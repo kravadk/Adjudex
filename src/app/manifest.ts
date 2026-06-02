@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "PariAI",
-    short_name: "PariAI",
+    name: "Adjudex",
+    short_name: "Adjudex",
     description:
       "AI-native prediction markets with real contracts, indexed proof, and portfolio lifecycle.",
     start_url: "/",

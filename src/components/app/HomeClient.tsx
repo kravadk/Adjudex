@@ -239,7 +239,7 @@ export function HomeClient() {
               Indexed market data unavailable
             </h2>
             <p className="max-w-[760px] text-[12.5px] leading-relaxed" style={{ color: "var(--t3)" }}>
-              PariAI only renders markets and activity from the backend/indexer. The current request failed, so the dashboard is not showing fabricated totals or fallback records.
+              Adjudex only renders markets and activity from the backend/indexer. The current request failed, so the dashboard is not showing fabricated totals or fallback records.
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               <Link href="/api/status" className="btn">

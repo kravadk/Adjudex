@@ -3,7 +3,7 @@
 import React from "react";
 import type { UserSettings } from "@/lib/types/domain";
 
-export const USER_SETTINGS_EVENT = "pariai:settings-updated";
+export const USER_SETTINGS_EVENT = "adjudex:settings-updated";
 
 export function UserSettingsEffects() {
   React.useEffect(() => {

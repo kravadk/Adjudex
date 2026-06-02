@@ -129,7 +129,7 @@ const RULES: Rule[] = [
     key: "SIWE_DOMAIN",
     category: "BACKEND",
     required: ["full"],
-    description: "SIWE domain string (e.g. pariai.app)",
+    description: "SIWE domain string (e.g. adjudex.app)",
   },
   {
     key: "JUDGE_PRIVATE_KEY",

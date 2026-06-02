@@ -1,5 +1,5 @@
 {
-  "name": "@pariai/ai-judge",
+  "name": "@adjudex/ai-judge",
   "version": "0.1.0",
   "private": true,
   "type": "module",

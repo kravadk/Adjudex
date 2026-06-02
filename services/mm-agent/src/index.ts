@@ -1,4 +1,4 @@
-﻿// PariAI AI Market-Maker - main loop.
+﻿// Adjudex AI Market-Maker - main loop.
 //
 // Strategy: counter-balance LP. For each open market compute |yes% - 50%|.
 // When deviation exceeds `imbalanceThresholdBps`, place a counter-bet on the
@@ -323,7 +323,7 @@ async function main() {
   const wallet = createWalletClient({ account, chain: arbitrumSepolia, transport });
   const pub = createPublicClient({ chain: arbitrumSepolia, transport });
 
-  console.log(`PariAI MM agent`);
+  console.log(`Adjudex MM agent`);
   console.log(`  handle:   ${config.handle}`);
   console.log(`  wallet:   ${account.address}`);
   console.log(`  factory:  ${config.factory}`);

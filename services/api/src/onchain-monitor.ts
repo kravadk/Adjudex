@@ -43,7 +43,7 @@ export function startOnchainMonitor(opts?: { intervalMs?: number }): void {
     running = true;
     drainOnce()
       .catch((err) => {
-        incCounter("pariai_onchain_monitor_errors_total");
+        incCounter("adjudex_onchain_monitor_errors_total");
         void captureException(err, { component: "onchain-monitor" });
       })
       .finally(() => {
@@ -82,7 +82,7 @@ async function checkIndexerLag(): Promise<void> {
   );
   for (const row of r.rows) {
     const lag = Number(row.last_block || 0);
-    setGauge("pariai_onchain_monitor_indexer_last_block", lag, {
+    setGauge("adjudex_onchain_monitor_indexer_last_block", lag, {
       chain: row.chain_id,
     });
     const staleMs = Date.now() - new Date(row.updated_at).getTime();
@@ -102,7 +102,7 @@ async function checkIndexerLag(): Promise<void> {
     }
   }
   // ALERT_LAG_BLOCKS gauge for Grafana alert rules.
-  setGauge("pariai_onchain_monitor_lag_threshold_blocks", ALERT_LAG_BLOCKS);
+  setGauge("adjudex_onchain_monitor_lag_threshold_blocks", ALERT_LAG_BLOCKS);
 }
 
 async function checkResolveBurst(): Promise<void> {
@@ -133,7 +133,7 @@ async function checkRefundBurst(): Promise<void> {
         AND created_at >= now() - interval '${ALERT_REFUND_WINDOW_MIN} minutes'`,
   );
   const total = Number(r.rows[0]?.refund_count ?? 0);
-  setGauge("pariai_onchain_monitor_refunds_window", total);
+  setGauge("adjudex_onchain_monitor_refunds_window", total);
   if (total >= ALERT_REFUND_BURST) {
     await notify({
       kind: "onchain_anomaly:refund_burst",
@@ -204,5 +204,5 @@ async function notify(input: {
      ON CONFLICT (id) DO NOTHING`,
     [id, ALERT_RECIPIENT, input.kind, input.marketId ?? null, input.title, input.body],
   );
-  incCounter("pariai_onchain_monitor_alerts_total", { kind: input.kind });
+  incCounter("adjudex_onchain_monitor_alerts_total", { kind: input.kind });
 }

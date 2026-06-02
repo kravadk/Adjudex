@@ -43,7 +43,7 @@ describe("reclaim-store", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith("https://backend.example/api/reclaim/proofs/session%2F1", {
       headers: {
-        "x-pariai-internal-secret": "test-proof-secret",
+        "x-adjudex-internal-secret": "test-proof-secret",
       },
       cache: "no-store",
     });

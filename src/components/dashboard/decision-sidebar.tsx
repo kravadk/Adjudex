@@ -10,7 +10,7 @@ type Props = {
 
 // Decision-support sidebar - rendered beside the bet form on /market/:id.
 // Mirrors polygaming.xyz's "Use this page to make a trading decision"
-// sidebar pattern, adapted to PariAI primitives:
+// sidebar pattern, adapted to Adjudex primitives:
 //   - "Good fit if" rules computed from the actual market (category,
 //     pool depth threshold, resolution method, time to resolve)
 //   - "Next steps" ordered checklist matching our resolution lifecycle:
@@ -161,7 +161,7 @@ function buildFits(input: Props): Fit[] {
     {
       label: "You prefer a wallet-first, USDC-centered workflow.",
       ok: true,
-      detail: "Always true for PariAI - no custody, no deposits.",
+      detail: "Always true for Adjudex - no custody, no deposits.",
     },
   ];
 }

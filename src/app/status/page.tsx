@@ -2,9 +2,9 @@ import { CheckCircle2, AlertCircle, XCircle } from "lucide-react";
 import { requireBackendUrl } from "@/lib/server/backend-api";
 
 export const metadata = {
-  title: "Status · PariAI",
+  title: "Status · Adjudex",
   description:
-    "Live system status for PariAI — backend API, indexer health per chain, AI judge worker, database. Refreshed every 30 seconds.",
+    "Live system status for Adjudex — backend API, indexer health per chain, AI judge worker, database. Refreshed every 30 seconds.",
 };
 
 // Public status page (S5.C). Server-rendered each visit so users see a
@@ -132,7 +132,7 @@ export default async function StatusPage() {
       >
         Snapshot at {new Date().toISOString()}. Refresh manually or visit
         every 30s for live ops; production also feeds Statuspage at
-        status.pariai.xyz.
+        status.adjudex.xyz.
       </p>
     </div>
   );

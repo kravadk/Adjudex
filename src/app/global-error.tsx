@@ -58,7 +58,7 @@ export default function GlobalError({
               marginBottom: 12,
             }}
           >
-            PariAI failed to load
+            Adjudex failed to load
           </h1>
           <p
             style={{

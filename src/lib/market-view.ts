@@ -1,4 +1,4 @@
-﻿// Adapter: maps domain Market to the view shape consumed by the PariAI UI.
+﻿// Adapter: maps domain Market to the view shape consumed by the Adjudex UI.
 // Keeps the service layer and zustand stores untouched.
 
 import type { EsportsGame, Market, MarketKind } from "@/lib/types/domain";

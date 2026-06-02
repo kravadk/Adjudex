@@ -3,13 +3,13 @@
 // (S3) we should swap for prom-client + a sidecar that aggregates.
 //
 // Metric shape:
-//   pariai_requests_total{method,route,status}     counter
-//   pariai_request_duration_ms_sum{route}          counter (sum)
-//   pariai_request_duration_ms_count{route}        counter
-//   pariai_errors_total{kind}                      counter
-//   pariai_indexer_lag_blocks{chain}               gauge (set via setGauge)
-//   pariai_db_pool_size                            gauge
-//   pariai_uptime_seconds                          gauge (auto, monotonic)
+//   adjudex_requests_total{method,route,status}     counter
+//   adjudex_request_duration_ms_sum{route}          counter (sum)
+//   adjudex_request_duration_ms_count{route}        counter
+//   adjudex_errors_total{kind}                      counter
+//   adjudex_indexer_lag_blocks{chain}               gauge (set via setGauge)
+//   adjudex_db_pool_size                            gauge
+//   adjudex_uptime_seconds                          gauge (auto, monotonic)
 
 const SERVICE = process.env.SERVICE_NAME ?? "api";
 const STARTED_AT = Date.now();
@@ -55,25 +55,25 @@ export function observeDuration(
 // "/api/markets/:id"), never the raw URL with literal ids.
 export function renderMetrics(): string {
   const lines: string[] = [];
-  lines.push(`# HELP pariai_uptime_seconds Service uptime in seconds.`);
-  lines.push(`# TYPE pariai_uptime_seconds gauge`);
+  lines.push(`# HELP adjudex_uptime_seconds Service uptime in seconds.`);
+  lines.push(`# TYPE adjudex_uptime_seconds gauge`);
   lines.push(
-    `pariai_uptime_seconds{service=${JSON.stringify(SERVICE)}} ${(
+    `adjudex_uptime_seconds{service=${JSON.stringify(SERVICE)}} ${(
       (Date.now() - STARTED_AT) /
       1000
     ).toFixed(0)}`,
   );
 
   if (counters.size) {
-    lines.push(`# TYPE pariai_requests_total counter`);
-    lines.push(`# TYPE pariai_errors_total counter`);
+    lines.push(`# TYPE adjudex_requests_total counter`);
+    lines.push(`# TYPE adjudex_errors_total counter`);
     for (const [k, v] of counters.entries()) {
       lines.push(`${k} ${v}`);
     }
   }
 
   if (durationSum.size) {
-    lines.push(`# TYPE pariai_request_duration_ms summary`);
+    lines.push(`# TYPE adjudex_request_duration_ms summary`);
     for (const [k, v] of durationSum.entries()) {
       lines.push(`${k}_sum ${v}`);
       lines.push(`${k}_count ${durationCount.get(k) ?? 0}`);

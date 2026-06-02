@@ -31,7 +31,7 @@ export async function putProof(entry: {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-pariai-internal-secret": secret,
+      "x-adjudex-internal-secret": secret,
     },
     body: JSON.stringify(entry),
     cache: "no-store",
@@ -46,7 +46,7 @@ export async function getProof(sessionId: string): Promise<StoredProof | null> {
   const secret = requireProofStoreSecret("read verified Reclaim proofs");
   const response = await fetch(`${requireBackendUrl()}/api/reclaim/proofs/${encodeURIComponent(sessionId)}`, {
     headers: {
-      "x-pariai-internal-secret": secret,
+      "x-adjudex-internal-secret": secret,
     },
     cache: "no-store",
   });

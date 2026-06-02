@@ -1,4 +1,4 @@
-# Terms of Service — PariAI
+# Terms of Service — Adjudex
 
 **DRAFT — Has NOT been reviewed by legal counsel. Replace before mainnet launch.**
 
@@ -7,13 +7,13 @@ Last updated: 2026-06-01
 
 ## 1. Acceptance
 
-By connecting a wallet to `pariai.xyz` ("PariAI", "the Service", "we"),
+By connecting a wallet to `adjudex.xyz` ("Adjudex", "the Service", "we"),
 you agree to these Terms of Service ("Terms"). If you do not agree, do
 not connect a wallet and do not use the Service.
 
 ## 2. Eligibility
 
-You may use PariAI only if **all** of the following are true:
+You may use Adjudex only if **all** of the following are true:
 
 - You are at least 18 years old (or the age of majority in your
   jurisdiction, whichever is higher).
@@ -32,7 +32,7 @@ material breach of these Terms.**
 
 ## 3. The Service
 
-PariAI is a **non-custodial parimutuel prediction-market protocol**
+Adjudex is a **non-custodial parimutuel prediction-market protocol**
 deployed on the Arbitrum blockchain. Key points:
 
 - We **do not hold user funds**. Stakes are deposited into open-source
@@ -46,7 +46,7 @@ deployed on the Arbitrum blockchain. Key points:
 
 ## 4. No financial product
 
-Positions on PariAI are **NOT**:
+Positions on Adjudex are **NOT**:
 - Securities under the Securities Act of 1933
 - Swaps under the Commodity Exchange Act
 - Investments under the laws of any covered jurisdiction
@@ -57,14 +57,14 @@ regulated financial products, you may not use the Service.
 
 ## 5. Fees
 
-PariAI charges a **1.5% protocol fee** taken from each winning claim.
+Adjudex charges a **1.5% protocol fee** taken from each winning claim.
 The fee is on-chain (configured at MarketFactory deployment, not
 mutable per-market). Losing stakes are not charged a fee. The
 `refundAfterGrace` recovery path does not charge a fee.
 
 ## 6. Risks
 
-Using PariAI involves significant risks, including:
+Using Adjudex involves significant risks, including:
 
 - **Total loss of staked capital**. Wrong-side positions return zero.
 - **Smart contract vulnerabilities**. While audited, no audit is
@@ -140,7 +140,7 @@ in these Terms limits those rights.
 ## 13. Contact
 
 - Security disclosure: see [SECURITY.md](../SECURITY.md)
-- General: contact@pariai.xyz (email goes live with mainnet)
+- General: contact@adjudex.xyz (email goes live with mainnet)
 - Discord: TBD link
 
 ---

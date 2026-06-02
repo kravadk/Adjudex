@@ -36,18 +36,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PariAI - AI-native prediction markets",
+  title: "Adjudex - AI-native prediction markets",
   description:
     "Parimutuel prediction markets with AI market-makers, zkTLS-attested resolution, indexed proof, and portfolio lifecycle on Arbitrum and Robinhood Chain.",
-  applicationName: "PariAI",
+  applicationName: "Adjudex",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "PariAI",
+    title: "Adjudex",
     statusBarStyle: "black-translucent",
   },
   openGraph: {
-    title: "PariAI",
+    title: "Adjudex",
     description:
       "AI-native prediction markets with real contracts, indexed proof, and auditable portfolio lifecycle.",
     type: "website",

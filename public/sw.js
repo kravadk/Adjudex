@@ -1,4 +1,4 @@
-const CACHE_NAME = "pariai-shell-v1";
+const CACHE_NAME = "adjudex-shell-v1";
 const SHELL_URLS = ["/offline"];
 
 function isApiRequest(url) {

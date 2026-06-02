@@ -12,7 +12,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    "public/pariai/**",
+    "public/adjudex/**",
     "test-results/**",
     "playwright-report/**",
     "services/*/node_modules/**",

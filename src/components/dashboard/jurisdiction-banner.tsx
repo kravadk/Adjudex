@@ -26,13 +26,13 @@ export function JurisdictionBanner() {
           className="text-[12px] leading-relaxed flex-1 min-w-[260px]"
           style={{ color: "var(--t2)" }}
         >
-          PariAI is a non-custodial parimutuel protocol on Arbitrum. It is{" "}
+          Adjudex is a non-custodial parimutuel protocol on Arbitrum. It is{" "}
           <span className="font-semibold" style={{ color: "var(--tx)" }}>
             not available
           </span>{" "}
           to residents of the United States, Cuba, Iran, North Korea, Syria,
           Russia, or Belarus. Trading involves real risk of total loss. By
-          using PariAI you accept the{" "}
+          using Adjudex you accept the{" "}
           <Link
             href="/legal/terms"
             className="underline"

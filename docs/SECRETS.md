@@ -1,6 +1,6 @@
 # Secrets — Management & Rotation
 
-This doc describes **where PariAI secrets live**, **who is allowed to
+This doc describes **where Adjudex secrets live**, **who is allowed to
 read them**, and **how to rotate them** without downtime.
 
 > Do not commit secrets to the repo. `.env*`, `deployments/*.json`
@@ -40,7 +40,7 @@ manager provides:
 ## Production flow
 
 ```
-[Doppler project: pariai]
+[Doppler project: adjudex]
   |-- config: dev          <- local development
   |-- config: staging      <- Sepolia
   |__ config: production   <- Arbitrum One (mainnet, post-audit)

@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:api": "pnpm --filter @pariai/api dev",
-    "dev:indexer": "pnpm --filter @pariai/indexer dev",
-    "api:migrate": "pnpm --filter @pariai/api migrate",
+    "dev:api": "pnpm --filter @adjudex/api dev",
+    "dev:indexer": "pnpm --filter @adjudex/indexer dev",
+    "api:migrate": "pnpm --filter @adjudex/api migrate",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -18,7 +18,7 @@
     "contracts:register-feeds": "tsx scripts/register-feed.ts",
     "env:check": "tsx scripts/check-env.ts",
     "e2e:live": "tsx scripts/e2e-live.ts",
-    "indexer:backfill": "pnpm --filter @pariai/indexer backfill",
+    "indexer:backfill": "pnpm --filter @adjudex/indexer backfill",
     "serve": "pnpm build && pnpm start",
     "prepare": "husky"
   },

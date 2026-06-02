@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ResolutionClient } from "@/components/app/ResolutionClient";
 
 export const metadata = {
-  title: "AI Resolver - PariAI",
+  title: "AI Resolver - Adjudex",
   description:
     "Resolve a market through configured source evidence and a signed verifier proposal.",
 };

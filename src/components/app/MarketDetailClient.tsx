@@ -210,7 +210,7 @@ export function MarketDetailClient({ id }: { id: string }) {
   async function shareMarketLink() {
     const payload = {
       title: currentMarket.title,
-      text: `PariAI market proof: ${currentMarket.title}`,
+      text: `Adjudex market proof: ${currentMarket.title}`,
       url: marketUrl,
     };
     if (navigator.share) {
@@ -353,7 +353,7 @@ export function MarketDetailClient({ id }: { id: string }) {
                 style={{ color: "var(--t2)" }}
               >
                 <span className="caps mr-2">Provenance</span>
-                {market.provenanceNote ?? "Imported from a public source and normalized by PariAI."}
+                {market.provenanceNote ?? "Imported from a public source and normalized by Adjudex."}
                 {market.sourcePublishedAtIso && (
                   <span className="ml-2 font-mono" style={{ color: "var(--t3)" }}>
                     source {new Date(market.sourcePublishedAtIso).toLocaleString()}

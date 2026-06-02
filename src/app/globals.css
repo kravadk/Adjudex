@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ============================================================
-   PariAI design tokens.
+   Adjudex design tokens.
    ============================================================ */
 
 :root {
@@ -181,7 +181,7 @@ html[data-compact="on"] .tbl th,
 html[data-compact="on"] .tbl td { padding-top: 8px; padding-bottom: 8px; }
 
 /* ============================================================
-   PariAI component primitives.
+   Adjudex component primitives.
    ============================================================ */
 
 /* Cards / panels */

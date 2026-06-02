@@ -60,6 +60,6 @@ export function resetRateLimitsForTests() {
 function clientId(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   const realIp = request.headers.get("x-real-ip")?.trim();
-  const wallet = request.headers.get("x-pariai-wallet")?.trim().toLowerCase();
+  const wallet = request.headers.get("x-adjudex-wallet")?.trim().toLowerCase();
   return forwarded || realIp || wallet || "anonymous";
 }

@@ -1,6 +1,6 @@
 # Audits
 
-This directory holds **external audit reports for PariAI smart contracts**
+This directory holds **external audit reports for Adjudex smart contracts**
 plus internal security-review summaries.
 
 ## Status
@@ -98,7 +98,7 @@ Ask the audit firm to verify:
 ## Workflow after engagement
 
 1. The audit firm receives a commit hash (frozen for review).
-2. Report lands here — `audits/YYYY-MM-firmname-pariai-v1.pdf`.
+2. Report lands here — `audits/YYYY-MM-firmname-adjudex-v1.pdf`.
 3. Findings tracked in `audits/YYYY-MM-firmname-findings.md`.
 4. Each finding gets a remediation commit with a cross-reference
    `Refs: audits/...-finding-N` in the commit message.

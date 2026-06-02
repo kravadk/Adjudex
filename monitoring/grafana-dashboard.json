@@ -1,9 +1,9 @@
 {
-  "title": "PariAI — Service Health",
-  "uid": "pariai-service-health",
+  "title": "Adjudex — Service Health",
+  "uid": "adjudex-service-health",
   "schemaVersion": 38,
   "version": 1,
-  "tags": ["pariai", "production"],
+  "tags": ["adjudex", "production"],
   "timezone": "browser",
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
@@ -26,7 +26,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "sum by (route) (rate(pariai_requests_total[1m])) * 60",
+          "expr": "sum by (route) (rate(adjudex_requests_total[1m])) * 60",
           "legendFormat": "{{route}}"
         }
       ],
@@ -42,7 +42,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "sum by (kind) (rate(pariai_errors_total[1m])) * 60",
+          "expr": "sum by (kind) (rate(adjudex_errors_total[1m])) * 60",
           "legendFormat": "{{kind}}"
         }
       ],
@@ -67,7 +67,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "sum by (route) (rate(pariai_request_duration_ms_sum[1m])) / sum by (route) (rate(pariai_request_duration_ms_count[1m]))",
+          "expr": "sum by (route) (rate(adjudex_request_duration_ms_sum[1m])) / sum by (route) (rate(adjudex_request_duration_ms_count[1m]))",
           "legendFormat": "{{route}}"
         }
       ],
@@ -81,7 +81,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "pariai_indexer_lag_blocks",
+          "expr": "adjudex_indexer_lag_blocks",
           "legendFormat": "chain={{chain}}"
         }
       ],
@@ -107,7 +107,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "pariai_uptime_seconds",
+          "expr": "adjudex_uptime_seconds",
           "legendFormat": "{{service}}"
         }
       ],
@@ -121,7 +121,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "sum(increase(pariai_errors_total[1h]))"
+          "expr": "sum(increase(adjudex_errors_total[1h]))"
         }
       ],
       "fieldConfig": {

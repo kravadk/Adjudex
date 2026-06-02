@@ -28,10 +28,10 @@ describe("backend API configuration", () => {
   });
 
   it("uses absolute backend URLs and trims trailing slashes", async () => {
-    process.env.BACKEND_API_URL = "https://backend.pariai.internal/";
+    process.env.BACKEND_API_URL = "https://backend.adjudex.internal/";
 
     const { requireBackendUrl } = await import("../backend-api");
 
-    expect(requireBackendUrl()).toBe("https://backend.pariai.internal");
+    expect(requireBackendUrl()).toBe("https://backend.adjudex.internal");
   });
 });

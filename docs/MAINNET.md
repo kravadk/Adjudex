@@ -15,7 +15,7 @@ the audit is clean and Stage 2 gates have passed.
 ## Pre-flight checklist
 
 ```
-[ ] audit report public in audits/YYYY-MM-firmname-pariai.pdf
+[ ] audit report public in audits/YYYY-MM-firmname-adjudex.pdf
 [ ] all P0/P1 findings closed
 [ ] Immunefi bounty page live (announcement-ready)
 [ ] Gnosis Safe 3-of-5 deployed on Arbitrum One

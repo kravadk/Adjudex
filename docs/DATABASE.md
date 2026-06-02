@@ -13,7 +13,7 @@ We provision **Neon Pro** at S2 (~$25/mo) — pgvector + 30-day PITR + read repl
 
 ## Connection pooling
 
-PariAI services connect via `node-postgres` (`pg` package). Two URLs:
+Adjudex services connect via `node-postgres` (`pg` package). Two URLs:
 
 ```
 DATABASE_URL              direct connection (migrations, server start)

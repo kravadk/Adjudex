@@ -49,7 +49,7 @@ const resolverAddress = "0x00000000000000000000000000000000000000cc";
 const adminAddress = "0x0000000000000000000000000000000000000ad1";
 const nonAdminAddress = "0x0000000000000000000000000000000000000bad";
 const sessionToken = "test-session-token";
-const sessionCookie = `pariai_session=${sessionToken}`;
+const sessionCookie = `adjudex_session=${sessionToken}`;
 const transactionHash = "0x00000000000000000000000000000000000000000000000000000000000000cc";
 const specHash = "0x0000000000000000000000000000000000000000000000000000000000001234";
 const deadline = 1_906_502_400n;
@@ -158,7 +158,7 @@ function marketRow(id: string) {
     import_source_id: "source-1",
     import_candidate_id: "candidate-1",
     source_published_at: null,
-    provenance_note: "Imported from public source source-1; normalized by PariAI Market Importer.",
+    provenance_note: "Imported from public source source-1; normalized by Adjudex Market Importer.",
   };
 }
 

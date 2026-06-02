@@ -1,14 +1,14 @@
-# PariAI AI Judge - Phala CVM image.
+# Adjudex AI Judge - Phala CVM image.
 #
 # Build from repo root:
-#   docker build -f services/ai-judge/Dockerfile -t pariai-ai-judge:latest .
+#   docker build -f services/ai-judge/Dockerfile -t adjudex-ai-judge:latest .
 #
 # Managed signer smoke:
 #   docker run --rm -p 8090:8090 \
 #     -e JUDGE_MODE=server \
 #     -e JUDGE_PRIVATE_KEY=0x... \
 #     -e ANTHROPIC_API_KEY=sk-ant-... \
-#     pariai-ai-judge:latest
+#     adjudex-ai-judge:latest
 #
 # Phala deploy: push to your registry, then deploy via Phala Cloud UI with the
 # image tag pinned by digest. The dstack socket is auto-mounted at
@@ -21,7 +21,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY services/ai-judge/package.json ./services/ai-judge/
 
 RUN corepack enable && corepack prepare pnpm@10 --activate \
-  && pnpm install --filter @pariai/ai-judge... --frozen-lockfile --prod
+  && pnpm install --filter @adjudex/ai-judge... --frozen-lockfile --prod
 
 COPY services/ai-judge/ ./services/ai-judge/
 

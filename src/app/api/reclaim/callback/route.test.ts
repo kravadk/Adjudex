@@ -31,7 +31,7 @@ describe("POST /api/reclaim/callback", () => {
     const response = await POST(jsonRequest({
       providerId: "provider-1",
       claimData: {
-        context: JSON.stringify({ pariai: { marketId: "42", sourceUrl: "https://example.com/source" } }),
+        context: JSON.stringify({ adjudex: { marketId: "42", sourceUrl: "https://example.com/source" } }),
       },
     }));
 

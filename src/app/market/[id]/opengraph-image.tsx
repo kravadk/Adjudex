@@ -3,7 +3,7 @@ import { requireBackendUrl } from "@/lib/server/backend-api";
 import type { Market } from "@/lib/types/domain";
 
 export const runtime = "nodejs";
-export const alt = "PariAI market";
+export const alt = "Adjudex market";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -25,7 +25,7 @@ export default async function OpenGraphImage({
     // fall through — render generic card
   }
 
-  const title = market?.title ?? "PariAI prediction market";
+  const title = market?.title ?? "Adjudex prediction market";
   const yesProb = market?.yesProbability ?? 50;
   const noProb = 100 - yesProb;
   const volume = market?.volumeUsd ?? 0;
@@ -77,7 +77,7 @@ export default async function OpenGraphImage({
                 fontWeight: 700,
               }}
             >
-              PariAI · Parimutuel terminal
+              Adjudex · Parimutuel terminal
             </div>
             <div style={{ display: "flex", marginTop: 4, fontSize: 20, color: "#a3a3a3" }}>
               {category}

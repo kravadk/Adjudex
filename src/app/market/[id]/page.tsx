@@ -26,11 +26,11 @@ export async function generateMetadata({
   const { id } = await params;
   const market = await loadMarket(id);
   if (!market) {
-    return { title: "Market · PariAI" };
+    return { title: "Market · Adjudex" };
   }
-  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://pariai.xyz").replace(/\/$/, "");
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://adjudex.xyz").replace(/\/$/, "");
   const url = `${base}/market/${encodeURIComponent(id)}`;
-  const title = `${market.title} · PariAI`;
+  const title = `${market.title} · Adjudex`;
   const description =
     market.description?.slice(0, 200) ??
     "Parimutuel prediction market on Arbitrum with optimistic AI-judged resolution.";
@@ -69,7 +69,7 @@ export default async function MarketPage({ params }: { params: Promise<{ id: str
 // rows (YES, NO) priced by current implied probability. Search engines
 // ingest this as a structured prediction; Twitter/Slack just ignore.
 function MarketStructuredData({ id, market }: { id: string; market: Market }) {
-  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://pariai.xyz").replace(/\/$/, "");
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://adjudex.xyz").replace(/\/$/, "");
   const url = `${base}/market/${encodeURIComponent(id)}`;
   const yesProb = Math.max(0, Math.min(100, market.yesProbability ?? 50));
   const noProb = 100 - yesProb;
@@ -92,7 +92,7 @@ function MarketStructuredData({ id, market }: { id: string; market: Market }) {
     },
     organizer: {
       "@type": "Organization",
-      name: "PariAI",
+      name: "Adjudex",
       url: base,
     },
     offers: [

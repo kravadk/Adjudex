@@ -47,7 +47,7 @@ export function NetworkBanner() {
           className="text-[12px] font-medium leading-snug mt-0.5"
           style={{ color: "var(--t2)" }}
         >
-          You&apos;re on chain {activeChainId}. PariAI runs on {EXPECTED_LABEL}{" "}
+          You&apos;re on chain {activeChainId}. Adjudex runs on {EXPECTED_LABEL}{" "}
           right now — switch to place positions and view balances.
         </div>
       </div>

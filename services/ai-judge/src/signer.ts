@@ -58,7 +58,7 @@ async function phalaSigner(): Promise<SignerHandle> {
 
   // path = stable label so the key persists across image rebuilds with the
   // same app-id; purpose appears in the signed key-derivation chain.
-  const keyResp = await client.getKey("pariai/ai-judge", "ai-judge-signing");
+  const keyResp = await client.getKey("adjudex/ai-judge", "ai-judge-signing");
   const account = toViemAccountSecure(keyResp);
 
   return {

@@ -19,7 +19,7 @@ export default function DocsPage() {
           Terminal guide
         </h1>
         <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed" style={{ color: "var(--t2)" }}>
-          A practical guide to PariAI&apos;s parimutuel terminal: how to read pool depth,
+          A practical guide to Adjudex&apos;s parimutuel terminal: how to read pool depth,
           live reprice triggers, AI-judged resolution, and the on-chain proof surface
           before opening a position.
         </p>
@@ -29,7 +29,7 @@ export default function DocsPage() {
         <div className="grid gap-[14px]">
           <GuideSection id="guide-what" title="What is a parimutuel market">
             <p>
-              Every market on PariAI is a parimutuel pool: USDC staked on YES and
+              Every market on Adjudex is a parimutuel pool: USDC staked on YES and
               USDC staked on NO. When the market resolves, winners share the
               entire pool pro-rata. There is no order book, no resting orders,
               no spread, and no house position. You always trade against the

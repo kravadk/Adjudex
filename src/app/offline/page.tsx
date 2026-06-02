@@ -15,12 +15,12 @@ export default function OfflinePage() {
           className="text-[24px] font-semibold tracking-[-0.02em]"
           style={{ color: "var(--tx)" }}
         >
-          PariAI is offline
+          Adjudex is offline
         </h1>
         <p className="mt-3 text-[13px] leading-relaxed" style={{ color: "var(--t2)" }}>
           The app shell is available, but live markets, portfolio, balances,
           transactions, and resolution proof require the backend, indexer, and
-          chain RPC. PariAI does not show cached trading state as current data.
+          chain RPC. Adjudex does not show cached trading state as current data.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Link href="/" className="btn primary">

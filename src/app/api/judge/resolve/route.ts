@@ -329,7 +329,7 @@ async function validateProofBinding(
       ok: false,
       status: 400,
       error: "source_proof_context_required",
-      message: "Verified source proof must include PariAI market binding context.",
+      message: "Verified source proof must include Adjudex market binding context.",
     };
   }
 
@@ -409,9 +409,9 @@ function extractPariaiProofBinding(proof: unknown): ProofBindingContext | null {
   const raw = topLevelClaimContext(proof);
   if (!raw) return null;
   const parsed = parseContext(raw);
-  const pariai = parsed?.pariai;
-  return pariai && typeof pariai === "object" && !Array.isArray(pariai)
-    ? (pariai as ProofBindingContext)
+  const adjudex = parsed?.adjudex;
+  return adjudex && typeof adjudex === "object" && !Array.isArray(adjudex)
+    ? (adjudex as ProofBindingContext)
     : null;
 }
 

@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 
-export const sessionCookieName = "pariai_session";
+export const sessionCookieName = "adjudex_session";
 export const nonceTtlMs = 15 * 60 * 1000;
 export const sessionTtlMs = 7 * 24 * 60 * 60 * 1000;
-export const defaultSiweDomain = "pariai.app";
+export const defaultSiweDomain = "adjudex.app";
 
 export function createToken(bytes = 32) {
   return randomBytes(bytes).toString("hex");
@@ -20,9 +20,9 @@ export function buildSiweMessage(input: {
     `${input.domain} wants you to sign in with your Ethereum account:`,
     input.address,
     "",
-    "Sign in to PariAI to manage settings, watchlist, and notifications.",
+    "Sign in to Adjudex to manage settings, watchlist, and notifications.",
     "",
-    "URI: https://pariai.app",
+    "URI: https://adjudex.app",
     "Version: 1",
     `Chain ID: ${input.chainId}`,
     `Nonce: ${input.nonce}`,

@@ -101,10 +101,10 @@ server.addHook("onResponse", async (req, reply) => {
   const startNs = (req as { _startNs?: bigint })._startNs;
   const route = req.routeOptions?.url ?? "unknown";
   const status = String(reply.statusCode);
-  incCounter("pariai_requests_total", { method: req.method, route, status });
+  incCounter("adjudex_requests_total", { method: req.method, route, status });
   if (startNs !== undefined) {
     const ms = Number(process.hrtime.bigint() - startNs) / 1_000_000;
-    observeDuration("pariai_request_duration_ms", ms, { route });
+    observeDuration("adjudex_request_duration_ms", ms, { route });
   }
 });
 
@@ -113,7 +113,7 @@ server.setErrorHandler(async (err, req, reply) => {
   const errObj = err as { name?: string; message?: string; statusCode?: number };
   const name = errObj.name ?? "Error";
   const message = errObj.message ?? String(err);
-  incCounter("pariai_errors_total", { route, kind: name });
+  incCounter("adjudex_errors_total", { route, kind: name });
   await captureException(err, { route, method: req.method, url: req.url });
   req.log.error({ err, route }, "request failed");
   reply.code(errObj.statusCode ?? 500).send({
@@ -1122,7 +1122,7 @@ server.post<{ Body: { transactionHash?: Hex; chainId?: number } }>("/api/sync/tr
 });
 
 server.post<{ Body: { sessionId?: string; providerId?: string; proof?: unknown } }>("/api/reclaim/proofs", async (request, reply) => {
-  if (!isAuthorizedInternalWrite(request.headers["x-pariai-internal-secret"])) {
+  if (!isAuthorizedInternalWrite(request.headers["x-adjudex-internal-secret"])) {
     return reply.code(401).send({ error: "reclaim_proof_write_unauthorized" });
   }
   const { sessionId, providerId, proof } = request.body;
@@ -1160,7 +1160,7 @@ server.post<{ Body: { sessionId?: string; providerId?: string; proof?: unknown }
 });
 
 server.get("/api/reclaim/proofs/:sessionId", async (request, reply) => {
-  if (!isAuthorizedInternalWrite(request.headers["x-pariai-internal-secret"])) {
+  if (!isAuthorizedInternalWrite(request.headers["x-adjudex-internal-secret"])) {
     return reply.code(401).send({ error: "reclaim_proof_read_unauthorized" });
   }
   const { sessionId } = request.params as { sessionId: string };
@@ -1653,7 +1653,7 @@ server.post<{ Params: { id: string }; Body: ImportDeployBody }>("/api/import/can
       spec.asset,
       spec.sourceUrl,
       candidate.source_published_at,
-      `Imported from public source ${candidate.source_id}; normalized by PariAI Market Importer.`,
+      `Imported from public source ${candidate.source_id}; normalized by Adjudex Market Importer.`,
       spec.resolutionCriteria,
       spec.deadlineIso,
       candidate.source_id,
@@ -1856,7 +1856,7 @@ server.addHook("onSend", async (request, reply, payload) => {
   try {
     const session = await requireSession(request.headers.cookie);
     if (session) {
-      reply.header("x-pariai-tier", await tierFor(session.address));
+      reply.header("x-adjudex-tier", await tierFor(session.address));
     }
   } catch {
     // tier header is decorative, never fail the response over it
@@ -1975,9 +1975,9 @@ function extractRequiredPariaiBinding(proof: unknown): ReclaimProofBinding | nul
   const context = topLevelReclaimClaimContext(proof);
   if (!context) return null;
   const parsed = parseJsonObject(context);
-  const pariai = parsed?.pariai;
-  if (!pariai || typeof pariai !== "object" || Array.isArray(pariai)) return null;
-  const record = pariai as Record<string, unknown>;
+  const adjudex = parsed?.adjudex;
+  if (!adjudex || typeof adjudex !== "object" || Array.isArray(adjudex)) return null;
+  const record = adjudex as Record<string, unknown>;
   const marketId = nonEmptyString(record.marketId);
   const sourceUrl = nonEmptyString(record.sourceUrl);
   if (!marketId || !sourceUrl) return null;
@@ -2336,7 +2336,7 @@ const EIP712_DOMAIN_TYPEHASH = keccak256(
     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)",
   ),
 );
-const QUOTE_DOMAIN_NAME_HASH = keccak256(stringToBytes("PariAI Bet Quote"));
+const QUOTE_DOMAIN_NAME_HASH = keccak256(stringToBytes("Adjudex Bet Quote"));
 const QUOTE_DOMAIN_VERSION_HASH = keccak256(stringToBytes("1"));
 // keccak256(BET_QUOTE_TYPEHASH) — string fed below to keep it auditable.
 const BET_QUOTE_TYPEHASH = keccak256(
@@ -2817,7 +2817,7 @@ async function syncConfirmedTransaction(transactionHash: Hex, chainId: number, o
     return nextReconciled;
   });
   if (options.requireTrustedEvent && !hasTrustedReconciliation(reconciled)) {
-    return { ok: false, statusCode: 400, error: "trusted_pariai_event_not_found" };
+    return { ok: false, statusCode: 400, error: "trusted_adjudex_event_not_found" };
   }
   return { ok: true, status: "confirmed", blockNumber: Number(receipt.blockNumber), reconciled };
 }

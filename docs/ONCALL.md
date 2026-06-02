@@ -6,10 +6,10 @@ This doc describes **who responds to incidents, how, and within what time**.
 
 | Metric | Target | Reading |
 |---|---|---|
-| Backend uptime | 99.5% / month | `pariai_uptime_seconds` |
-| Indexer lag (p95) | < 30 seconds (~ 120 blocks Arbitrum) | `pariai_indexer_lag_blocks` |
-| API request error rate | < 0.5% / 5m | `rate(pariai_errors_total[5m]) / rate(pariai_requests_total[5m])` |
-| API request duration (p95) | < 800 ms | `pariai_request_duration_ms` summary |
+| Backend uptime | 99.5% / month | `adjudex_uptime_seconds` |
+| Indexer lag (p95) | < 30 seconds (~ 120 blocks Arbitrum) | `adjudex_indexer_lag_blocks` |
+| API request error rate | < 0.5% / 5m | `rate(adjudex_errors_total[5m]) / rate(adjudex_requests_total[5m])` |
+| API request duration (p95) | < 800 ms | `adjudex_request_duration_ms` summary |
 | Time-to-first-response (P0) | 15 min | Manual log |
 | Time-to-mitigation (P0) | 2 hours | Manual log |
 | Time-to-mitigation (P1) | 8 hours | Manual log |
@@ -66,19 +66,19 @@ Grafana / Prometheus
 
 ```yaml
 groups:
-  - name: pariai-p0
+  - name: adjudex-p0
     interval: 30s
     rules:
       - alert: BackendDown
-        expr: up{job="pariai-api"} == 0
+        expr: up{job="adjudex-api"} == 0
         for: 2m
         labels: { severity: P0 }
         annotations:
           summary: "Backend API is down"
-          runbook: "https://github.com/pariai/repo/blob/main/docs/RUNBOOK.md#backend-down"
+          runbook: "https://github.com/adjudex/repo/blob/main/docs/RUNBOOK.md#backend-down"
 
       - alert: IndexerStuck
-        expr: increase(pariai_indexer_lag_blocks[5m]) > 0 and pariai_indexer_lag_blocks > 100
+        expr: increase(adjudex_indexer_lag_blocks[5m]) > 0 and adjudex_indexer_lag_blocks > 100
         for: 10m
         labels: { severity: P0 }
         annotations:
@@ -86,26 +86,26 @@ groups:
 
       - alert: HighErrorRate
         expr: |
-          rate(pariai_errors_total[5m]) /
-          rate(pariai_requests_total[5m]) > 0.05
+          rate(adjudex_errors_total[5m]) /
+          rate(adjudex_requests_total[5m]) > 0.05
         for: 5m
         labels: { severity: P1 }
         annotations:
           summary: "Error rate > 5% for 5 minutes"
 
-  - name: pariai-p1
+  - name: adjudex-p1
     rules:
       - alert: SlowRequests
         expr: |
-          (rate(pariai_request_duration_ms_sum[5m]) /
-           rate(pariai_request_duration_ms_count[5m])) > 1000
+          (rate(adjudex_request_duration_ms_sum[5m]) /
+           rate(adjudex_request_duration_ms_count[5m])) > 1000
         for: 10m
         labels: { severity: P1 }
         annotations:
           summary: "Mean request duration > 1s"
 
       - alert: ChallengeRaisedOnMarket
-        expr: increase(pariai_challenges_total[1h]) > 0
+        expr: increase(adjudex_challenges_total[1h]) > 0
         labels: { severity: P1 }
         annotations:
           summary: "AI judge verdict was challenged on-chain; review evidence"
@@ -134,8 +134,8 @@ Use Resend (same provider as in-app notifications):
 receivers:
   - name: email
     email_configs:
-      - to: oncall@pariai.xyz  # forwards to primary + secondary
-        from: alerts@pariai.xyz
+      - to: oncall@adjudex.xyz  # forwards to primary + secondary
+        from: alerts@adjudex.xyz
         smarthost: smtp.resend.com:587
         auth_username: resend
         auth_password: <RESEND_API_KEY>
@@ -189,7 +189,7 @@ Create under `docs/incidents/YYYY-MM-DD-<slug>.md`:
 
 ### Backend down (5xx on / )
 1. Check Vercel / Fly status page
-2. `curl https://pariai.xyz/api/status` from external location
+2. `curl https://adjudex.xyz/api/status` from external location
 3. Check Grafana panel "request rate" — did traffic spike?
 4. Roll back to previous deploy if recent change
 5. If DB-side: check Postgres host status (Supabase / Neon dashboard)
@@ -197,9 +197,9 @@ Create under `docs/incidents/YYYY-MM-DD-<slug>.md`:
 
 ### Indexer stuck
 1. Check `/api/status` → `chains.*.indexer.lastBlock` + `lagBlocks`
-2. SSH to indexer host: `journalctl -u pariai-indexer -n 200`
+2. SSH to indexer host: `journalctl -u adjudex-indexer -n 200`
 3. Look for RPC errors (Alchemy rate limit, transient 5xx)
-4. Restart: `systemctl restart pariai-indexer` (or fly redeploy)
+4. Restart: `systemctl restart adjudex-indexer` (or fly redeploy)
 5. If stuck > 1h: pause new bets via Safe (`MarketFactory.setPaused(true)`) and notify users
 
 ### Smart contract exploit suspected
@@ -224,7 +224,7 @@ fix is non-trivial AND no funds at risk.
 
 ## Posting public status
 
-Use `https://status.pariai.xyz` (Atlassian Statuspage / BetterUptime).
+Use `https://status.adjudex.xyz` (Atlassian Statuspage / BetterUptime).
 Open incident BEFORE mitigation (set "Investigating"), update every
 30 min, mark "Resolved" after verification.
 

@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { MiniMarkdown } from "@/components/dashboard/mini-markdown";
 
 export const metadata = {
-  title: "Terms of Service · PariAI",
+  title: "Terms of Service · Adjudex",
   description:
-    "Terms governing your use of the PariAI parimutuel prediction-market protocol. Non-custodial, jurisdiction-restricted.",
+    "Terms governing your use of the Adjudex parimutuel prediction-market protocol. Non-custodial, jurisdiction-restricted.",
 };
 
 // Serves docs/TERMS.md at /legal/terms. The doc file is the single source

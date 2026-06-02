@@ -1,10 +1,10 @@
-# PariAI
+# Adjudex
 
 **AI-native prediction markets on Arbitrum** — parimutuel pools with an
 optimistic AI judge, on-chain Reclaim zkTLS proof anchors, EIP-712 signed
 bet quotes, and a hardened Postgres-backed indexer.
 
-PariAI takes a strict view of where data lives. Markets, balances,
+Adjudex takes a strict view of where data lives. Markets, balances,
 positions, activity, timelines, resolution status, settings, watchlists,
 and notifications must come from contracts, the indexer, the
 Postgres-backed API, SIWE-authenticated backend persistence, or confirmed
@@ -309,7 +309,7 @@ production should set `pinata` (or `web3storage` / `kubo`).
 The backend (`POST /api/bets/quote`) returns a `BetQuote` (pool, side,
 stake, `minShares`, `maxPoolImpactBps`, deadline, nonce, bettor) plus a
 signature from `QUOTE_SIGNER_PRIVATE_KEY`. The `BetQuoteVerifier` contract
-binds the signature to its EIP-712 domain (`PariAI Bet Quote / 1`) and
+binds the signature to its EIP-712 domain (`Adjudex Bet Quote / 1`) and
 verifies / consumes it (one-shot per `(bettor, nonce)`).
 
 This is a standalone verifier today — the next pool upgrade will add a
@@ -432,7 +432,7 @@ backend; the frontend never falls back to browser storage for any of
 them.
 
 - **SIWE auth** — `POST /api/auth/nonce` → wallet signs SIWE message →
-  `POST /api/auth/verify` issues the `pariai_session` cookie (HttpOnly,
+  `POST /api/auth/verify` issues the `adjudex_session` cookie (HttpOnly,
   SameSite=Strict, 7-day TTL).
 - **Wallet session API** — `POST /api/wallet/connect`,
   `POST /api/wallet/disconnect`, `GET /api/wallet` for the active
@@ -452,7 +452,7 @@ them.
 
 ## API map
 
-PariAI runs two HTTP layers:
+Adjudex runs two HTTP layers:
 - **Fastify backend** (`services/api/`) — owns Postgres, SIWE sessions,
   importer, EIP-712 quote signer, transaction recovery.
 - **Next API routes** (`src/app/api/**/route.ts`) — thin proxies +

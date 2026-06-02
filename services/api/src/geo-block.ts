@@ -70,11 +70,11 @@ export async function applyGeoBlock(
 ): Promise<boolean> {
   const blockedCountry = geoBlockDecision(req);
   if (!blockedCountry) return true;
-  incCounter("pariai_geo_block_total", { country: blockedCountry });
+  incCounter("adjudex_geo_block_total", { country: blockedCountry });
   reply.code(451).send({
     error: "geo_blocked",
     message:
-      "PariAI is not available in your jurisdiction. Prediction markets are restricted in certain regions; this is a good-faith block based on CDN-reported country. If you believe this is incorrect, see https://pariai.xyz/legal/jurisdictions for the policy.",
+      "Adjudex is not available in your jurisdiction. Prediction markets are restricted in certain regions; this is a good-faith block based on CDN-reported country. If you believe this is incorrect, see https://adjudex.xyz/legal/jurisdictions for the policy.",
     country: blockedCountry,
   });
   return false;

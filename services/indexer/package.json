@@ -1,5 +1,5 @@
 {
-  "name": "@pariai/indexer",
+  "name": "@adjudex/indexer",
   "version": "0.1.0",
   "private": true,
   "type": "module",

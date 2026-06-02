@@ -44,7 +44,7 @@ export function referralRebatePct(): number {
 
 export function buildReferralMessage(address: string, referrerAddress: string, nonce: string): string {
   return [
-    "PariAI referral attribution",
+    "Adjudex referral attribution",
     `Referee:   ${address.toLowerCase()}`,
     `Referrer:  ${referrerAddress.toLowerCase()}`,
     `Nonce:     ${nonce}`,

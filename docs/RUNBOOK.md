@@ -1,6 +1,6 @@
-# PariAI — Operations Runbook
+# Adjudex — Operations Runbook
 
-This runbook is the single source for bringing the full PariAI stack up on
+This runbook is the single source for bringing the full Adjudex stack up on
 testnet and verifying it end-to-end. It covers env config, deploys, indexer
 hardening, and the live verification script.
 

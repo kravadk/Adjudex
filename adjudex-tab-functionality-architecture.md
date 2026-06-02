@@ -1,4 +1,4 @@
-# PariAI Tab Functionality Architecture
+# Adjudex Tab Functionality Architecture
 
 Current architecture rule: every tab must depend on real service integrations only.
 

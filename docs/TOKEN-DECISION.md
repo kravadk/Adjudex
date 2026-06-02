@@ -1,6 +1,6 @@
 # Token Launch — Decision Framework
 
-> **Default position**: PariAI does NOT launch a token until Stage 5
+> **Default position**: Adjudex does NOT launch a token until Stage 5
 > exit-criteria are met AND there's a clear product reason. This doc
 > exists so the decision is structured, not vibes-driven, when the
 > conversation eventually happens.

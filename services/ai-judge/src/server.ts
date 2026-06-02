@@ -1,4 +1,4 @@
-// PariAI AI Judge - Fastify worker that signs a market verdict.
+// Adjudex AI Judge - Fastify worker that signs a market verdict.
 //
 // Modes:
 //   server: uses JUDGE_PRIVATE_KEY env in a managed backend worker.

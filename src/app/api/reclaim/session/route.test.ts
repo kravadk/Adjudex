@@ -22,7 +22,7 @@ describe("POST /api/reclaim/session", () => {
     process.env.RECLAIM_APP_ID = "app-id";
     process.env.RECLAIM_APP_SECRET = "app-secret";
     process.env.RECLAIM_PROVIDER_ID = "provider-id";
-    process.env.RECLAIM_PUBLIC_BASE_URL = "https://pariai.example";
+    process.env.RECLAIM_PUBLIC_BASE_URL = "https://adjudex.example";
   });
 
   afterEach(() => {
@@ -69,7 +69,7 @@ describe("POST /api/reclaim/session", () => {
     expect(reclaimInitMock).not.toHaveBeenCalled();
   });
 
-  it("creates a Reclaim request with exact PariAI market context", async () => {
+  it("creates a Reclaim request with exact Adjudex market context", async () => {
     const setJsonContext = vi.fn();
     const setAppCallbackUrl = vi.fn();
     reclaimInitMock.mockResolvedValue({
@@ -98,7 +98,7 @@ describe("POST /api/reclaim/session", () => {
     });
     expect(reclaimInitMock).toHaveBeenCalledWith("app-id", "app-secret", "provider-id");
     expect(setJsonContext).toHaveBeenCalledWith({
-      pariai: {
+      adjudex: {
         marketId: "46630:7",
         sourceUrl: "https://example.com/source",
         chainId: 46630,
@@ -107,7 +107,7 @@ describe("POST /api/reclaim/session", () => {
       },
     });
     expect(setAppCallbackUrl).toHaveBeenCalledWith(
-      "https://pariai.example/api/reclaim/callback",
+      "https://adjudex.example/api/reclaim/callback",
       true,
     );
   });

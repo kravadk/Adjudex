@@ -129,7 +129,7 @@ export function LiquidityIncentivesClient() {
               </h2>
               <p className="mt-2 max-w-[760px] text-[12.5px] leading-relaxed" style={{ color: "var(--t3)" }}>
                 No active liquidity program is configured, or the backend is not
-                reachable. PariAI does not show synthetic incentive rows.
+                reachable. Adjudex does not show synthetic incentive rows.
               </p>
               <pre className="mt-3 overflow-auto rounded-[6px] border p-3 text-[11px]" style={{ borderColor: "var(--line)", color: "var(--t3)" }}>
                 {error}

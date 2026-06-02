@@ -14,9 +14,9 @@ import { FiatOnrampButton } from "@/components/dashboard/fiat-onramp";
 // is the live status + proof panel) so a brand-new visitor can land
 // on the first concrete how-to page without scanning JSON.
 export const metadata = {
-  title: "How PariAI works",
+  title: "How Adjudex works",
   description:
-    "PariAI is a parimutuel prediction-market terminal. Connect wallet, mint test USDC, open a position, claim the winning side of the pool.",
+    "Adjudex is a parimutuel prediction-market terminal. Connect wallet, mint test USDC, open a position, claim the winning side of the pool.",
 };
 
 export default function HowItWorksPage() {
@@ -33,13 +33,13 @@ export default function HowItWorksPage() {
           className="text-[28px] font-semibold tracking-[-0.02em]"
           style={{ color: "var(--tx)" }}
         >
-          How PariAI works
+          How Adjudex works
         </h1>
         <p
           className="text-[13.5px] max-w-prose leading-relaxed mt-2"
           style={{ color: "var(--t2)" }}
         >
-          PariAI is a parimutuel prediction-market terminal. Every market
+          Adjudex is a parimutuel prediction-market terminal. Every market
           is a peer pool: USDC staked on YES versus USDC staked on NO.
           Winners share the entire pool pro-rata. No order book, no house.
         </p>

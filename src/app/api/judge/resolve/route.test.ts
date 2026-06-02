@@ -219,7 +219,7 @@ describe("POST /api/judge/resolve", () => {
     expect(privateKeyToAccountMock).not.toHaveBeenCalled();
   });
 
-  it("rejects a verified proof without PariAI market binding context", async () => {
+  it("rejects a verified proof without Adjudex market binding context", async () => {
     process.env.JUDGE_REMOTE_URL = "https://judge-worker.example/";
     process.env.JUDGE_REMOTE_SECRET = "remote-secret";
     getProofMock.mockResolvedValue({
@@ -287,7 +287,7 @@ describe("POST /api/judge/resolve", () => {
     expect(privateKeyToAccountMock).not.toHaveBeenCalled();
   });
 
-  it("rejects nested unsigned PariAI proof binding metadata", async () => {
+  it("rejects nested unsigned Adjudex proof binding metadata", async () => {
     process.env.JUDGE_REMOTE_URL = "https://judge-worker.example/";
     process.env.JUDGE_REMOTE_SECRET = "remote-secret";
     getProofMock.mockResolvedValue({
@@ -385,7 +385,7 @@ describe("POST /api/judge/resolve", () => {
     expect(privateKeyToAccountMock).not.toHaveBeenCalled();
   });
 
-  it("accepts a proof with exact PariAI source binding and forwards sourceProofHash to the remote worker", async () => {
+  it("accepts a proof with exact Adjudex source binding and forwards sourceProofHash to the remote worker", async () => {
     process.env.JUDGE_REMOTE_URL = "https://judge-worker.example/";
     process.env.JUDGE_REMOTE_SECRET = "remote-secret";
     const sourceProofHash = `0x${"11".repeat(32)}` as const;
@@ -526,7 +526,7 @@ function boundProof(
     claimData: {
       provider: "reclaim-provider",
       context: JSON.stringify({
-        pariai: {
+        adjudex: {
           marketId: overrides.marketId ?? "42",
           sourceUrl,
           chainId: overrides.chainId ?? 421614,

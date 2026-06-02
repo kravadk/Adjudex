@@ -43,7 +43,7 @@ export function AgentProfileClient({ id }: { id: string }) {
           <h2 className="text-white text-lg font-semibold mb-2">Agent not found</h2>
           <p className="text-gray-500 text-sm">
             {error ??
-              "No agent matches this ID. ERC-8004 registry has no entries - register one via @pariai/mm-agent."}
+              "No agent matches this ID. ERC-8004 registry has no entries - register one via @adjudex/mm-agent."}
           </p>
         </div>
       </main>
@@ -262,7 +262,7 @@ export function AgentProfileClient({ id }: { id: string }) {
             shortDescription={
               agent.strategyDescription
                 ? `${agent.strategyDescription} · reputation ${agent.reputation}`
-                : `PariAI agent with reputation ${agent.reputation} (ERC-8004)`
+                : `Adjudex agent with reputation ${agent.reputation} (ERC-8004)`
             }
             kind="agent"
           />

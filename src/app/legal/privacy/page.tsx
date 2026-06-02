@@ -3,9 +3,9 @@ import { join } from "node:path";
 import { MiniMarkdown } from "@/components/dashboard/mini-markdown";
 
 export const metadata = {
-  title: "Privacy Policy · PariAI",
+  title: "Privacy Policy · Adjudex",
   description:
-    "How PariAI handles your data. Non-custodial, cookieless analytics, minimal off-chain footprint.",
+    "How Adjudex handles your data. Non-custodial, cookieless analytics, minimal off-chain footprint.",
 };
 
 export default function PrivacyPage() {

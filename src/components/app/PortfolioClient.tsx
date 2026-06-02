@@ -369,7 +369,7 @@ export function PortfolioClient() {
               <AlertTriangle className="mx-auto mb-2 h-5 w-5 text-[#fca5a5]" />
               <div className="text-sm font-semibold" style={{ color: "var(--tx)" }}>Portfolio data unavailable</div>
               <p className="mt-2 text-[12px]" style={{ color: "var(--t2)" }}>
-                Backend/indexer data could not be loaded, so PariAI is not showing zero balances or empty history.
+                Backend/indexer data could not be loaded, so Adjudex is not showing zero balances or empty history.
               </p>
               <div className="mt-3 font-mono text-[11px] text-[#fca5a5]">
                 {portfolioError ?? historyError}

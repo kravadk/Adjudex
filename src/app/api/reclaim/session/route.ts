@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
   const reclaim = await ReclaimProofRequest.init(appId, appSecret, providerId);
   reclaim.setJsonContext({
-    pariai: {
+    adjudex: {
       marketId: body.marketId,
       sourceUrl: normalizedSourceUrl,
       chainId: body.chainId ?? null,

@@ -1,6 +1,6 @@
 # Governance — Multisig Ownership Model
 
-This doc describes **how PariAI manages administrative actions on its contracts**:
+This doc describes **how Adjudex manages administrative actions on its contracts**:
 who has authority, how many signatures are required, and how to perform
 an upgrade without losing a key.
 
@@ -154,7 +154,7 @@ shows all pending, who has signed, how many signatures remain.
 ### Audit trail
 
 The Safe Transaction Service automatically logs every executed action.
-For the PariAI runbook, periodically screenshot this view (monthly) and
+For the Adjudex runbook, periodically screenshot this view (monthly) and
 save it under `docs/governance-log/YYYY-MM.md` as an incident trail.
 
 ## What not to do

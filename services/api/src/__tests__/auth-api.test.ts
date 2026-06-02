@@ -32,7 +32,7 @@ describe("auth API", () => {
     queryMock.mockResolvedValue({ rows: [], rowCount: 1 });
     transactionMock.mockImplementation(async (callback) => callback(queryMock));
     verifyMessageMock.mockResolvedValue(true);
-    process.env.SIWE_DOMAIN = "auth.pariai.test";
+    process.env.SIWE_DOMAIN = "auth.adjudex.test";
     delete process.env.PUBLIC_APP_URL;
     delete process.env.NEXT_PUBLIC_APP_URL;
     delete process.env.RECLAIM_PUBLIC_BASE_URL;
@@ -63,7 +63,7 @@ describe("auth API", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json() as { nonce: string; message: string };
     expect(body.nonce).toMatch(/^[0-9a-f]{24}$/);
-    expect(body.message).toContain("auth.pariai.test wants you to sign in with your Ethereum account");
+    expect(body.message).toContain("auth.adjudex.test wants you to sign in with your Ethereum account");
     expect(body.message).not.toContain("attacker.example");
     expect(queryMock).toHaveBeenCalledWith(
       "INSERT INTO auth_nonces (nonce, address, message, chain_id, domain) VALUES ($1, $2, $3, $4, $5)",
@@ -72,19 +72,19 @@ describe("auth API", () => {
         "0x0000000000000000000000000000000000000001",
         body.message,
         46630,
-        "auth.pariai.test",
+        "auth.adjudex.test",
       ],
     );
   });
 
   it("atomically consumes a SIWE nonce and creates a session scoped to chain and domain", async () => {
     const message = [
-      "auth.pariai.test wants you to sign in with your Ethereum account:",
+      "auth.adjudex.test wants you to sign in with your Ethereum account:",
       "0x0000000000000000000000000000000000000001",
       "",
-      "Sign in to PariAI to manage settings, watchlist, and notifications.",
+      "Sign in to Adjudex to manage settings, watchlist, and notifications.",
       "",
-      "URI: https://pariai.app",
+      "URI: https://adjudex.app",
       "Version: 1",
       "Chain ID: 46630",
       "Nonce: nonce-1",
@@ -92,7 +92,7 @@ describe("auth API", () => {
     ].join("\n");
     const execute = vi
       .fn()
-      .mockResolvedValueOnce({ rows: [{ chain_id: 46630, domain: "auth.pariai.test" }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ chain_id: 46630, domain: "auth.adjudex.test" }], rowCount: 1 })
       .mockResolvedValueOnce({ rows: [], rowCount: 1 });
     transactionMock.mockImplementationOnce(async (callback) => callback(execute));
     queryMock.mockResolvedValueOnce({
@@ -104,7 +104,7 @@ describe("auth API", () => {
           created_at: new Date(),
           consumed_at: null,
           chain_id: 46630,
-          domain: "auth.pariai.test",
+          domain: "auth.adjudex.test",
         },
       ],
       rowCount: 1,
@@ -121,7 +121,7 @@ describe("auth API", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers["set-cookie"]).toContain("pariai_session=");
+    expect(response.headers["set-cookie"]).toContain("adjudex_session=");
     expect(verifyMessageMock).toHaveBeenCalledWith({
       address: "0x0000000000000000000000000000000000000001",
       message,
@@ -136,7 +136,7 @@ describe("auth API", () => {
     expect((execute.mock.calls[1]?.[1] as unknown[]).slice(1, 4)).toEqual([
       "0x0000000000000000000000000000000000000001",
       46630,
-      "auth.pariai.test",
+      "auth.adjudex.test",
     ]);
   });
 
@@ -152,7 +152,7 @@ describe("auth API", () => {
           created_at: new Date(),
           consumed_at: null,
           chain_id: 46630,
-          domain: "auth.pariai.test",
+          domain: "auth.adjudex.test",
         },
       ],
       rowCount: 1,
@@ -177,12 +177,12 @@ describe("auth API", () => {
     const response = await server.inject({
       method: "POST",
       url: "/api/wallet/disconnect",
-      headers: { cookie: "pariai_session=session-token" },
+      headers: { cookie: "adjudex_session=session-token" },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ ok: true, revoked: true });
-    expect(response.headers["set-cookie"]).toContain("pariai_session=;");
+    expect(response.headers["set-cookie"]).toContain("adjudex_session=;");
     expect(response.headers["set-cookie"]).toContain("Max-Age=0");
     expect(queryMock).toHaveBeenCalledWith("DELETE FROM auth_sessions WHERE token = $1", ["session-token"]);
   });

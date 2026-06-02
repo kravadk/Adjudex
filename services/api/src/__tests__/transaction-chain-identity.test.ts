@@ -106,7 +106,7 @@ const marketPool = "0x00000000000000000000000000000000000000aa";
 const creatorAddress = "0x00000000000000000000000000000000000000bb";
 const resolverAddress = "0x00000000000000000000000000000000000000cc";
 const adminAddress = "0x0000000000000000000000000000000000000ad1";
-const sessionCookie = "pariai_session=test-session-token";
+const sessionCookie = "adjudex_session=test-session-token";
 const transactionHash = "0x00000000000000000000000000000000000000000000000000000000000000cc";
 
 function validMarketSpecUri() {
@@ -145,7 +145,7 @@ function sessionRows(address = adminAddress) {
       {
         address,
         chain_id: 46630,
-        domain: "pariai.test",
+        domain: "adjudex.test",
         expires_at: new Date(Date.now() + 60_000),
       },
     ],
@@ -806,7 +806,7 @@ describe("transaction chain and log identity", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "trusted_pariai_event_not_found" });
+    expect(response.json()).toEqual({ error: "trusted_adjudex_event_not_found" });
     expect(
       execute.mock.calls.some((call) => String((call as unknown[])[0]).includes("INSERT INTO markets")),
     ).toBe(false);
@@ -906,7 +906,7 @@ describe("transaction chain and log identity", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "trusted_pariai_event_not_found" });
+    expect(response.json()).toEqual({ error: "trusted_adjudex_event_not_found" });
     expect(
       execute.mock.calls.some((call) => String((call as unknown[])[0]).includes("INSERT INTO markets")),
     ).toBe(false);
@@ -918,7 +918,7 @@ describe("transaction chain and log identity", () => {
     ).toBe(false);
   });
 
-  it("does not persist public transaction syncs without trusted PariAI events", async () => {
+  it("does not persist public transaction syncs without trusted Adjudex events", async () => {
     const execute = vi.fn(async () => ({ rows: [], rowCount: 0 }));
     state.getChainId.mockResolvedValue(46630);
     state.getTransactionReceipt.mockResolvedValue({
@@ -940,7 +940,7 @@ describe("transaction chain and log identity", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "trusted_pariai_event_not_found" });
+    expect(response.json()).toEqual({ error: "trusted_adjudex_event_not_found" });
     expect(execute).not.toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO transaction_syncs"),
       expect.anything(),
@@ -1179,7 +1179,7 @@ describe("transaction chain and log identity", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "trusted_pariai_event_not_found" });
+    expect(response.json()).toEqual({ error: "trusted_adjudex_event_not_found" });
     expect(
       execute.mock.calls.some((call) => String((call as unknown[])[0]).includes("resolution_evidence_hash = $2")),
     ).toBe(false);

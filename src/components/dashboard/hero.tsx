@@ -10,7 +10,7 @@ type Props = {
   recentActivity?: ActivityEvent[];
 };
 
-// PariAI homepage hero with:
+// Adjudex homepage hero with:
 //   - peer-pool tagline
 //   - dual primary CTA ("Open markets" / "Read the terminal guide")
 //   - Connect Wallet CTA shown only when user is NOT connected
@@ -50,7 +50,7 @@ export function Hero({ recentActivity = [] }: Props) {
             className="text-[13.5px] max-w-prose leading-relaxed mb-5"
             style={{ color: "var(--t2)" }}
           >
-            PariAI brings live market prices, resolution context, and
+            Adjudex brings live market prices, resolution context, and
             on-chain proof anchors into one wallet-first surface.
             USDC-centered workflows, no order book, no sportsbook -
             you trade against the other side of the pool.

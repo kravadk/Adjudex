@@ -32,8 +32,8 @@ const NAV: Item[] = [
 ];
 
 const SOCIAL: { href: string; label: string; Icon: typeof XIcon }[] = [
-  { href: "https://x.com/pariai_xyz", label: "X (Twitter)", Icon: XIcon },
-  { href: "https://t.me/pariai", label: "Telegram", Icon: Send },
+  { href: "https://x.com/adjudex_xyz", label: "X (Twitter)", Icon: XIcon },
+  { href: "https://t.me/adjudex", label: "Telegram", Icon: Send },
 ];
 
 function isActive(pathname: string, match: string): boolean {
@@ -56,7 +56,7 @@ export function LeftSidebar() {
       <Link
         href="/"
         className="flex items-center gap-2.5 px-3 pb-5 mb-2"
-        aria-label="PariAI home"
+        aria-label="Adjudex home"
       >
         <span
           className="grid place-items-center w-9 h-9 rounded-full flex-shrink-0"
@@ -73,7 +73,7 @@ export function LeftSidebar() {
           className="text-[19px] font-bold tracking-tight"
           style={{ color: "var(--tx, #fafafa)" }}
         >
-          pariai
+          adjudex
         </span>
       </Link>
 

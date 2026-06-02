@@ -19,11 +19,11 @@ describe("reclaim proof API", () => {
     await server.close();
   });
 
-  it("requires source-bound PariAI binding metadata before storing a proof", async () => {
+  it("requires source-bound Adjudex binding metadata before storing a proof", async () => {
     const response = await server.inject({
       method: "POST",
       url: "/api/reclaim/proofs",
-      headers: { "x-pariai-internal-secret": "test-proof-secret" },
+      headers: { "x-adjudex-internal-secret": "test-proof-secret" },
       payload: {
         sessionId: "session-1",
         providerId: "provider-1",
@@ -74,7 +74,7 @@ describe("reclaim proof API", () => {
       claimData: {
         provider: "provider-1",
         context: JSON.stringify({
-          pariai: {
+          adjudex: {
             marketId: "46630:7",
             sourceUrl: "https://example.com/source",
             chainId: 46630,
@@ -88,7 +88,7 @@ describe("reclaim proof API", () => {
     const response = await server.inject({
       method: "POST",
       url: "/api/reclaim/proofs",
-      headers: { "x-pariai-internal-secret": "test-proof-secret" },
+      headers: { "x-adjudex-internal-secret": "test-proof-secret" },
       payload: {
         sessionId: "session-1",
         providerId: "provider-1",
@@ -122,11 +122,11 @@ describe("reclaim proof API", () => {
     );
   });
 
-  it("rejects nested unsigned PariAI binding metadata", async () => {
+  it("rejects nested unsigned Adjudex binding metadata", async () => {
     const response = await server.inject({
       method: "POST",
       url: "/api/reclaim/proofs",
-      headers: { "x-pariai-internal-secret": "test-proof-secret" },
+      headers: { "x-adjudex-internal-secret": "test-proof-secret" },
       payload: {
         sessionId: "session-1",
         providerId: "provider-1",
@@ -167,7 +167,7 @@ describe("reclaim proof API", () => {
     const response = await server.inject({
       method: "GET",
       url: "/api/reclaim/proofs/session-1",
-      headers: { "x-pariai-internal-secret": "test-proof-secret" },
+      headers: { "x-adjudex-internal-secret": "test-proof-secret" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -191,7 +191,7 @@ function boundProof() {
     claimData: {
       provider: "provider-1",
       context: JSON.stringify({
-        pariai: {
+        adjudex: {
           marketId: "46630:7",
           sourceUrl: "https://example.com/source",
         },

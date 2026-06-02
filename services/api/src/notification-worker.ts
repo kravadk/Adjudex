@@ -67,7 +67,7 @@ async function drainOnce(): Promise<void> {
     [MAX_ATTEMPTS],
   );
   const rows = result.rows;
-  setGauge("pariai_notification_pending", rows.length);
+  setGauge("adjudex_notification_pending", rows.length);
   if (!rows.length) return;
 
   for (const row of rows) {

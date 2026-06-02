@@ -101,7 +101,7 @@ contract ParimutuelPool {
     function getTotalVolume() external view returns (uint256) { return yesPool + noPool; }
     function getBettorCount() external view returns (uint256) { return bettorCount; }
 
-    function name() external pure returns (string memory) { return "PariAI Position"; }
+    function name() external pure returns (string memory) { return "Adjudex Position"; }
     function symbol() external pure returns (string memory) { return "PARIPOS"; }
 
     // The creator (or any current resolver) can hand off authority. Used to

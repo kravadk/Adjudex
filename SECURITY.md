@@ -1,6 +1,6 @@
 # Security Policy
 
-PariAI is a parimutuel prediction-market dApp on Arbitrum. This document
+Adjudex is a parimutuel prediction-market dApp on Arbitrum. This document
 explains how to report vulnerabilities, what is in scope, and what our
 disclosure timeline looks like.
 
@@ -25,10 +25,10 @@ self-hosters are responsible for back-porting.
 Send a private report via one of these channels (in order of preference):
 
 1. **Immunefi** — once our bug bounty is live (S1.D), report at
-   `https://immunefi.com/bounty/pariai` (link will be published here)
-2. **Encrypted email** — `security@pariai.xyz` (PGP key fingerprint:
+   `https://immunefi.com/bounty/adjudex` (link will be published here)
+2. **Encrypted email** — `security@adjudex.xyz` (PGP key fingerprint:
    _TBD before mainnet, will be published here and on the website_)
-3. **DM on X** — [@pariai_xyz](https://x.com/pariai_xyz) for initial
+3. **DM on X** — [@adjudex_xyz](https://x.com/adjudex_xyz) for initial
    contact only; we will move to encrypted email for details
 
 Include:

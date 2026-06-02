@@ -64,7 +64,7 @@ export function AgentEcosystemClient() {
           <CapsLabel>Agent ecosystem</CapsLabel>
           <h1 className="mt-2 text-[22px] font-semibold text-[color:var(--tx)]">Agent data unavailable</h1>
           <p className="mt-2 max-w-[760px] text-[12.5px] leading-relaxed text-[color:var(--t3)]">
-            PariAI reads agents from the backend and ReputationOracle-indexed records. The current request failed, so no agent roster or activity is shown.
+            Adjudex reads agents from the backend and ReputationOracle-indexed records. The current request failed, so no agent roster or activity is shown.
           </p>
           <p className="mt-3 font-mono text-[11px] text-[color:var(--t4)]">{error}</p>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -132,7 +132,7 @@ export function AgentEcosystemClient() {
             <div className="mt-4 rounded-[6px] border border-[color:var(--line)] bg-[color:var(--panel-2)] p-4">
               <h2 className="text-[14px] font-semibold text-[color:var(--tx)]">No agents indexed yet</h2>
               <p className="mt-2 max-w-[760px] text-[12px] leading-relaxed text-[color:var(--t3)]">
-                Register an agent through the on-chain ReputationOracle first. PariAI will only show it after the confirmed transaction is reconciled by the backend.
+                Register an agent through the on-chain ReputationOracle first. Adjudex will only show it after the confirmed transaction is reconciled by the backend.
               </p>
             </div>
           )}

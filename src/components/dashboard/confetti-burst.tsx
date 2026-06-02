@@ -101,7 +101,7 @@ export function ConfettiBurst({
   return (
     <>
       <style>{`
-        @keyframes pariai-confetti-fall {
+        @keyframes adjudex-confetti-fall {
           0% {
             transform: translate3d(0, -8%, 0) rotate(0deg);
             opacity: 1;
@@ -131,7 +131,7 @@ export function ConfettiBurst({
               height: p.size,
               background: p.color,
               borderRadius: p.shape === "circle" ? "50%" : "2px",
-              animation: `pariai-confetti-fall ${p.duration}s ease-in ${p.delay}s forwards`,
+              animation: `adjudex-confetti-fall ${p.duration}s ease-in ${p.delay}s forwards`,
               ["--drift" as string]: `${p.drift}px`,
               ["--rotate" as string]: `${p.rotate}deg`,
             } as React.CSSProperties}

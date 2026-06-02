@@ -138,7 +138,7 @@ async function main() {
     console.log(`Already registered (wallet=${existing[0]}).`);
   }
 
-  console.log("\nReady. Start the loop:\n  pnpm --filter @pariai/mm-agent dev");
+  console.log("\nReady. Start the loop:\n  pnpm --filter @adjudex/mm-agent dev");
 }
 
 main().catch((err) => {

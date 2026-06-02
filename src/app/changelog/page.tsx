@@ -2,9 +2,9 @@ import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export const metadata = {
-  title: "Changelog - PariAI",
+  title: "Changelog - Adjudex",
   description:
-    "What shipped on PariAI: observability, multisig, audit prep, fee mechanism, geo-block, on-ramps, scale infrastructure, and more.",
+    "What shipped on Adjudex: observability, multisig, audit prep, fee mechanism, geo-block, on-ramps, scale infrastructure, and more.",
 };
 
 type Entry = {
@@ -23,7 +23,7 @@ const ENTRIES: Entry[] = [
     stage: "S3.E",
     title: "Agent ecosystem",
     body:
-      "PariAI now exposes an agent ecosystem surface at /agents, a backend summary endpoint, and a confirmed-transaction registration path. Agents are recorded only after ReputationOracle emits AgentRegistered and the backend reconciles the receipt.",
+      "Adjudex now exposes an agent ecosystem surface at /agents, a backend summary endpoint, and a confirmed-transaction registration path. Agents are recorded only after ReputationOracle emits AgentRegistered and the backend reconciles the receipt.",
   },
   {
     date: "2026-06-02",
@@ -31,7 +31,7 @@ const ENTRIES: Entry[] = [
     stage: "S3.B",
     title: "Liquidity incentives",
     body:
-      "PariAI now has backend-configured liquidity incentive programs. Eligibility is computed from indexed positions, while rebate payouts appear only after a confirmed transaction is recorded by the backend.",
+      "Adjudex now has backend-configured liquidity incentive programs. Eligibility is computed from indexed positions, while rebate payouts appear only after a confirmed transaction is recorded by the backend.",
   },
   {
     date: "2026-06-02",
@@ -39,7 +39,7 @@ const ENTRIES: Entry[] = [
     stage: "S3.D",
     title: "Mobile PWA shell",
     body:
-      "PariAI now ships an installable web app manifest, generated mobile icons, viewport metadata, service-worker registration, and an offline shell. The worker caches only static shell assets and never caches API, wallet, market, portfolio, balance, or transaction data.",
+      "Adjudex now ships an installable web app manifest, generated mobile icons, viewport metadata, service-worker registration, and an offline shell. The worker caches only static shell assets and never caches API, wallet, market, portfolio, balance, or transaction data.",
   },
   {
     date: "2026-06-02",
@@ -75,7 +75,7 @@ const ENTRIES: Entry[] = [
     links: [
       {
         label: "docs/ONCALL.md",
-        href: "https://github.com/pariai/repo/blob/main/docs/ONCALL.md",
+        href: "https://github.com/adjudex/repo/blob/main/docs/ONCALL.md",
       },
     ],
   },
@@ -85,7 +85,7 @@ const ENTRIES: Entry[] = [
     stage: "S2.D",
     title: "Fiat on-ramp",
     body:
-      "MoonPay and Transak widgets are wired into onboarding. Users can buy USDC on Arbitrum with a card and funds land directly in their wallet, with no custody by PariAI.",
+      "MoonPay and Transak widgets are wired into onboarding. Users can buy USDC on Arbitrum with a card and funds land directly in their wallet, with no custody by Adjudex.",
   },
   {
     date: "2026-06-01",
@@ -178,7 +178,7 @@ export default function ChangelogPage() {
         className="text-[28px] font-semibold tracking-[-0.02em] mb-2"
         style={{ color: "var(--tx)" }}
       >
-        What shipped on PariAI
+        What shipped on Adjudex
       </h1>
       <p
         className="text-[13.5px] leading-relaxed mb-6 max-w-prose"

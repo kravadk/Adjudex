@@ -65,7 +65,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", fontSize: 28, color: "#CCE9E7", letterSpacing: 2, textTransform: "uppercase" }}>
-              PariAI proof market
+              Adjudex proof market
             </div>
             <div style={{ display: "flex", marginTop: 8, fontSize: 24, color: "#a3a3a3" }}>
               {market.category} - {market.asset} - {market.status}

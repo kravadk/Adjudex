@@ -3,7 +3,7 @@ name = "ai-judge-verifier"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Stylus port of AIJudgeVerifier.sol — ECDSA-signed AI judge verdict verifier for PariAI parimutuel pools."
+description = "Stylus port of AIJudgeVerifier.sol — ECDSA-signed AI judge verdict verifier for Adjudex parimutuel pools."
 
 [dependencies]
 stylus-sdk = "0.10.7"

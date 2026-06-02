@@ -1,6 +1,6 @@
-﻿# PariAI Architecture
+﻿# Adjudex Architecture
 
-PariAI is an AI-native prediction-market product on Arbitrum Sepolia (and
+Adjudex is an AI-native prediction-market product on Arbitrum Sepolia (and
 optionally Robinhood Chain). It composes a parimutuel pool primitive with
 an **optimistic** AI-judge resolver, on-chain Reclaim proof anchoring,
 EIP-712 signed bet quotes, a hardened Postgres indexer, and an
@@ -99,7 +99,7 @@ One anchor per sessionId — first publisher binds. Anyone can read via
 
 ### 2.5 BetQuoteVerifier
 
-EIP-712 domain: `name = "PariAI Bet Quote", version = "1",
+EIP-712 domain: `name = "Adjudex Bet Quote", version = "1",
 chainId = block.chainid, verifyingContract = address(this)`.
 
 `BetQuote` struct:
@@ -149,7 +149,7 @@ off-chain signer code does not change.
 
 ## 3. AI roles
 
-PariAI keeps AI liquidity and AI resolution strictly separated.
+Adjudex keeps AI liquidity and AI resolution strictly separated.
 
 - **AI Market-Maker** (`services/mm-agent/`) — registers in
   `ReputationOracle`, watches open pools, places counter-bets when the
@@ -370,7 +370,7 @@ a new chain.
 - **Rate limiter** — global `onRequest` hook (`rate-limit.ts`). 30 writes
   / 240 reads per minute per IP. `/health`, `/api/status` are unmetered.
 - **SIWE** — `auth.ts` builds the SIWE message, verifies signature,
-  issues `pariai_session` HttpOnly cookie with 7d TTL.
+  issues `adjudex_session` HttpOnly cookie with 7d TTL.
 - **Admin allowlist** — `parseAdminAllowlist()` reads
   `IMPORT_ADMIN_ADDRESSES` (or legacy `ADMIN_WALLET_ADDRESSES`).
   Importer routes call `requireImportAdmin()` (401 / 403 / 503).
@@ -471,7 +471,7 @@ state or user persistence.
 
 The importer scans configured public sources (RSS / API / event feeds),
 normalises source-backed candidates into `MarketDraft`, validates them,
-and deploys PariAI-owned market contracts after admin approval. It does
+and deploys Adjudex-owned market contracts after admin approval. It does
 **not** copy third-party prediction markets, liquidity, odds, or
 activity.
 
@@ -526,12 +526,12 @@ wallet → Pool.claim → receipt → /api/claim or /api/sync/transaction →
 - RPC chain id matches `chainId`
 - receipt not reverted
 - confirmation depth >= `TRANSACTION_SYNC_MIN_CONFIRMATIONS`
-- contains at least one trusted PariAI event
+- contains at least one trusted Adjudex event
 
 Outcomes: `confirmed`, `chain_not_supported`, `rpc_not_configured`,
 `rpc_chain_mismatch`, `transaction_not_found`, `transaction_reverted`,
 `transaction_insufficient_confirmations`,
-`trusted_pariai_event_not_found`. With `TRANSACTION_SYNC_MIN_CONFIRMATIONS
+`trusted_adjudex_event_not_found`. With `TRANSACTION_SYNC_MIN_CONFIRMATIONS
 > 0`, returns 409 + `pending_confirmations` until the receipt has enough
 confirmations.
 

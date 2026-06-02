@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, BookOpen, ExternalLink } from "lucide-react";
 
-// PariAI app footer - clustered nav (Core / Terminal / Resolution) +
+// Adjudex app footer - clustered nav (Core / Terminal / Resolution) +
 // dual-CTA ("Open markets" / "Read the terminal guide") + related-reading.
 export function Footer() {
   return (
@@ -15,7 +15,7 @@ export function Footer() {
             className="text-[14px] font-semibold tracking-tight mb-2"
             style={{ color: "var(--tx)" }}
           >
-            PariAI
+            Adjudex
           </div>
           <p
             className="text-[12.5px] leading-relaxed mb-3"

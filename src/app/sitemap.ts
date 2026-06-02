@@ -1,12 +1,12 @@
 import type { MetadataRoute } from "next";
 
-// Sitemap for PariAI. Returns evergreen static routes plus per-game
+// Sitemap for Adjudex. Returns evergreen static routes plus per-game
 // esports landing pages. Per-market entries are intentionally NOT in
 // the sitemap right now — they're high-churn and adding them requires
 // a DB roundtrip on every sitemap fetch. When we're ready to ship the
 // market index entries, route this through /api/markets/sitemap.
 //
-// Configurable via NEXT_PUBLIC_SITE_URL (defaults to https://pariai.xyz).
+// Configurable via NEXT_PUBLIC_SITE_URL (defaults to https://adjudex.xyz).
 const GAMES = [
   "cs2",
   "dota2",
@@ -21,7 +21,7 @@ const GAMES = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base =
-    (process.env.NEXT_PUBLIC_SITE_URL ?? "https://pariai.xyz").replace(/\/$/, "");
+    (process.env.NEXT_PUBLIC_SITE_URL ?? "https://adjudex.xyz").replace(/\/$/, "");
   const now = new Date().toISOString();
 
   const evergreen: MetadataRoute.Sitemap = [

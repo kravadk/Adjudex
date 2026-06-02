@@ -54,7 +54,7 @@ contract BetQuoteVerifier {
     constructor(address _quoteSigner) {
         require(_quoteSigner != address(0), "signer=0");
         quoteSigner = _quoteSigner;
-        nameHash = keccak256(bytes("PariAI Bet Quote"));
+        nameHash = keccak256(bytes("Adjudex Bet Quote"));
         versionHash = keccak256(bytes("1"));
     }
 

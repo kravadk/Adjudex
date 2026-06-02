@@ -1,4 +1,4 @@
-# Privacy Policy — PariAI
+# Privacy Policy — Adjudex
 
 **DRAFT — Has NOT been reviewed by legal counsel. Replace before mainnet launch.**
 
@@ -7,9 +7,9 @@ Last updated: 2026-06-01
 
 ## 1. Who we are
 
-PariAI is operated by **TBD legal entity** (Ukrainian or Estonian
+Adjudex is operated by **TBD legal entity** (Ukrainian or Estonian
 company TBD post-S2). For data-protection questions, contact
-`privacy@pariai.xyz`.
+`privacy@adjudex.xyz`.
 
 ## 2. Data we collect
 
@@ -111,7 +111,7 @@ If you are in the EU/EEA you have the right to:
 - **Complaint**: lodge a complaint with your national supervisory
   authority.
 
-To exercise rights, email `privacy@pariai.xyz` with your wallet address
+To exercise rights, email `privacy@adjudex.xyz` with your wallet address
 signed with that wallet (proof of ownership).
 
 ## 7. Cookies
@@ -162,7 +162,7 @@ Material changes are announced 7 days in advance via Discord and X.
 
 ## 13. Contact
 
-- Privacy questions: `privacy@pariai.xyz`
+- Privacy questions: `privacy@adjudex.xyz`
 - Security disclosure: see [SECURITY.md](../SECURITY.md)
 - Data Protection Officer (DPO): TBD (required only if processing
   scales to GDPR Article 37 thresholds)
