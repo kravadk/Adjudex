@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -59,15 +60,17 @@ export function LeftSidebar() {
         aria-label="Adjudex home"
       >
         <span
-          className="grid place-items-center w-9 h-9 rounded-full flex-shrink-0"
-          style={{ background: "#ffffff" }}
+          className="grid place-items-center w-9 h-9 rounded-[8px] flex-shrink-0 overflow-hidden"
+          style={{ background: "#0a0a0a" }}
         >
-          <span
-            className="text-[16px] font-black"
-            style={{ color: "#3b6ffa", letterSpacing: "-0.04em" }}
-          >
-            Π
-          </span>
+          <Image
+            src="/logo.png"
+            alt=""
+            width={36}
+            height={36}
+            priority
+            className="w-full h-full object-contain"
+          />
         </span>
         <span
           className="text-[19px] font-bold tracking-tight"

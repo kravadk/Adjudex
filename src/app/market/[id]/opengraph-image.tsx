@@ -52,26 +52,27 @@ export default async function OpenGraphImage({
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
           <div
             style={{
-              fontSize: 38,
+              fontSize: 44,
               width: 76,
               height: 76,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               borderRadius: 16,
-              background: "#28a0f0",
+              background: "#d9ff00",
               color: "#0a0a0a",
-              fontWeight: 800,
+              fontWeight: 900,
+              fontFamily: "Arial",
             }}
           >
-            P
+            A
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div
               style={{
                 display: "flex",
                 fontSize: 22,
-                color: "#28a0f0",
+                color: "#d9ff00",
                 letterSpacing: 2,
                 textTransform: "uppercase",
                 fontWeight: 700,
