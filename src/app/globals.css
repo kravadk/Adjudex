@@ -1,0 +1,457 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   PariAI design tokens.
+   ============================================================ */
+
+:root {
+  /* Brand accent (foresee-style swap — bright blue + yellow-green) */
+  --accent: #3b6ffa;
+  --accent-bright: #3b6ffa;
+  --accent-deep: #2851d0;
+  --accent-soft: rgba(59, 111, 250, 0.10);
+  --brand-primary: #d9ff00;
+  --brand-secondary: #9be600;
+
+  /* Yes / No button colors (parimutuel sides) */
+  --yes-bg: #d9ff00;
+  --yes-tx: #0a0a0a;
+  --yes-bg-soft: rgba(217, 255, 0, 0.10);
+  --no-bg: #3b6ffa;
+  --no-tx: #ffffff;
+  --no-bg-soft: rgba(59, 111, 250, 0.10);
+
+  /* Surfaces (pure-dark foresee-style shell) */
+  --shell-bg: #0a0a0a;
+  --wallpaper: #0a0a0a;
+  --win-bg: #0a0a0a;
+  --sidebar-bg: #0a0a0a;
+  --main-bg: #0a0a0a;
+  --panel-bg: #141414;
+  --panel-bg-2: #161616;
+  --card-bg: #141414;
+  --card-inner: #161616;
+
+  /* Lines */
+  --line: #1f1f1f;
+  --line-soft: #1a1a1a;
+  --grid-sq: #1f1f1f;
+
+  /* Text */
+  --tx: #f4f2ef;
+  --t2: #a7a29d;
+  --t3: #7c7772;
+  --t4: #5f5a55;
+
+  /* Status pills */
+  --green-bg: rgba(63, 140, 108, 0.16);
+  --green-tx: #5fc295;
+  --green-dot: #54b88a;
+  --amber-bg: rgba(240, 150, 30, 0.15);
+  --amber-tx: #e9a23b;
+  --gray-bg: rgba(150, 145, 140, 0.12);
+  --gray-tx: #b4afa9;
+
+  /* Backwards-compat aliases so existing Tailwind arbitrary-value
+     classes (bg-[#1a1a1a] etc.) keep working visually */
+  --background: var(--win-bg);
+  --foreground: var(--tx);
+  --card: var(--card-bg);
+  --card-foreground: var(--tx);
+  --popover: var(--card-inner);
+  --popover-foreground: var(--tx);
+  --primary: var(--brand-primary);
+  --primary-foreground: #0a0a0a;
+  --secondary: var(--panel-bg);
+  --secondary-foreground: var(--tx);
+  --muted: var(--line);
+  --muted-foreground: var(--t2);
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: var(--line);
+  --input: var(--panel-bg);
+  --ring: var(--accent);
+
+  --radius: 16px;
+  --radius-card: 14px;
+  --radius-button: 9px;
+  --radius-pill: 9999px;
+  --radius-chip: 7px;
+}
+
+@theme inline {
+  /* Rubik — same Google Font foresee.lol loads via @expo-google-fonts.
+     Both --font-sans and --font-mono point to it so existing font-mono
+     usages (numbers, kbd, table cells) match the rest of the site.
+     Tabular alignment is preserved by callers via tabular-nums. */
+  --font-sans: var(--font-rubik), "Rubik", system-ui, sans-serif;
+  --font-mono: var(--font-rubik), "Rubik", system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  html, body {
+    background: var(--wallpaper);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Wallpaper that lives under the window frame */
+.wallpaper {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 70% 18%, #6b6048 0%, #4a4636 26%, #2c2a22 55%, #14130f 100%),
+    radial-gradient(80% 60% at 12% 95%, #3a3526 0%, transparent 60%);
+  background-color: var(--wallpaper);
+  z-index: -1;
+  pointer-events: none;
+}
+.wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.012) 0 2px, transparent 2px 5px),
+    radial-gradient(150% 120% at 50% 0%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Edge-to-edge content container (window frame removed per request) */
+.app-frame {
+  background: var(--win-bg);
+  min-height: 100vh;
+}
+
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Polish — gentle reveal motion on initial load */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+  .reveal {
+    opacity: 0;
+    animation: rise 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+}
+
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.001ms !important;
+}
+
+html[data-compact="on"] .panel-head { padding: 10px 13px; }
+html[data-compact="on"] .panel-body { padding: 12px 13px; }
+html[data-compact="on"] .stat-card { padding: 11px 12px 0; }
+html[data-compact="on"] .tbl th,
+html[data-compact="on"] .tbl td { padding-top: 8px; padding-bottom: 8px; }
+
+/* ============================================================
+   PariAI component primitives.
+   ============================================================ */
+
+/* Cards / panels */
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.22s, box-shadow 0.22s;
+}
+.panel:hover { border-color: #423f3c; }
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.panel-title {
+  font: 600 12px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t2);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.panel-body { padding: 15px 16px 14px; }
+
+/* Stat card */
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 15px 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+              box-shadow 0.28s, border-color 0.2s;
+}
+.stat-card:hover {
+  transform: translateY(-3px);
+  border-color: #4a4641;
+  box-shadow: 0 16px 32px -18px rgba(0, 0, 0, 0.75);
+}
+.stat-card .stat-label {
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+.stat-card .stat-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  margin-top: 11px;
+}
+.stat-card .stat-num {
+  font: 600 27px/1 var(--font-mono);
+  letter-spacing: -0.01em;
+  color: var(--tx);
+}
+.stat-card .stat-unit { font-size: 12px; color: var(--t3); padding-bottom: 3px; }
+.stat-card .stat-foot {
+  display: flex;
+  align-items: center;
+  margin: 13px -15px 0;
+  padding: 9px 15px;
+  border-top: 1px solid var(--line);
+}
+.stat-card .stat-foot .ic {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #4a4641;
+  display: grid;
+  place-items: center;
+  color: var(--t3);
+  transition: transform 0.25s, color 0.2s, border-color 0.2s;
+}
+.stat-card:hover .stat-foot .ic {
+  transform: rotate(90deg);
+  color: var(--accent);
+  border-color: rgba(40, 160, 240, 0.4);
+}
+.stat-card .stat-foot .delta { margin-left: auto; font-size: 11.5px; color: var(--t3); }
+.stat-card .stat-foot .delta b {
+  color: var(--green-tx);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+/* Small-caps label */
+.caps {
+  font: 500 10.5px/1 var(--font-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+
+/* Badges */
+.b-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.b-badge .d { width: 6px; height: 6px; border-radius: 50%; }
+.b-badge.ok { background: var(--green-bg); color: var(--green-tx); }
+.b-badge.ok .d { background: var(--green-dot); }
+.b-badge.pend { background: var(--amber-bg); color: var(--amber-tx); }
+.b-badge.pend .d { background: var(--amber-tx); }
+.b-badge.ref { background: var(--gray-bg); color: var(--gray-tx); }
+.b-badge.ref .d { background: var(--gray-tx); }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s, box-shadow 0.18s;
+}
+.btn:active { transform: scale(0.95); }
+.btn.ghost { background: #2a2826; border-color: #3a3633; color: var(--tx); }
+.btn.ghost:hover { background: #2c2926; }
+.btn.primary {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 6px 16px -9px rgba(40, 160, 240, 0.65);
+}
+.btn.primary:hover {
+  background: var(--accent-bright);
+  box-shadow: 0 9px 22px -9px rgba(40, 160, 240, 0.8);
+  transform: translateY(-1px);
+}
+
+.form-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #34312e;
+  background: #211f1e;
+  color: var(--tx);
+  padding: 10px 12px;
+  font: 500 13px/1.4 var(--font-sans);
+  outline: none;
+}
+.form-input:focus {
+  border-color: rgba(40, 160, 240, 0.65);
+  box-shadow: 0 0 0 3px rgba(40, 160, 240, 0.12);
+}
+.form-input::placeholder {
+  color: var(--t4);
+}
+.form-input option {
+  background: #211f1e;
+  color: var(--tx);
+}
+
+/* Segmented control */
+.seg {
+  display: inline-flex;
+  background: #252321;
+  border: 1px solid #34312e;
+  border-radius: 9px;
+  padding: 3px;
+}
+.seg button {
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--t2);
+  padding: 5px 13px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, transform 0.12s;
+}
+.seg button:hover:not(.on) { color: var(--tx); background: #34322f; }
+.seg button.on { background: #e9e6e2; color: #1c1b1a; font-weight: 600; }
+
+/* Tables */
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tbl thead th {
+  font: 500 10.5px/1 var(--font-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--t3);
+  text-align: left;
+  padding: 11px 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tbl thead th.right { text-align: right; }
+.tbl tbody td {
+  padding: 13px 14px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13px;
+  color: var(--tx);
+  white-space: nowrap;
+}
+.tbl tbody tr { transition: background 0.14s; }
+.tbl tbody tr:hover {
+  background: #2c2a28;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.tbl td.num { font-family: var(--font-mono); font-weight: 500; }
+.tbl td.id { font-family: var(--font-mono); color: var(--t3); font-size: 12.5px; }
+
+/* Live activity row */
+.live-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green-dot);
+  margin-right: 7px;
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes livepulse {
+    0%   { box-shadow: 0 0 0 0 rgba(84, 184, 138, 0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(84, 184, 138, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(84, 184, 138, 0); }
+  }
+  .live-dot { animation: livepulse 2.2s ease-out infinite; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--win-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4641;
+}
+::selection {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+/* Hide scrollbar but keep scroll behaviour (used on horizontal
+   sub-category strip + sticky right rail). */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

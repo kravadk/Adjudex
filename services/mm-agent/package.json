@@ -1,0 +1,18 @@
+{
+  "name": "@pariai/mm-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --env-file=../../.env.local src/index.ts",
+    "start": "tsx --env-file=../../.env.local src/index.ts",
+    "register": "tsx --env-file=../../.env.local src/register.ts"
+  },
+  "dependencies": {
+    "viem": "^2.51.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.3",
+    "typescript": "^5"
+  }
+}
