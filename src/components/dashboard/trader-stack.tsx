@@ -10,7 +10,7 @@
 
 const PALETTE = [
   "#10b981", // green
-  "#28a0f0", // arbitrum blue
+  "#3b6ffa", // arbitrum blue
   "#a78bfa", // violet
   "#f59e0b", // amber
   "#ef4444", // red

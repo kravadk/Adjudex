@@ -1,8 +1,19 @@
-# Adjudex
+<div align="center">
+  <img src="public/logo.png" alt="Adjudex" width="128" height="128" />
+  <h1>Adjudex</h1>
+  <p><strong>AI-native parimutuel prediction markets on Arbitrum.</strong></p>
+  <p>
+    <img src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" alt="Next.js 16" />
+    <img src="https://img.shields.io/badge/Solidity-0.8.26-363636?logo=solidity" alt="Solidity 0.8.26" />
+    <img src="https://img.shields.io/badge/chain-Arbitrum%20Sepolia-28a0f0?logo=arbitrum" alt="Arbitrum Sepolia" />
+    <img src="https://img.shields.io/badge/license-MIT-d9ff00" alt="MIT License" />
+  </p>
+</div>
 
-**AI-native prediction markets on Arbitrum** — parimutuel pools with an
-optimistic AI judge, on-chain Reclaim zkTLS proof anchors, EIP-712 signed
-bet quotes, and a hardened Postgres-backed indexer.
+---
+
+Parimutuel pools with an optimistic AI judge, on-chain Reclaim zkTLS proof
+anchors, EIP-712 signed bet quotes, and a hardened Postgres-backed indexer.
 
 Adjudex takes a strict view of where data lives. Markets, balances,
 positions, activity, timelines, resolution status, settings, watchlists,

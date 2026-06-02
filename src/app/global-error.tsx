@@ -80,7 +80,7 @@ export default function GlobalError({
                 marginBottom: 18,
               }}
             >
-              digest: <span style={{ color: "#28a0f0" }}>{error.digest}</span>
+              digest: <span style={{ color: "#3b6ffa" }}>{error.digest}</span>
             </p>
           )}
           <button
@@ -91,7 +91,7 @@ export default function GlobalError({
               padding: "0 18px",
               fontSize: 13,
               fontWeight: 600,
-              background: "#28a0f0",
+              background: "#3b6ffa",
               color: "#0a0a0a",
               border: "none",
               borderRadius: 6,

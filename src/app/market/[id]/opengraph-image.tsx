@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { ImageResponse } from "next/og";
 import { requireBackendUrl } from "@/lib/server/backend-api";
 import type { Market } from "@/lib/types/domain";
@@ -6,6 +8,18 @@ export const runtime = "nodejs";
 export const alt = "Adjudex market";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+
+// Read logo once per process and inline as base64 — Satori cannot fetch
+// network assets reliably from inside ImageResponse, so we embed the
+// PNG bytes directly. Trades ~110 KB of bundle for guaranteed rendering.
+const LOGO_DATA_URI = (() => {
+  try {
+    const buf = fs.readFileSync(path.join(process.cwd(), "public", "logo.png"));
+    return `data:image/png;base64,${buf.toString("base64")}`;
+  } catch {
+    return null;
+  }
+})();
 
 export default async function OpenGraphImage({
   params,
@@ -50,23 +64,35 @@ export default async function OpenGraphImage({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <div
-            style={{
-              fontSize: 44,
-              width: 76,
-              height: 76,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 16,
-              background: "#d9ff00",
-              color: "#0a0a0a",
-              fontWeight: 900,
-              fontFamily: "Arial",
-            }}
-          >
-            A
-          </div>
+          {LOGO_DATA_URI ? (
+            // ImageResponse (Satori) only accepts native <img>, not next/image
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={LOGO_DATA_URI}
+              alt=""
+              width={76}
+              height={76}
+              style={{ borderRadius: 16 }}
+            />
+          ) : (
+            <div
+              style={{
+                fontSize: 44,
+                width: 76,
+                height: 76,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 16,
+                background: "#d9ff00",
+                color: "#0a0a0a",
+                fontWeight: 900,
+                fontFamily: "Arial",
+              }}
+            >
+              A
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div
               style={{

@@ -1,5 +1,5 @@
-const CACHE_NAME = "adjudex-shell-v1";
-const SHELL_URLS = ["/offline"];
+const CACHE_NAME = "adjudex-shell-v2";
+const SHELL_URLS = ["/offline", "/logo.png"];
 
 function isApiRequest(url) {
   return url.pathname.startsWith("/api/");
@@ -10,6 +10,7 @@ function isStaticAsset(url) {
     url.pathname.startsWith("/_next/static/") ||
     url.pathname === "/icon" ||
     url.pathname === "/apple-icon" ||
+    url.pathname === "/logo.png" ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname === "/favicon.ico"
   );

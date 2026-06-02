@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 
 const PARTICLE_COUNT = 30;
 const COLORS = [
-  "#28a0f0", // arbitrum blue
+  "#3b6ffa", // arbitrum blue
   "#10b981", // green
   "#a78bfa", // violet
   "#f59e0b", // amber

@@ -35,12 +35,21 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://adjudex.xyz";
+
 export const metadata: Metadata = {
-  title: "Adjudex - AI-native prediction markets",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "Adjudex - AI-native prediction markets",
+    template: "%s · Adjudex",
+  },
   description:
     "Parimutuel prediction markets with AI market-makers, zkTLS-attested resolution, indexed proof, and portfolio lifecycle on Arbitrum and Robinhood Chain.",
   applicationName: "Adjudex",
   manifest: "/manifest.webmanifest",
+  alternates: {
+    canonical: "/",
+  },
   appleWebApp: {
     capable: true,
     title: "Adjudex",
@@ -51,6 +60,15 @@ export const metadata: Metadata = {
     description:
       "AI-native prediction markets with real contracts, indexed proof, and auditable portfolio lifecycle.",
     type: "website",
+    siteName: "Adjudex",
+    url: SITE_URL,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Adjudex",
+    description:
+      "AI-native prediction markets with real contracts, indexed proof, and auditable portfolio lifecycle.",
+    site: "@adjudex_xyz",
   },
 };
 

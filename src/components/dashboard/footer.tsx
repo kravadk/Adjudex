@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BookOpen, ExternalLink } from "lucide-react";
 
@@ -11,11 +12,20 @@ export function Footer() {
     >
       <div className="max-w-[1280px] mx-auto px-[22px] py-8 grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1fr_1fr] gap-6">
         <div>
-          <div
-            className="text-[14px] font-semibold tracking-tight mb-2"
-            style={{ color: "var(--tx)" }}
-          >
-            Adjudex
+          <div className="flex items-center gap-2 mb-2">
+            <Image
+              src="/logo.png"
+              alt=""
+              width={20}
+              height={20}
+              className="rounded-[4px]"
+            />
+            <span
+              className="text-[14px] font-semibold tracking-tight"
+              style={{ color: "var(--tx)" }}
+            >
+              Adjudex
+            </span>
           </div>
           <p
             className="text-[12.5px] leading-relaxed mb-3"

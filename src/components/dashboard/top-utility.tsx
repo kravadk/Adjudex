@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, Search } from "lucide-react";
 import { CommandPalette } from "./command-palette";
@@ -76,6 +78,20 @@ export function TopUtility() {
           borderBottom: "1px solid var(--line-soft)",
         }}
       >
+        <Link
+          href="/"
+          aria-label="Adjudex home"
+          className="md:hidden flex-shrink-0"
+        >
+          <Image
+            src="/logo.png"
+            alt=""
+            width={32}
+            height={32}
+            priority
+            className="rounded-[6px]"
+          />
+        </Link>
         <form
           onSubmit={onSearchSubmit}
           className="flex h-10 flex-1 items-center gap-2.5 rounded-full border px-4 max-w-[480px]"

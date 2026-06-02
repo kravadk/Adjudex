@@ -134,7 +134,7 @@ function ReasonChip({ reason, tier }: { reason: string; tier: 1 | 2 | 3 | 4 }) {
     tier === 1
       ? "#10b981"
       : tier === 2
-        ? "#28a0f0"
+        ? "#3b6ffa"
         : tier === 3
           ? "#a78bfa"
           : "#f59e0b";
