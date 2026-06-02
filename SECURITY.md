@@ -118,7 +118,7 @@ multisig executes the fix.
 See [audits/README.md](audits/README.md) for the index of completed
 audits and their findings.
 
-**Status** (станом на S1):
+**Status** (as of S1):
 - No external audit has been completed yet
 - Internal review of `AIJudgeVerifier` V2 challenge window is in
   the codebase as inline comments

@@ -1,6 +1,6 @@
 # On-Call & Alert Routing
 
-Цей doc описує **хто реагує на інциденти, як і за який час**.
+This doc describes **who responds to incidents, how, and within what time**.
 
 ## SLA targets (S2 launch)
 
@@ -144,7 +144,7 @@ receivers:
 
 ## Incident response template
 
-Створи в `docs/incidents/YYYY-MM-DD-<slug>.md`:
+Create under `docs/incidents/YYYY-MM-DD-<slug>.md`:
 
 ```markdown
 # Incident — <one-line title>
@@ -230,10 +230,10 @@ Open incident BEFORE mitigation (set "Investigating"), update every
 
 ## Scale-up roadmap
 
-Якщо real-people on-call вже не масштабується (S5 territory):
+If real-people on-call no longer scales (S5 territory):
 
 - Auto-pause via on-chain monitor + threshold alerts
-- Forta-bot integration для smart contract anomalies
+- Forta-bot integration for smart contract anomalies
 - 24/7 SRE contractor (StatusUp, Squadcast, PagerDuty managed)
 
 ## Links

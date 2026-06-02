@@ -1,38 +1,38 @@
 # SOC 2 Readiness — Roadmap & Evidence Map
 
-Цей doc описує що потрібно для SOC 2 Type II report — і **коли** його
-варто починати. SOC 2 не безкоштовний (15-50K USD/yr + significant
-internal ops time), тому ми НЕ робимо його доки enterprise tier не
-почав давати $5K+ MRR.
+This doc describes what's needed for a SOC 2 Type II report — and
+**when** it's worth starting. SOC 2 is not free (15–50K USD/yr +
+significant internal ops time), so we do NOT start it until the
+enterprise tier is producing $5K+ MRR.
 
-## Гейт — коли починати
+## Gate — when to start
 
-Не починати раніше:
+Do not start earlier than:
 
-| Сигнал | Тригер |
+| Signal | Trigger |
 |---|---|
-| Enterprise tier ARR | > $30K (enterprise sales bottleneck є compliance) |
-| Inbound від procurement | > 2 запити за квартал з vendor security questionnaire |
-| Data sensitivity | Зберігаємо PII PHI або обробляємо bank-tier data flow |
-| Investor pressure | Series B / pre-IPO діагностика |
+| Enterprise tier ARR | > $30K (enterprise-sales bottleneck is compliance) |
+| Inbound from procurement | > 2 vendor-security questionnaires per quarter |
+| Data sensitivity | We store PII / PHI or handle bank-tier data flow |
+| Investor pressure | Series B / pre-IPO diligence |
 
-Якщо жодне з цього — **SOC 2 пуста витрата**. Краще писати docs/PRIVACY.md
-зрозуміло і відповідати ad-hoc.
+If none of these are true, **SOC 2 is wasted spend**. Better to write
+`docs/PRIVACY.md` clearly and answer ad hoc.
 
-## Що це таке (стисло)
+## What it is (in brief)
 
-**SOC 2 Type II** = independent audit що перевіряє: політики +
-implementation + докази операційності протягом 6+ місяців. П'ять "Trust
+**SOC 2 Type II** = an independent audit that verifies: policies +
+implementation + evidence of operation over 6+ months. The five "Trust
 Services Criteria" (TSC):
 
-- **Security** (обов'язковий) — захист системи
+- **Security** (mandatory) — system protection
 - **Availability** — SLA, monitoring
 - **Processing Integrity** — accuracy of data
 - **Confidentiality** — non-public data protection
 - **Privacy** — PII handling
 
-Мінімум: Security TSC. Enterprise клієнти зазвичай вимагають Security +
-Availability + Confidentiality. Privacy додаємо коли користувачів > 100K.
+Minimum: Security TSC. Enterprise clients usually require Security +
+Availability + Confidentiality. Add Privacy when users > 100K.
 
 ## Vendor selection
 
@@ -40,7 +40,7 @@ Availability + Confidentiality. Privacy додаємо коли користув
 |---|---|---|
 | Drata + small CPA firm | $15-25K/yr | Recommended for first audit. Automation-heavy. |
 | Vanta + boutique CPA | $20-35K/yr | Same model, slightly more UI polish |
-| Big 4 (Deloitte / EY) | $80-150K+ | Only if Fortune-500 customer demands |
+| Big 4 (Deloitte / EY) | $80-150K+ | Only if a Fortune-500 customer demands |
 | Self-audited | Don't. | Fails procurement check. |
 
 Recommended: **Drata** (controls automation tool) + a partner CPA firm
@@ -48,7 +48,7 @@ that signs the actual report (Drata has a list).
 
 ## Evidence map → existing artefacts
 
-Auditor will ask for evidence in 10+ buckets. Map to what we already
+The auditor will ask for evidence in 10+ buckets. Map to what we already
 have:
 
 | Control area | Where evidence lives |
@@ -96,8 +96,8 @@ $30-50K/yr.
 - Smart contract security (use [audits/](../audits/) for that)
 - Token / regulatory compliance (use [docs/TOKEN-DECISION.md](TOKEN-DECISION.md))
 - PCI DSS — only Stripe handles cards, we never see PAN
-- HIPAA — irrelevant unless healthcare data involved
-- ISO 27001 — separate certification, mostly overlaps SOC 2 but more
+- HIPAA — irrelevant unless healthcare data is involved
+- ISO 27001 — separate certification, mostly overlaps with SOC 2 but more
   prescriptive; defer until international enterprise demand
 
 ## Scale-up version
@@ -107,7 +107,7 @@ For Stage 5+ multi-region multi-product play:
 - Privacy TSC addition (Privacy + Confidentiality combined)
 - Continuous-control monitoring (Drata/Vanta) + dedicated GRC headcount
 
-## Посилання
+## Links
 
 - [Drata](https://drata.com) — recommended automation platform
 - [Vanta](https://vanta.com) — alternative

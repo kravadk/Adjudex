@@ -1,29 +1,29 @@
 # Mainnet Deploy Runbook (Arbitrum One — 42161)
 
-Цей doc описує **як перейти з Sepolia на Arbitrum One** після того як
-audit clean і Stage 2 gates пройдено.
+This doc describes **how to move from Sepolia to Arbitrum One** once
+the audit is clean and Stage 2 gates have passed.
 
-> **DO NOT** виконати кроки нижче без:
-> 1. Завершеного external audit (звіт у [audits/](../audits/))
-> 2. Усі critical/high findings remediated + re-audited
-> 3. Bug bounty активний на Immunefi
-> 4. Gnosis Safe готовий (3-of-5 threshold для mainnet — див. [GOVERNANCE.md](GOVERNANCE.md))
+> **DO NOT** execute the steps below without:
+> 1. A completed external audit (report in [audits/](../audits/))
+> 2. All critical/high findings remediated + re-audited
+> 3. An active bug bounty on Immunefi
+> 4. A Gnosis Safe ready (3-of-5 threshold for mainnet — see [GOVERNANCE.md](GOVERNANCE.md))
 > 5. Pinata / Sentry / managed Postgres provisioned
-> 6. `pnpm env:check --profile=production` зелений
-> 7. ToS + Privacy опубліковані
+> 6. `pnpm env:check --profile=production` green
+> 7. ToS + Privacy published
 
 ## Pre-flight checklist
 
 ```
-[ ] audit report public в audits/YYYY-MM-firmname-pariai.pdf
+[ ] audit report public in audits/YYYY-MM-firmname-pariai.pdf
 [ ] all P0/P1 findings closed
 [ ] Immunefi bounty page live (announcement-ready)
-[ ] Gnosis Safe 3-of-5 deployed на Arbitrum One
+[ ] Gnosis Safe 3-of-5 deployed on Arbitrum One
 [ ] Deployer EOA topped up with > 0.05 ETH (deploy ~ 0.01-0.03 ETH gas)
 [ ] Mainnet RPC URL (Alchemy / QuickNode dedicated — NOT public RPCs)
 [ ] Doppler/Infisical production config has all prod secrets
 [ ] Arbiscan API key for contract verification
-[ ] PINATA_JWT funded для prod IPFS pinning
+[ ] PINATA_JWT funded for prod IPFS pinning
 [ ] Sentry projects created (backend + frontend separately)
 [ ] Postgres production instance (managed: Supabase / Neon / Crunchy)
 [ ] Backup verified (restore-from-snapshot smoke test)
@@ -31,12 +31,12 @@ audit clean і Stage 2 gates пройдено.
 
 ## Step 1. Prepare contracts for mainnet
 
-Mainnet deploy відрізняється від Sepolia:
+Mainnet deploy differs from Sepolia:
 - **NO TestUSDC** — use canonical Arbitrum One USDC `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`
-- **Deployer** має бути EOA, але одразу transfer-ownership на Safe
-- **feeRecipient** = Safe address (не deployer)
+- **Deployer** must be an EOA, but immediately transfer-ownership to the Safe
+- **feeRecipient** = Safe address (not the deployer)
 
-Закоментуй TestUSDC deploy крок у [scripts/deploy-contracts.ts](../scripts/deploy-contracts.ts) коли запускаєш з `CHAIN_ID=42161`, або зроби branching в скрипті — це зараз manual step.
+Comment out the TestUSDC deploy step in [scripts/deploy-contracts.ts](../scripts/deploy-contracts.ts) when running with `CHAIN_ID=42161`, or add branching to the script — for now this is a manual step.
 
 ## Step 2. Deploy
 
@@ -59,7 +59,7 @@ export CHAIN_ID=42161
 pnpm contracts:deploy
 ```
 
-Result: новий `deployments/42161.json` з реальними addresses + tx hashes.
+Result: a new `deployments/42161.json` with real addresses + tx hashes.
 
 ## Step 3. Verify on Arbiscan
 
@@ -76,9 +76,9 @@ forge flatten contracts/src/ParimutuelPool.sol > flat/ParimutuelPool.flat.sol
 # Source: paste flat
 ```
 
-Альтернатива: `npx hardhat verify <address> <constructor-args>` якщо hardhat config.
+Alternative: `npx hardhat verify <address> <constructor-args>` if you have a hardhat config.
 
-## Step 4. Transfer ownership на Gnosis Safe
+## Step 4. Transfer ownership to the Gnosis Safe
 
 ```bash
 SAFE_ADDRESS=<safe>           \
@@ -91,8 +91,8 @@ pnpm tsx scripts/transfer-ownership.ts
 # Review output. If OK, run without DRY_RUN.
 ```
 
-**УВАГА**: для mainnet `BetQuoteVerifier` + `PriceOracle` + `TokenizedStockAdapter`
-потребують contract changes (додати `transferOwnership`) — див. [GOVERNANCE.md](GOVERNANCE.md#pre-mainnet-contract-changes).
+**WARNING**: for mainnet `BetQuoteVerifier` + `PriceOracle` + `TokenizedStockAdapter`
+require contract changes (add `transferOwnership`) — see [GOVERNANCE.md](GOVERNANCE.md#pre-mainnet-contract-changes).
 
 ## Step 5. Wire frontend to mainnet
 
@@ -107,7 +107,7 @@ NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS=<from deployments>
 NEXT_PUBLIC_ARBISCAN_URL=https://arbiscan.io
 ```
 
-Push to Vercel → it auto-deploys main branch with new env.
+Push to Vercel → it auto-deploys the main branch with the new env.
 
 Sepolia stays available as opt-in dev — set `NEXT_PUBLIC_ONCHAIN_*` to override
 when running locally.
@@ -131,7 +131,7 @@ pnpm env:check --profile=production
 
 # Then deploy:
 # - Vercel auto-deploys frontend on push to main
-# - Backend API: redeploy in Fly / Railway / Render
+# - Backend API: redeploy on Fly / Railway / Render
 # - Indexer: redeploy
 # - AI Judge: Phala CVM rebuild
 ```
@@ -146,26 +146,26 @@ pnpm e2e:live --chain=42161 --usdc-amount=10
 ```
 
 Expected: market created → bet placed → judge proposed → finalize → claim
-all succeed. Якщо щось fails — pause всі writes (через Safe) і
-investigate перш ніж відкривати для public users.
+all succeed. If anything fails — pause all writes (via the Safe) and
+investigate before opening up to public users.
 
 ## Step 8. Public announcement
 
 - Update README "Live on Arbitrum One" badge
 - Publish [SECURITY.md](../SECURITY.md) PGP key + Immunefi link
-- Twitter announcement з audit report
+- Twitter announcement with audit report
 - Discord #announcements
 - Add to L2BEAT / DefiLlama listings (optional)
 
 ## Rollback / Pause playbook
 
-Якщо в перші 30 днів виявлено P0 vulnerability:
+If a P0 vulnerability is discovered in the first 30 days:
 
-1. **Immediate**: Pause через Safe — `MarketFactory.setPaused(true)` (потребує pre-mainnet contract change від [GOVERNANCE.md](GOVERNANCE.md))
-2. **Notify**: Discord + X + email до beta users
-3. **Drain support**: open Etherscan-based withdraw для тих, хто хоче exit
-4. **Fix + re-audit**: patch + new audit pass на critical paths
-5. **Resume**: tx через Safe щоб `setPaused(false)`
+1. **Immediate**: Pause via the Safe — `MarketFactory.setPaused(true)` (requires the pre-mainnet contract change from [GOVERNANCE.md](GOVERNANCE.md))
+2. **Notify**: Discord + X + email to beta users
+3. **Drain support**: open an Etherscan-based withdraw for users who want to exit
+4. **Fix + re-audit**: patch + new audit pass on critical paths
+5. **Resume**: tx via the Safe to `setPaused(false)`
 6. **Postmortem**: `docs/incidents/2026-MM-DD-pause.md`
 
 ## Cost estimate (single-deploy)

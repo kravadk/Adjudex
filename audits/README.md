@@ -1,49 +1,49 @@
 # Audits
 
-Цей каталог містить **звіти зовнішніх аудитів смарт-контрактів PariAI**
-та зведення внутрішніх security reviews.
+This directory holds **external audit reports for PariAI smart contracts**
+plus internal security-review summaries.
 
 ## Status
 
 | Audit | Firm | Scope | Status | Report |
 |---|---|---|---|---|
-| _planned_ | Cantina / Spearbit / Hats Finance | див. нижче | **Not yet engaged** (S1.D) | — |
+| _planned_ | Cantina / Spearbit / Hats Finance | see below | **Not yet engaged** (S1.D) | — |
 
-**Жодного зовнішнього аудиту ще не завершено.** Зовнішній аудит — gate
-для mainnet deploy (Stage 2 maturity roadmap-у). До цього всі контракти
-живуть тільки на Arbitrum Sepolia з testnet-USDC.
+**No external audit has been completed yet.** External audit is the gate
+for mainnet deploy (Stage 2 maturity roadmap). Until then, all contracts
+live only on Arbitrum Sepolia with testnet USDC.
 
 ## Engagement plan (S1.D)
 
-### Шорт-ліст firms
+### Firm shortlist
 
 1. **Cantina** ([cantina.xyz](https://cantina.xyz))
    - Community-driven, competitive bidding
-   - Сильна репутація на DeFi audits
-   - Ціна: $20-50K на 2K LoC за 4-6 тижнів
+   - Strong reputation for DeFi audits
+   - Price: $20–50K for 2K LoC over 4–6 weeks
 2. **Spearbit** ([spearbit.com](https://spearbit.com))
    - Lead-auditor model, individually-named researchers
-   - Хороші retrospective publications
-   - Ціна: $40-80K
+   - Strong retrospective publications
+   - Price: $40–80K
 3. **Hats Finance** ([hats.finance](https://hats.finance))
    - Competitive (bug-bounty-style), continuous
-   - Pay-on-finding model — economical для невеликих проектів
+   - Pay-on-finding model — economical for smaller projects
 4. **Code4rena** ([code4rena.com](https://code4rena.com))
-   - Найбільший pool wardens; competitive
-   - Менша глибина на single-pair audit, але широке покриття
-5. **OpenZeppelin** — top tier ($100K+), залишити для post-S2 re-audit
+   - Largest pool of wardens; competitive
+   - Less depth on single-pair audit but wide coverage
+5. **OpenZeppelin** — top tier ($100K+), reserve for post-S2 re-audit
 
-Уникати: **Certik** (low signal, формальний "passed" штамп без deep
+Avoid: **Certik** (low signal, formal "passed" stamp without deep
 review).
 
 ### Recommended path
 
-Стартовий аудит — **Cantina competitive** ($20-30K, 4 тижні): покриває
-80% поверхні. Після remediation — **Spearbit lead-auditor follow-up** на
-найкритичніших контрактах (`ParimutuelPool` + `AIJudgeVerifier`,
-$15-25K, 2 тижні).
+Initial audit — **Cantina competitive** ($20–30K, 4 weeks): covers ~80%
+of the surface. After remediation — **Spearbit lead-auditor follow-up**
+on the most critical contracts (`ParimutuelPool` + `AIJudgeVerifier`,
+$15–25K, 2 weeks).
 
-## Scope draft (для submission)
+## Scope draft (for submission)
 
 ### In scope (~2,000 LoC)
 
@@ -60,61 +60,62 @@ $15-25K, 2 тижні).
 
 ### Out of scope
 
-- `TestUSDC.sol`, `TestAggregatorV3.sol` — testnet-only, не buduть deploy на mainnet
-- Frontend (`src/`) і backend (`services/`) — не контракти; окреме application security review якщо буде
-- Phala TEE attestation flow — окремий audit Phala SDK + dstack
-- Reclaim zkTLS protocol — out of scope для нашого аудиту (Reclaim має власні audits)
+- `TestUSDC.sol`, `TestAggregatorV3.sol` — testnet-only, will not be deployed on mainnet
+- Frontend (`src/`) and backend (`services/`) — not contracts; a separate application security review if needed
+- Phala TEE attestation flow — separate audit of Phala SDK + dstack
+- Reclaim zkTLS protocol — out of scope for our audit (Reclaim has its own audits)
 
 ### Topics of particular concern
 
-Вкажемо аудитору ці specific risk areas:
+Flag these specific risk areas to the auditor:
 
-1. **Reentrancy в `ParimutuelPool.claim()`** — користувач отримує USDC,
-   shared state на `claimed[user]` має mutate ДО transfer
-2. **Signature replay в `BetQuoteVerifier`** — чи nonce монотонний per
-   user, чи domain separator коректний (chainId + verifyingContract)
-3. **Challenge window edge-cases в `AIJudgeVerifier`** — що якщо
-   challenge поданий в останній block перед deadline? Що якщо
-   verdict-signature stale (signed before market open)?
-4. **Funds locked permanentno** — чи є scenario де `refundAfterGrace`
-   може заблокувати, не звільнити кошти?
-5. **Integer overflow / precision loss** — pool ratio math в Solidity
-   0.8.x (default checked, але можна обійти через unchecked blocks)
-6. **Front-running на `MarketFactory.createMarket`** — чи може attacker
-   запропонувати дублікат title раніше creator-а?
-7. **Oracle staleness в `PriceOracle`** — як обробляється Chainlink feed
-   що не оновлювався >1h?
+1. **Reentrancy in `ParimutuelPool.claim()`** — user receives USDC; the
+   `claimed[user]` shared state must mutate BEFORE transfer.
+2. **Signature replay in `BetQuoteVerifier`** — is the per-user nonce
+   monotonic, is the domain separator correct (chainId +
+   verifyingContract)?
+3. **Challenge-window edge cases in `AIJudgeVerifier`** — what if a
+   challenge is submitted in the last block before the deadline? What
+   if the verdict signature is stale (signed before market open)?
+4. **Funds permanently locked** — is there any scenario where
+   `refundAfterGrace` can lock funds instead of releasing them?
+5. **Integer overflow / precision loss** — pool ratio math in Solidity
+   0.8.x (checked by default but can be bypassed via unchecked blocks).
+6. **Front-running on `MarketFactory.createMarket`** — can an attacker
+   propose a duplicate title before the creator?
+7. **Oracle staleness in `PriceOracle`** — how do we handle a Chainlink
+   feed that hasn't updated for >1h?
 
 ### Out-of-band invariants
 
-Audit-firm запросити перевірити:
-- Сума `stakeYes[user] + stakeNo[user]` ≤ pool total для будь-якого user
-- Після `resolve(outcome)`: sum claims = total pool - fee (коли fee
-  буде implemented у S1.E — поки 0)
-- `challenge()` після deadline reverts
-- `finalize()` без proposed verdict reverts
+Ask the audit firm to verify:
+- `stakeYes[user] + stakeNo[user]` ≤ pool total for any user
+- After `resolve(outcome)`: sum of claims = total pool - fee (once fee
+  lands in S1.E — currently 0)
+- `challenge()` after deadline reverts
+- `finalize()` without a proposed verdict reverts
 
-## Workflow після engagement
+## Workflow after engagement
 
-1. Audit firm отримує commit hash (frozen для перевірки)
-2. Звіт сюди — `audits/YYYY-MM-firmname-pariai-v1.pdf`
-3. Findings tracked у `audits/YYYY-MM-firmname-findings.md`
-4. Кожен finding отримує remediation commit з cross-reference у
-   `Refs: audits/...-finding-N` повідомленні комміта
-5. Re-audit firmname робить short follow-up на patch hashes
-6. Final hash → mainnet deploy permission unlock (S2.A gate)
+1. The audit firm receives a commit hash (frozen for review).
+2. Report lands here — `audits/YYYY-MM-firmname-pariai-v1.pdf`.
+3. Findings tracked in `audits/YYYY-MM-firmname-findings.md`.
+4. Each finding gets a remediation commit with a cross-reference
+   `Refs: audits/...-finding-N` in the commit message.
+5. The audit firm does a short follow-up on the patch hashes.
+6. Final hash → mainnet deploy permission unlocked (S2.A gate).
 
-## Чого ми робимо самі (internal review)
+## What we do ourselves (internal review)
 
 - Compile + slither: `pnpm contracts:compile`
-- Echidna fuzzing (TBD у S1.D — добавити harness)
+- Echidna fuzzing (TBD in S1.D — add harness)
 - Mythril analysis (TBD)
-- Foundry differential test проти math reference у Python (для pool ratio)
+- Foundry differential tests vs a Python math reference (for pool ratio)
 
-Це **не замінює** зовнішній аудит, але виловлює тривіальні баги перед
-зовнішнім ревью (cheaper).
+This **does not replace** external audit but catches trivial bugs before
+external review (cheaper).
 
-## Сторінки далі
+## Further reading
 
 - [SECURITY.md](../SECURITY.md) — disclosure policy
 - [docs/GOVERNANCE.md](../docs/GOVERNANCE.md) — multisig flow

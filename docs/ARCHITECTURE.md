@@ -10,7 +10,7 @@ The single product rule: user-facing markets, balances, positions,
 activity, timelines, settings, watchlists, notifications, and resolution
 state must come from **contracts, the indexer, Postgres/API,
 SIWE-authenticated backend persistence, or confirmed chain reads**. The
-UI may show loading, empty, or setup states вЂ” it never invents records.
+UI may show loading, empty, or setup states — it never invents records.
 
 ## 1. Product flow
 
@@ -23,9 +23,9 @@ Discover -> Trust -> Connect -> Act -> Track -> Resolve -> Share
 | Discover | indexed `MarketCreated` events + imported source-backed candidates |
 | Trust    | every market exposes contract, pool, source URL, resolution rules, creation tx, activity, proof links |
 | Connect  | wallet/network status surfaces Arbitrum Sepolia + RHC readiness separately |
-| Act      | create, bet, propose, challenge, finalize, claim вЂ” every action a confirmed tx |
-| Track    | portfolio, activity, agent moves, market timeline вЂ” all API/indexer-backed |
-| Resolve  | optimistic propose в†’ 2h challenge window в†’ finalize, all on `AIJudgeVerifier` |
+| Act      | create, bet, propose, challenge, finalize, claim — every action a confirmed tx |
+| Track    | portfolio, activity, agent moves, market timeline — all API/indexer-backed |
+| Resolve  | optimistic propose → 2h challenge window → finalize, all on `AIJudgeVerifier` |
 | Share    | market/result proof links point back to indexed market pages and explorers |
 
 ## 2. Smart-contract surface
@@ -44,7 +44,7 @@ payout(myStake, mySide) =
 ```
 
 Solvency invariant: `sum(claims) <= yesPool + noPool`. Integer division
-floors rounding dust into the pool. No AMM impermanent loss вЂ” AI
+floors rounding dust into the pool. No AMM impermanent loss — AI
 market-maker agents are bettors / liquidity participants, not privileged
 resolvers.
 
@@ -63,15 +63,15 @@ Replaces the legacy single-shot `verifyAndResolve` with an optimistic
 state machine:
 
 ```text
-None  в”Ђв”Ђ propose в”Ђв”Ђв–є  Pending  в”Ђв”Ђ (window elapses) в”Ђв”Ђ finalize в”Ђв”Ђв–є  Finalized
-                          в”‚
-                          в””в”Ђв”Ђ challenge в”Ђв”Ђв–є  Disputed  в”Ђв”Ђ overrideAndFinalize (owner) в”Ђв”Ђв–є  Finalized
+None  ── propose ──►  Pending  ── (window elapses) ── finalize ──►  Finalized
+                          │
+                          └── challenge ──►  Disputed  ── overrideAndFinalize (owner) ──►  Finalized
 ```
 
 Storage (per `marketId`):
 - `pool` (address)
 - `outcome` (uint8)
-- `evidenceHash` (bytes32 вЂ” keccak of reasoning bytes, optionally
+- `evidenceHash` (bytes32 — keccak of reasoning bytes, optionally
   XOR-folded with the Reclaim `proofHash`)
 - `proposedAt` (uint64)
 - `status` (enum None | Pending | Disputed | Finalized)
@@ -93,7 +93,7 @@ sessionId. `anchor(sessionId, proofHash, cid)` records the proof hash and
 its IPFS CID on chain and emits
 `ProofAnchored(sessionIdHash, proofHash, publisher, cid, anchoredAt)`.
 
-One anchor per sessionId вЂ” first publisher binds. Anyone can read via
+One anchor per sessionId — first publisher binds. Anyone can read via
 `getAnchor(sessionId)` / `getAnchorByKey(sessionIdHash)` /
 `isAnchored(sessionId)`.
 
@@ -151,11 +151,11 @@ off-chain signer code does not change.
 
 PariAI keeps AI liquidity and AI resolution strictly separated.
 
-- **AI Market-Maker** (`services/mm-agent/`) вЂ” registers in
+- **AI Market-Maker** (`services/mm-agent/`) — registers in
   `ReputationOracle`, watches open pools, places counter-bets when the
   pool is imbalanced. All actions are wallet transactions visible
   through the indexer.
-- **AI Resolver** (`services/ai-judge/`) вЂ” produces a soft-market
+- **AI Resolver** (`services/ai-judge/`) — produces a soft-market
   verdict, optionally inside a Phala TEE, signs the digest with
   `JUDGE_PRIVATE_KEY`, and posts `propose()` to `AIJudgeVerifier`. The
   zkTLS proof hash is folded into `evidenceHash`.
@@ -273,36 +273,36 @@ Agent ecosystem surfaces are backend/indexer-backed:
 
 ### 4.6 Read model
 
-- **Market list / detail** в†’ `markets`, `market_stats`,
+- **Market list / detail** → `markets`, `market_stats`,
   `market_timeline`, `activity_events`
-- **Portfolio** в†’ `positions`, `claims`, `refunds`, final pool stats,
+- **Portfolio** → `positions`, `claims`, `refunds`, final pool stats,
   confirmed tx identity
-- **Watchlist / settings / notifications** в†’ SIWE session + backend
+- **Watchlist / settings / notifications** → SIWE session + backend
   tables (rate-limit + admin allowlist applied)
-- **Retention analytics** в†’ `user_activity_events` with admin-gated
+- **Retention analytics** → `user_activity_events` with admin-gated
   cohort API.
-- **Liquidity incentives** в†’ `liquidity_incentive_programs`,
+- **Liquidity incentives** → `liquidity_incentive_programs`,
   `positions`, and `liquidity_incentive_payouts`.
-- **Agents** в†’ `agents`, `agent_reputation_history`, indexed activity,
+- **Agents** → `agents`, `agent_reputation_history`, indexed activity,
   proof URLs
-- **Resolution** в†’ `markets` resolution fields + verifier and pool events
+- **Resolution** → `markets` resolution fields + verifier and pool events
   (`Proposed`, `Challenged`, `Finalized`, `Resolved`)
-- **Proof** в†’ `ProofAnchored` events keyed by `keccak(sessionId)`
+- **Proof** → `ProofAnchored` events keyed by `keccak(sessionId)`
 
 ### 4.7 Write model
 
 | Action | Path | Verification |
 |---|---|---|
-| Create market | wallet в†’ `MarketFactory.createMarket{,WithSpec,Soft}` | receipt + `MarketCreated` event |
-| Bet | (optional) `/api/bets/quote` в†’ wallet в†’ `ParimutuelPool.bet` | backend `previewBet` + indexed `BetPlaced` |
-| Propose | judge service в†’ `AIJudgeVerifier.propose` | signature recover == `judge` |
-| Challenge | anyone в†’ `AIJudgeVerifier.challenge` | within `CHALLENGE_WINDOW` |
-| Finalize | anyone в†’ `AIJudgeVerifier.finalize` | after window, status == Pending |
-| Override | owner в†’ `AIJudgeVerifier.overrideAndFinalize` | status == Disputed |
-| Claim | wallet в†’ `ParimutuelPool.claim` | indexed `Claimed` |
-| Anchor proof | proof anchor wallet в†’ `ProofAnchor.anchor` | indexed `ProofAnchored` |
-| Importer deploy | admin (SIWE + allowlist) в†’ factory | validated candidate + `MarketCreated` |
-| Register agent | agent wallet в†’ `ReputationOracle.registerAgent` | receipt + trusted `AgentRegistered` |
+| Create market | wallet → `MarketFactory.createMarket{,WithSpec,Soft}` | receipt + `MarketCreated` event |
+| Bet | (optional) `/api/bets/quote` → wallet → `ParimutuelPool.bet` | backend `previewBet` + indexed `BetPlaced` |
+| Propose | judge service → `AIJudgeVerifier.propose` | signature recover == `judge` |
+| Challenge | anyone → `AIJudgeVerifier.challenge` | within `CHALLENGE_WINDOW` |
+| Finalize | anyone → `AIJudgeVerifier.finalize` | after window, status == Pending |
+| Override | owner → `AIJudgeVerifier.overrideAndFinalize` | status == Disputed |
+| Claim | wallet → `ParimutuelPool.claim` | indexed `Claimed` |
+| Anchor proof | proof anchor wallet → `ProofAnchor.anchor` | indexed `ProofAnchored` |
+| Importer deploy | admin (SIWE + allowlist) → factory | validated candidate + `MarketCreated` |
+| Register agent | agent wallet → `ReputationOracle.registerAgent` | receipt + trusted `AgentRegistered` |
 | Settings / watchlist / notifications | SIWE | backend tables |
 | Retention event | SIWE or confirmed backend action | allowlisted event kind or verified tx/indexed row |
 | Liquidity program | SIWE admin | backend program table |
@@ -320,7 +320,7 @@ Agent ecosystem surfaces are backend/indexer-backed:
    `last_reorg_at = now()`, rewind by `2 * confirmations`, and continue.
 3. For each market: sync market state (pool reads) + events in
    `[fromBlock, toBlock]`.
-4. Capture new tip hash в†’ write `indexer_state(last_block,
+4. Capture new tip hash → write `indexer_state(last_block,
    last_block_hash, last_status, last_error, last_reorg_at,
    updated_at)`.
 
@@ -367,16 +367,16 @@ a new chain.
 `services/api/` is a Fastify app. Top-level concerns:
 
 - **CORS** open in dev, restrict by origin in production.
-- **Rate limiter** вЂ” global `onRequest` hook (`rate-limit.ts`). 30 writes
+- **Rate limiter** — global `onRequest` hook (`rate-limit.ts`). 30 writes
   / 240 reads per minute per IP. `/health`, `/api/status` are unmetered.
-- **SIWE** вЂ” `auth.ts` builds the SIWE message, verifies signature,
+- **SIWE** — `auth.ts` builds the SIWE message, verifies signature,
   issues `pariai_session` HttpOnly cookie with 7d TTL.
-- **Admin allowlist** вЂ” `parseAdminAllowlist()` reads
+- **Admin allowlist** — `parseAdminAllowlist()` reads
   `IMPORT_ADMIN_ADDRESSES` (or legacy `ADMIN_WALLET_ADDRESSES`).
   Importer routes call `requireImportAdmin()` (401 / 403 / 503).
-- **EIP-712 quote signer** вЂ” `/api/bets/quote` issues signed `BetQuote`
+- **EIP-712 quote signer** — `/api/bets/quote` issues signed `BetQuote`
   payloads bound to `BET_QUOTE_VERIFIER_ADDRESS`.
-- **Transaction recovery** вЂ” `/api/sync/transaction` verifies receipt,
+- **Transaction recovery** — `/api/sync/transaction` verifies receipt,
   chain id, optional confirmation depth, decodes known events.
 
 ### 6.1 Public routes (read)
@@ -413,30 +413,30 @@ a new chain.
 - `POST /api/reclaim/session`, `GET /api/reclaim/get`,
   `POST /api/reclaim/callback`, `POST /api/resolve`
 
-## 7. Proof anchor flow (Reclaim в†’ IPFS в†’ ProofAnchor)
+## 7. Proof anchor flow (Reclaim → IPFS → ProofAnchor)
 
 ```text
 user           Reclaim attestor      /api/reclaim/callback     IPFS provider   ProofAnchor
-  в”‚                  в”‚                        в”‚                      в”‚              в”‚
-  в”‚в”Ђв”Ђ start session в–єв”‚                        в”‚                      в”‚              в”‚
-  в”‚                  в”‚в”Ђв”Ђ POST proof в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв–єв”‚                      в”‚              в”‚
-  в”‚                  в”‚                        в”‚в”Ђв”Ђ verifyProof() в”Ђв”Ђв”ђ  в”‚              в”‚
-  в”‚                  в”‚                        в”‚в—„в”Ђв”Ђв”Ђв”Ђ verified в”Ђв”Ђв”Ђв”Ђв”  в”‚              в”‚
-  в”‚                  в”‚                        в”‚в”Ђв”Ђ putProof() в”Ђв”Ђв”Ђв”Ђв”Ђв”ђ  в”‚              в”‚
-  в”‚                  в”‚                        в”‚в—„в”Ђв”Ђ persisted в”Ђв”Ђв”Ђв”Ђв”Ђв”  в”‚              в”‚
-  в”‚                  в”‚                        в”‚в”Ђв”Ђ pinJson(proof) в”Ђв”Ђв”Ђв–єв”‚              в”‚
-  в”‚                  в”‚                        в”‚в—„в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ cid в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”‚              в”‚
-  в”‚                  в”‚                        в”‚в”Ђв”Ђ anchorProof()  в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв–єв”‚
-  в”‚                  в”‚                        в”‚в—„в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ ProofAnchored event в”Ђв”Ђв”Ђв”‚
-  в”‚                  в”‚                        в”‚                                     в”‚
-  в”‚в—„в”Ђв”Ђ 200 {sessionId, proofHash, cid, anchor:{txHash}} в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”‚
+  │                  │                        │                      │              │
+  │── start session ►│                        │                      │              │
+  │                  │── POST proof ─────────►│                      │              │
+  │                  │                        │── verifyProof() ──┐  │              │
+  │                  │                        │◄──── verified ────┘  │              │
+  │                  │                        │── putProof() ─────┐  │              │
+  │                  │                        │◄── persisted ─────┘  │              │
+  │                  │                        │── pinJson(proof) ───►│              │
+  │                  │                        │◄────── cid ──────────│              │
+  │                  │                        │── anchorProof()  ───────────────────►│
+  │                  │                        │◄──────────── ProofAnchored event ───│
+  │                  │                        │                                     │
+  │◄── 200 {sessionId, proofHash, cid, anchor:{txHash}} ──────────────────────────────│
 ```
 
 `IPFS_PROVIDER` controls the pin: `pinata` (Pinata JWT),
 `web3storage` (Storacha token), `kubo` (local IPFS daemon), or `stub`
 (deterministic `localcid-{hex}` for dev/CI without network).
 
-Anchor calls are best-effort вЂ” a missing
+Anchor calls are best-effort — a missing
 `PROOF_ANCHOR_DEPLOYER_KEY` / `NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS` degrades
 to `anchor.status='skipped'` without breaking the verify path.
 
@@ -444,8 +444,8 @@ to `anchor.status='skipped'` without breaking the verify path.
 
 `src/lib/services/provider.ts` selects between:
 
-- `onchain` вЂ” direct viem reads (`onchain/*.ts` services)
-- `api`     вЂ” Fastify-backed via `NEXT_PUBLIC_BACKEND_URL`
+- `onchain` — direct viem reads (`onchain/*.ts` services)
+- `api`     — Fastify-backed via `NEXT_PUBLIC_BACKEND_URL`
 
 Hooks (`useMarkets`, `usePortfolio`, `useBet`, `useLeaderboard`,
 `useActivity`, `useAgent`, `useSystemStatus`, `useWallet`) call
@@ -479,12 +479,12 @@ Candidate provenance fields: source URL, source timestamp, normalized
 candidate id, resolution rules, creation tx, pool contract.
 
 Failure rules:
-- no source URL в†’ reject
-- no future deadline в†’ reject
-- ambiguous binary question в†’ require review
-- no resolution criteria в†’ reject
-- no configured oracle/verifier path в†’ reject
-- no confirmed `MarketCreated` event в†’ not shown as deployed
+- no source URL → reject
+- no future deadline → reject
+- ambiguous binary question → require review
+- no resolution criteria → reject
+- no configured oracle/verifier path → reject
+- no confirmed `MarketCreated` event → not shown as deployed
 
 All five importer endpoints require `requireImportAdmin()` (SIWE +
 allowlist).
@@ -493,7 +493,7 @@ allowlist).
 
 | Step | Caller | Contract method | Receipt event | UI surface |
 |---|---|---|---|---|
-| propose | AI judge service | `AIJudgeVerifier.propose` | `Proposed` | `<ResolutionStatus>` shows "Proposed В· 2h window" + countdown |
+| propose | AI judge service | `AIJudgeVerifier.propose` | `Proposed` | `<ResolutionStatus>` shows "Proposed · 2h window" + countdown |
 | challenge | anyone, within window | `AIJudgeVerifier.challenge` | `Challenged` | "Challenge" button gated by deadline; updates UI to "Disputed" |
 | finalize | anyone, after window | `AIJudgeVerifier.finalize` | `Finalized` + pool `MarketResolved` | "Finalize" button gated by `canFinalize` |
 | override | owner | `AIJudgeVerifier.overrideAndFinalize` | `Overridden` + `Finalized` | hidden in V1 UI, owner CLI |
@@ -507,13 +507,13 @@ lifecycle controls.
 
 Open-position PnL uses indexed/current market probability with normalized
 prices in `[0, 1]`. Claimable payout uses indexed final pool stats and
-the winning side вЂ” not a stake-amount fallback.
+the winning side — not a stake-amount fallback.
 
 Lifecycle:
 
 ```text
-wallet в†’ Pool.claim в†’ receipt в†’ /api/claim or /api/sync/transaction в†’
-  backend verifies (RPC chain, receipt, confirmation depth, event) в†’
+wallet → Pool.claim → receipt → /api/claim or /api/sync/transaction →
+  backend verifies (RPC chain, receipt, confirmation depth, event) →
   indexer/API updates positions, claims/refunds, history, activity,
   notifications.
 ```
@@ -582,5 +582,5 @@ Before mainnet:
 - Indexer state is fresh (`stale = false`) and not lagging
   (`lagging = false`); `lastStatus` not `error`
 - Wallet connects to the same chain shown as ready
-- Create, bet, propose, finalize, claim, share proof вЂ” each verified
+- Create, bet, propose, finalize, claim, share proof — each verified
   through a real tx hash on Arbiscan

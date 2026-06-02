@@ -1,6 +1,6 @@
-﻿# PariAI
+# PariAI
 
-**AI-native prediction markets on Arbitrum** вЂ” parimutuel pools with an
+**AI-native prediction markets on Arbitrum** — parimutuel pools with an
 optimistic AI judge, on-chain Reclaim zkTLS proof anchors, EIP-712 signed
 bet quotes, and a hardened Postgres-backed indexer.
 
@@ -9,7 +9,7 @@ positions, activity, timelines, resolution status, settings, watchlists,
 and notifications must come from contracts, the indexer, the
 Postgres-backed API, SIWE-authenticated backend persistence, or confirmed
 chain reads. If a service is missing, the UI returns explicit empty
-states вЂ” never fabricates records.
+states — never fabricates records.
 
 ---
 
@@ -39,16 +39,16 @@ createMarket -> approve -> bet -> indexer picks up event ->
 - BetForm with real on-chain balance, accurate post-bet probability
   projection, slippage in bps with color tone, and explicit
   insufficient-balance / high-slippage warning banners.
-- EIP-712 signed bet quotes (`/api/bets/quote` в†’ `BetQuoteVerifier`).
+- EIP-712 signed bet quotes (`/api/bets/quote` → `BetQuoteVerifier`).
 
 **Resolution**
-- Optimistic AI judge: `propose` в†’ 2h challenge window в†’ `finalize`.
+- Optimistic AI judge: `propose` → 2h challenge window → `finalize`.
 - Anyone can `challenge` inside the window; owner can
   `overrideAndFinalize` a disputed proposal.
 - AI verdict optionally produced inside Phala TEE; signed with
   `JUDGE_PRIVATE_KEY` (or remote TEE worker via `JUDGE_REMOTE_URL`).
 - Reclaim zkTLS proof pinned to IPFS and anchored on-chain via
-  `ProofAnchor.anchor()` вЂ” every resolved market can be traced back to
+  `ProofAnchor.anchor()` — every resolved market can be traced back to
   the exact proof bytes.
 
 **Markets**
@@ -73,11 +73,11 @@ createMarket -> approve -> bet -> indexer picks up event ->
 - Leaderboard: humans + AI agents ranked by realized PnL.
 - Agent profiles with on-chain moves (tx-proven) and ERC-8004-style
   reputation.
-- вЊK command palette for fuzzy search across markets, agents, routes.
+- ⌘K command palette for fuzzy search across markets, agents, routes.
 
 **Wallet-scoped persistence**
 - SIWE login + 7-day session cookie. Watchlist, settings,
-  notifications, importer admin вЂ” all persisted server-side per address.
+  notifications, importer admin — all persisted server-side per address.
 - Notification center surfaces `bet_confirmed`, `market_resolved`,
   `payout_claimable` events.
 
@@ -89,9 +89,9 @@ createMarket -> approve -> bet -> indexer picks up event ->
   per minute per IP).
 - SIWE + admin allowlist on importer routes; `RECLAIM_PROOF_WRITE_SECRET`
   on server-to-server proof writes.
-- `pnpm env:check [--profile=full]` вЂ” 23 rules across FRONTEND /
+- `pnpm env:check [--profile=full]` — 23 rules across FRONTEND /
   BACKEND / INDEXER / AGENTS / IPFS, never prints secret values.
-- `pnpm e2e:live [--dry]` вЂ” full create в†’ bet в†’ propose в†’ finalize в†’
+- `pnpm e2e:live [--dry]` — full create → bet → propose → finalize →
   claim flow on testnet, every tx hash logged.
 - `<SystemStatusDrawer>` shows live `/api/status` per chain.
 
@@ -108,12 +108,12 @@ createMarket -> approve -> bet -> indexer picks up event ->
 |---|---|
 | `MarketFactory`         | Deploys a new `ParimutuelPool` per market, emits `MarketCreated`. |
 | `ParimutuelPool`        | Holds yes/no USDC pools. Bet, resolve, claim, refundAfterGrace. |
-| `AIJudgeVerifier` (V2)  | Optimistic resolution: `propose` в†’ 2h challenge window в†’ `finalize`. Owner can `overrideAndFinalize` if disputed. Backwards-compatible `verifyAndResolve` gated by `fastTrackUntil`. |
-| `ProofAnchor`           | Public registry mapping a Reclaim sessionId в†’ (`proofHash`, IPFS `cid`). Emits `ProofAnchored`. |
+| `AIJudgeVerifier` (V2)  | Optimistic resolution: `propose` → 2h challenge window → `finalize`. Owner can `overrideAndFinalize` if disputed. Backwards-compatible `verifyAndResolve` gated by `fastTrackUntil`. |
+| `ProofAnchor`           | Public registry mapping a Reclaim sessionId → (`proofHash`, IPFS `cid`). Emits `ProofAnchored`. |
 | `BetQuoteVerifier`      | EIP-712 verifier for signed bet quotes (slippage, deadline, nonce). Currently a standalone verifier consumed by the API; pool integration is the next contract upgrade. |
 | `ReputationOracle`      | ERC-8004-style agent registry (handles + reputation). |
 | `PriceOracle`           | Operator-set + Chainlink fallback, normalized to 8 decimals. |
-| `TokenizedStockAdapter` | Registry of tokenized-equity adapters (TSLA, AAPL, вЂ¦). |
+| `TokenizedStockAdapter` | Registry of tokenized-equity adapters (TSLA, AAPL, …). |
 | `TestUSDC`              | ERC-20 with public `mint()` for testnet. |
 | `TestAggregatorV3`      | Chainlink-shape test feed for `PriceOracle` testing. |
 
@@ -132,7 +132,7 @@ ABI in pure Rust (k256 ECDSA, sha3 keccak). Build with
 | Indexer worker       | `services/indexer/` | `pnpm dev:indexer` | Block sync + reorg detection + Postgres write |
 | AI resolver worker   | `services/ai-judge/`| run separately     | Signs source-backed verdicts through the configured resolver path |
 | Market-maker agent   | `services/mm-agent/`| opt-in             | Counter-balances open pools |
-| Postgres             | external            | вЂ”                  | Single source of indexed state |
+| Postgres             | external            | —                  | Single source of indexed state |
 
 The frontend talks to the backend when `NEXT_PUBLIC_BACKEND=api`.
 Direct on-chain mode can read configured contracts, but portfolio,
@@ -171,7 +171,7 @@ incident triage, and live verification flow.
 `pnpm env:check` is the authoritative list. Common buckets:
 
 **Frontend (`NEXT_PUBLIC_*`)**
-- `NEXT_PUBLIC_BACKEND` вЂ” `api` | `onchain`
+- `NEXT_PUBLIC_BACKEND` — `api` | `onchain`
 - `NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL`
 - `NEXT_PUBLIC_MARKET_FACTORY_ADDRESS`
 - `NEXT_PUBLIC_STAKE_TOKEN_ADDRESS`
@@ -184,12 +184,12 @@ incident triage, and live verification flow.
 - `DATABASE_POOL_URL=postgres://...` - optional PgBouncer/pooler URL for runtime traffic
 - `ARBITRUM_SEPOLIA_RPC_URL`
 - `SIWE_DOMAIN`
-- `IMPORT_ADMIN_ADDRESSES` вЂ” comma-separated 0x allowlist for importer routes
-- `RECLAIM_PROOF_WRITE_SECRET` вЂ” shared secret for Next в†’ backend proof writes
-- `QUOTE_SIGNER_PRIVATE_KEY` + `BET_QUOTE_VERIFIER_ADDRESS` вЂ” EIP-712 quote signer
+- `IMPORT_ADMIN_ADDRESSES` — comma-separated 0x allowlist for importer routes
+- `RECLAIM_PROOF_WRITE_SECRET` — shared secret for Next → backend proof writes
+- `QUOTE_SIGNER_PRIVATE_KEY` + `BET_QUOTE_VERIFIER_ADDRESS` — EIP-712 quote signer
 - `JUDGE_PRIVATE_KEY` (local) or `JUDGE_REMOTE_URL` + `JUDGE_REMOTE_SECRET` (Phala)
-- `STATUS_INDEXER_STALE_MS`, `STATUS_INDEXER_LAG_BLOCKS` вЂ” health thresholds
-- `TRANSACTION_SYNC_MIN_CONFIRMATIONS` вЂ” recovery confirmation depth
+- `STATUS_INDEXER_STALE_MS`, `STATUS_INDEXER_LAG_BLOCKS` — health thresholds
+- `TRANSACTION_SYNC_MIN_CONFIRMATIONS` — recovery confirmation depth
 
 **Stage 3 scale infrastructure**
 - `RATE_LIMIT_BACKEND=memory|redis` - use `redis` for multi-instance API.
@@ -232,12 +232,12 @@ incident triage, and live verification flow.
 - `INDEXER_RPC_URL`, `INDEXER_CHAIN_ID`, `INDEXER_ID`
 - `INDEXER_INTERVAL_MS` (e.g. `12000`)
 - `INDEXER_MAX_BLOCK_RANGE` (e.g. `2000`)
-- `INDEXER_CONFIRMATIONS` (default `3`) вЂ” block depth before indexing
+- `INDEXER_CONFIRMATIONS` (default `3`) — block depth before indexing
 
 **IPFS (ProofAnchor)**
-- `IPFS_PROVIDER` вЂ” `stub` | `pinata` | `web3storage` | `kubo`
+- `IPFS_PROVIDER` — `stub` | `pinata` | `web3storage` | `kubo`
 - `PINATA_JWT` or `WEB3_STORAGE_TOKEN` or `IPFS_API_URL`
-- `PROOF_ANCHOR_DEPLOYER_KEY` вЂ” wallet that submits `anchor()` tx
+- `PROOF_ANCHOR_DEPLOYER_KEY` — wallet that submits `anchor()` tx
 
 **Agents**
 - `MM_AGENT_PRIVATE_KEY`
@@ -246,7 +246,7 @@ incident triage, and live verification flow.
 
 **Reclaim zkTLS**
 - `RECLAIM_APP_ID`, `RECLAIM_APP_SECRET`, `RECLAIM_PROVIDER_ID`
-- `RECLAIM_PUBLIC_BASE_URL` вЂ” public URL the attestor calls back
+- `RECLAIM_PUBLIC_BASE_URL` — public URL the attestor calls back
 
 ---
 
@@ -254,24 +254,24 @@ incident triage, and live verification flow.
 
 ```text
 AI judge service
-   в”‚  signs verdict
-   в”‚  (EIP-191 over keccak(chainId,pool,marketId,outcome,evidenceHash))
-   в–ј
-propose(marketId, outcome, evidenceHash, sig)        вЂ” judge service
-   в”‚
-   в–ј
+   │  signs verdict
+   │  (EIP-191 over keccak(chainId,pool,marketId,outcome,evidenceHash))
+   ▼
+propose(marketId, outcome, evidenceHash, sig)        — judge service
+   │
+   ▼
 status = Pending     (2h challenge window)
-   в”‚
-   в”њв”Ђв”Ђ challenge(marketId) в”Ђв–є status = Disputed      вЂ” anyone, within window
-   в”‚
-   в–ј
-finalize(marketId) в”Ђв–є pool.resolve(outcome)          вЂ” anyone, after window
-   в”‚
-   в–ј
+   │
+   ├── challenge(marketId) ─► status = Disputed      — anyone, within window
+   │
+   ▼
+finalize(marketId) ─► pool.resolve(outcome)          — anyone, after window
+   │
+   ▼
 status = Finalized   (claims unlock)
 
-overrideAndFinalize(marketId, outcome)               вЂ” owner only
-   в–ј
+overrideAndFinalize(marketId, outcome)               — owner only
+   ▼
 status = Finalized   (only when previously Disputed)
 ```
 
@@ -285,7 +285,7 @@ explicitly desired.
 
 ---
 
-## Reclaim в†’ IPFS в†’ on-chain proof anchor
+## Reclaim → IPFS → on-chain proof anchor
 
 1. User runs zkTLS via Reclaim, attestor `POST`s the proof to
    `/api/reclaim/callback`.
@@ -296,7 +296,7 @@ explicitly desired.
    publisher, cid, anchoredAt)` so any indexer / client can resolve a
    proof from on-chain state alone.
 4. The same `proofHash` is folded into `evidenceHash` when the AI judge
-   signs its verdict вЂ” so a finalized market is cryptographically tied to
+   signs its verdict — so a finalized market is cryptographically tied to
    the anchored proof.
 
 `IPFS_PROVIDER=stub` returns a deterministic `localcid-{hex}` for dev/CI;
@@ -312,7 +312,7 @@ signature from `QUOTE_SIGNER_PRIVATE_KEY`. The `BetQuoteVerifier` contract
 binds the signature to its EIP-712 domain (`PariAI Bet Quote / 1`) and
 verifies / consumes it (one-shot per `(bettor, nonce)`).
 
-This is a standalone verifier today вЂ” the next pool upgrade will add a
+This is a standalone verifier today — the next pool upgrade will add a
 `betWithQuote(quote, signature)` wrapper that calls
 `BetQuoteVerifier.consume()` before executing the bet, giving on-chain
 slippage protection.
@@ -326,10 +326,10 @@ pnpm e2e:live --dry     # env preflight + plan only
 pnpm e2e:live           # full flow against the configured chain
 ```
 
-The script runs: env preflight в†’ RPC sanity в†’
-`createSoftMarket` в†’ `mint` test USDC в†’ `approve` + `bet YES` в†’
-sign verdict в†’ `propose` в†’ bump `fastTrackUntil` (best-effort) в†’
-poll `canFinalize` в†’ `finalize` в†’ `claim`. Every tx hash is printed.
+The script runs: env preflight → RPC sanity →
+`createSoftMarket` → `mint` test USDC → `approve` + `bet YES` →
+sign verdict → `propose` → bump `fastTrackUntil` (best-effort) →
+poll `canFinalize` → `finalize` → `claim`. Every tx hash is printed.
 
 Required env (`pnpm env:check --profile=full` will tell you what's
 missing):
@@ -368,17 +368,17 @@ touching the live cursor.
 
 ## Security & ops
 
-- **Rate limit** вЂ” `services/api/src/rate-limit.ts` is an in-memory
+- **Rate limit** — `services/api/src/rate-limit.ts` is an in-memory
   token bucket (30 writes / 240 reads per minute per IP, configurable).
   Health endpoints (`/health`, `/api/status`) are unmetered. Swap to
   Redis for multi-instance backend.
-- **Admin allowlist** вЂ” `parseAdminAllowlist()` / `isAdminAddress()` in
+- **Admin allowlist** — `parseAdminAllowlist()` / `isAdminAddress()` in
   `services/api/src/auth.ts` reads `IMPORT_ADMIN_ADDRESSES` (or legacy
   `ADMIN_WALLET_ADDRESSES`). Importer routes call `requireImportAdmin()`
   which returns 401 / 403 / 503 with explicit error codes.
-- **SIWE sessions** вЂ” wallet-scoped writes (settings, watchlist,
+- **SIWE sessions** — wallet-scoped writes (settings, watchlist,
   notifications, importer, proof storage) require SIWE.
-- **Env validation** вЂ” `pnpm env:check [--profile=full]` runs 23 rules
+- **Env validation** — `pnpm env:check [--profile=full]` runs 23 rules
   across FRONTEND / BACKEND / INDEXER / AGENTS / IPFS. Exits non-zero
   with categorized missing/invalid lists. Wire into CI.
 
@@ -398,31 +398,31 @@ touching the live cursor.
 | `/agent/:id`        | Agent profile, recent moves with tx proof, reputation |
 | `/create`           | Spec generator + Market Importer flow |
 | `/resolve`          | Source-proof resolution UI (`<ResolutionClient>`) |
-| `/docs`             | In-app live status + proof panel (`<DocsStatusClient>`) вЂ” backend, RPC, factory, indexer readiness |
+| `/docs`             | In-app live status + proof panel (`<DocsStatusClient>`) — backend, RPC, factory, indexer readiness |
 | `/api/status`       | Live readiness JSON (DB, RPC, factory, indexer per chain) |
 
 ### UI building blocks worth knowing
 
-- **Header** ([header.tsx](src/components/dashboard/header.tsx)) вЂ” wallet
+- **Header** ([header.tsx](src/components/dashboard/header.tsx)) — wallet
   ConnectButton, chain badge, USDC faucet button, command palette
   trigger, notification bell.
 - **Bottom tab bar** ([bottom-tab-bar.tsx](src/components/dashboard/bottom-tab-bar.tsx))
-  вЂ” mobile nav across Markets / Portfolio / Create / Leaderboard.
+  — mobile nav across Markets / Portfolio / Create / Leaderboard.
 - **Command palette** ([command-palette.tsx](src/components/dashboard/command-palette.tsx))
-  вЂ” вЊK-style fuzzy search across markets, agents, routes.
+  — ⌘K-style fuzzy search across markets, agents, routes.
 - **Notification center** ([notification-center.tsx](src/components/dashboard/notification-center.tsx))
-  вЂ” drawer for `bet_confirmed`, `market_resolved`, `payout_claimable`
+  — drawer for `bet_confirmed`, `market_resolved`, `payout_claimable`
   events; bridges `GET/POST/PATCH /api/notifications`.
 - **System status drawer** ([system-status-drawer.tsx](src/components/dashboard/system-status-drawer.tsx))
-  вЂ” live `/api/status` panel (DB / RPC / factory / indexer per chain,
+  — live `/api/status` panel (DB / RPC / factory / indexer per chain,
   reorg + lag indicators).
 - **USDC faucet** ([usdc-faucet-button.tsx](src/components/dashboard/usdc-faucet-button.tsx))
-  вЂ” one-click `TestUSDC.mint(1000)` for the connected wallet on testnet.
+  — one-click `TestUSDC.mint(1000)` for the connected wallet on testnet.
 - **BetForm** ([bet-form.tsx](src/components/dashboard/bet-form.tsx))
-  вЂ” real on-chain balance, slippage in bps with tone (green/amber/red),
+  — real on-chain balance, slippage in bps with tone (green/amber/red),
   pool-impact + insufficient-balance warning banners.
 - **ResolutionStatus** ([resolution-status.tsx](src/components/dashboard/resolution-status.tsx))
-  вЂ” stage-aware Challenge / Finalize buttons gated by `canFinalize`
+  — stage-aware Challenge / Finalize buttons gated by `canFinalize`
   + countdown to `challengeDeadline`.
 
 ### Wallet-scoped user features (require SIWE)
@@ -431,19 +431,19 @@ These persist across sessions per wallet address via the Postgres
 backend; the frontend never falls back to browser storage for any of
 them.
 
-- **SIWE auth** вЂ” `POST /api/auth/nonce` в†’ wallet signs SIWE message в†’
+- **SIWE auth** — `POST /api/auth/nonce` → wallet signs SIWE message →
   `POST /api/auth/verify` issues the `pariai_session` cookie (HttpOnly,
   SameSite=Strict, 7-day TTL).
-- **Wallet session API** вЂ” `POST /api/wallet/connect`,
+- **Wallet session API** — `POST /api/wallet/connect`,
   `POST /api/wallet/disconnect`, `GET /api/wallet` for the active
   wallet session state shown by `<WalletButton>` /
   `<UserSettingsEffects>`.
-- **Settings** вЂ” `GET/PUT /api/settings`. Notifications on/off, default
+- **Settings** — `GET/PUT /api/settings`. Notifications on/off, default
   chain, slippage prefs.
-- **Watchlist** вЂ” `GET/POST /api/watchlist`, `DELETE
+- **Watchlist** — `GET/POST /api/watchlist`, `DELETE
   /api/watchlist/:marketId`. Mark a market and receive
   `market_resolved` notifications when it resolves.
-- **Notifications** вЂ” `GET /api/notifications`,
+- **Notifications** — `GET /api/notifications`,
   `POST /api/notifications/read`, `PATCH /api/notifications/:id/read`.
   Events: `bet_confirmed`, `market_resolved`, `payout_claimable`.
   Surfaced by `<NotificationCenter>` drawer.
@@ -453,9 +453,9 @@ them.
 ## API map
 
 PariAI runs two HTTP layers:
-- **Fastify backend** (`services/api/`) вЂ” owns Postgres, SIWE sessions,
+- **Fastify backend** (`services/api/`) — owns Postgres, SIWE sessions,
   importer, EIP-712 quote signer, transaction recovery.
-- **Next API routes** (`src/app/api/**/route.ts`) вЂ” thin proxies +
+- **Next API routes** (`src/app/api/**/route.ts`) — thin proxies +
   edge-friendly helpers (Reclaim session/callback, judge signer, public
   GET surfaces). Frontend hits these first; many proxy through to
   Fastify.
@@ -463,8 +463,8 @@ PariAI runs two HTTP layers:
 ### Fastify backend (`services/api/src/server.ts`)
 
 **Health & sync**
-- `GET /health`, `GET /api/status` вЂ” DB / RPC / factory / indexer per chain
-- `POST /api/sync/transaction` вЂ” verify receipt + reconcile DB
+- `GET /health`, `GET /api/status` — DB / RPC / factory / indexer per chain
+- `POST /api/sync/transaction` — verify receipt + reconcile DB
 
 **Markets**
 - `GET /api/markets`, `GET /api/markets/:id`
@@ -472,9 +472,9 @@ PariAI runs two HTTP layers:
 - `POST /api/markets/validate`, `/generate`, `/api/markets`
 
 **Trading**
-- `POST /api/bets/preview` вЂ” quote derived from pool snapshot
-- `POST /api/bets/quote` вЂ” EIP-712 signed quote (`BetQuoteVerifier`)
-- `POST /api/bets` вЂ” confirm a placed bet against a tx receipt
+- `POST /api/bets/preview` — quote derived from pool snapshot
+- `POST /api/bets/quote` — EIP-712 signed quote (`BetQuoteVerifier`)
+- `POST /api/bets` — confirm a placed bet against a tx receipt
 - `POST /api/claim`
 
 **Portfolio & agents**
@@ -482,8 +482,8 @@ PariAI runs two HTTP layers:
 - `GET /api/agents`, `/ecosystem`, `/:id`, `/:id/moves`, `/:id/reputation`
 - `POST /api/agents/register`
 - `GET /api/leaderboard`
-- `GET /api/activity` вЂ” global activity feed
-- `GET /api/oracle/:marketId` вЂ” oracle resolution state for a market
+- `GET /api/activity` — global activity feed
+- `GET /api/oracle/:marketId` — oracle resolution state for a market
 - `GET /api/liquidity/incentives` - active incentive eligibility from indexed positions
 
 **SIWE / user**
@@ -508,14 +508,14 @@ PariAI runs two HTTP layers:
 
 **Resolution & proof**
 - `POST /api/reclaim/proofs`, `GET /api/reclaim/proofs/:sessionId`
-  вЂ” server-to-server proof store keyed by `RECLAIM_PROOF_WRITE_SECRET`
+  — server-to-server proof store keyed by `RECLAIM_PROOF_WRITE_SECRET`
 - `POST /api/resolve`
 
 ### Next API routes (`src/app/api/**/route.ts`)
 
 These run inside Next.js and are what the browser actually hits:
 
-- `GET /api/status` вЂ” proxies the Fastify status payload
+- `GET /api/status` — proxies the Fastify status payload
 - `GET /api/markets`, `GET /api/markets/:id`, `GET /api/markets/:id/activity`,
   `/timeline`
 - `POST /api/markets/validate`, `/generate`
@@ -542,14 +542,14 @@ These run inside Next.js and are what the browser actually hits:
   `POST /api/import/candidates/:id/validate`, `/deploy`
 - `POST /api/liquidity/programs`, `POST /api/liquidity/payouts`
 - `POST /api/wallet/connect`, `POST /api/wallet/disconnect`,
-  `GET /api/wallet` вЂ” wallet session state
-- `POST /api/reclaim/session` вЂ” Reclaim app session bootstrap
-- `POST /api/reclaim/callback` вЂ” Reclaim attestor callback;
-  verifies в†’ `putProof()` в†’ IPFS pin в†’ `ProofAnchor.anchor()`
-- `GET /api/reclaim/get` вЂ” fetch verified proof by sessionId
-- `POST /api/resolve` вЂ” server-side resolution helper
-- `POST /api/judge/resolve` вЂ” sign AI judge verdict
-  (Claude в†’ EIP-191 в†’ ECDSA signature) for `AIJudgeVerifier.propose`
+  `GET /api/wallet` — wallet session state
+- `POST /api/reclaim/session` — Reclaim app session bootstrap
+- `POST /api/reclaim/callback` — Reclaim attestor callback;
+  verifies → `putProof()` → IPFS pin → `ProofAnchor.anchor()`
+- `GET /api/reclaim/get` — fetch verified proof by sessionId
+- `POST /api/resolve` — server-side resolution helper
+- `POST /api/judge/resolve` — sign AI judge verdict
+  (Claude → EIP-191 → ECDSA signature) for `AIJudgeVerifier.propose`
 
 ---
 
@@ -567,7 +567,7 @@ services/ai-judge/          Resolver worker (TEE/local)
 services/mm-agent/          AI market-maker agent service
 scripts/check-env.ts        Env validation (`pnpm env:check`)
 scripts/e2e-live.ts         Live testnet E2E (`pnpm e2e:live`)
-scripts/compile-abis.ts     Solidity в†’ ABI JSON
+scripts/compile-abis.ts     Solidity → ABI JSON
 scripts/deploy-contracts.ts Testnet deploy + .env.local patcher
 deployments/                Per-chain deployment snapshots
 public/sw.js                PWA shell worker; API and trading data stay network-only
@@ -596,7 +596,7 @@ Requires `DEPLOYER_PRIVATE_KEY`. Set `JUDGE_PUBLIC_ADDRESS` and
 `contracts:register-feeds` reads `scripts/register-feed.ts` config and
 sets price feeds on `PriceOracle` for the configured asset symbols.
 
-Current Arbitrum Sepolia (`421614`) snapshot вЂ” see
+Current Arbitrum Sepolia (`421614`) snapshot — see
 [`deployments/421614.json`](deployments/421614.json) for the live record.
 
 ---
@@ -615,7 +615,7 @@ pnpm e2e:live --dry                 # script wiring sanity (no chain writes)
 ```
 
 For visible feature verification: `pnpm dev`, then walk
-Markets в†’ Portfolio в†’ Create в†’ Market detail в†’ Resolve flow and confirm
+Markets → Portfolio → Create → Market detail → Resolve flow and confirm
 each surface shows real indexed / chain-derived state (no placeholder
 records).
 
@@ -624,37 +624,37 @@ records).
 ## Internals reference
 
 The sections below are an inventory of every shipped surface. They are
-authoritative вЂ” if something is in the codebase and not listed here, it
+authoritative — if something is in the codebase and not listed here, it
 is a documentation bug.
 
 ### Frontend internals (`src/lib/`)
 
 **Hooks** (`src/lib/hooks/*.ts`)
-- `useMarkets` вЂ” list markets via the configured service layer
-- `useMarketDetail` вЂ” single market + timeline + activity
-- `usePortfolio` вЂ” open positions, history, claimable amounts
-- `useBet` вЂ” quote + signed approve + bet transaction lifecycle
-- `useLeaderboard` вЂ” humans + AI agents ranked by realized PnL
-- `useActivity` вЂ” global activity feed (`/api/activity`)
-- `useAgent` вЂ” single agent profile, recent moves
-- `useSystemStatus` вЂ” `/api/status` polling for the status drawer
-- `useWallet` вЂ” wagmi account + hydration
+- `useMarkets` — list markets via the configured service layer
+- `useMarketDetail` — single market + timeline + activity
+- `usePortfolio` — open positions, history, claimable amounts
+- `useBet` — quote + signed approve + bet transaction lifecycle
+- `useLeaderboard` — humans + AI agents ranked by realized PnL
+- `useActivity` — global activity feed (`/api/activity`)
+- `useAgent` — single agent profile, recent moves
+- `useSystemStatus` — `/api/status` polling for the status drawer
+- `useWallet` — wagmi account + hydration
 
-**Stores** (`src/lib/store/`, all zustand, no persistence вЂ” sources of
+**Stores** (`src/lib/store/`, all zustand, no persistence — sources of
 truth live in contracts / Postgres)
-- `useUserStore` вЂ” account, session, connect/disconnect
-- `useMarketsStore` вЂ” filters, refresh trigger
-- `usePortfolioStore` вЂ” positions cache, claim state
-- `useActivityStore` вЂ” live event stream
+- `useUserStore` — account, session, connect/disconnect
+- `useMarketsStore` — filters, refresh trigger
+- `usePortfolioStore` — positions cache, claim state
+- `useActivityStore` — live event stream
 
 **Service layer** (`src/lib/services/`)
-- `provider.ts` вЂ” selects between `api | onchain` via
+- `provider.ts` — selects between `api | onchain` via
   `NEXT_PUBLIC_BACKEND`.
-- `onchain/` вЂ” direct viem reads (markets, positions, oracle, spec
+- `onchain/` — direct viem reads (markets, positions, oracle, spec
   cache, judge state)
-- `api/create-api-services.ts` вЂ” Fastify-backed mirror of the onchain
+- `api/create-api-services.ts` — Fastify-backed mirror of the onchain
   service surface
-- backend/indexer services вЂ” production data path for market, portfolio, activity, and agent records
+- backend/indexer services — production data path for market, portfolio, activity, and agent records
 
 **Domain types** (`src/lib/types/domain.ts`)
 - Core: `Market`, `MarketSpec`, `MarketFilters`, `MarketTimelinePoint`,
@@ -669,16 +669,16 @@ truth live in contracts / Postgres)
 - Importer: `ImportSource`, `ImportCandidate`
 
 **Adapters / formatters**
-- `src/lib/market-view.ts` вЂ” Market в†’ UI view (ticker, asset class,
+- `src/lib/market-view.ts` — Market → UI view (ticker, asset class,
   lifecycle, badges)
-- `src/lib/market-lifecycle.ts` вЂ” computed market state
+- `src/lib/market-lifecycle.ts` — computed market state
   (`draft | open | locked | resolving | resolved | claimable | archived`)
-- `src/lib/utils.ts` вЂ” `shortenAddress`, formatting helpers
+- `src/lib/utils.ts` — `shortenAddress`, formatting helpers
 
 **Wagmi setup** (`src/lib/wagmi.ts`)
 - Chains: Arbitrum Sepolia (always), Robinhood Chain Testnet
   (conditional on `NEXT_PUBLIC_RHC_RPC_URL`)
-- Connectors: `injected()` вЂ” MetaMask + any EIP-1193 wallet
+- Connectors: `injected()` — MetaMask + any EIP-1193 wallet
 - Transports: HTTP per chain
 - `ssr: true` enabled for Next.js App Router
 
@@ -686,40 +686,40 @@ truth live in contracts / Postgres)
 
 Each client component owns a Next.js route or a major lifecycle effect:
 
-- `HomeClient.tsx` вЂ” `/` dashboard (stats, volume bar chart, live
+- `HomeClient.tsx` — `/` dashboard (stats, volume bar chart, live
   activity, markets table)
-- `MarketDetailClient.tsx` вЂ” `/market/:id` (probability chart, trust
+- `MarketDetailClient.tsx` — `/market/:id` (probability chart, trust
   panel, BetForm, ResolutionStatus, activity, timeline)
-- `PortfolioClient.tsx` вЂ” `/portfolio` (stats, cumulative-PnL chart,
+- `PortfolioClient.tsx` — `/portfolio` (stats, cumulative-PnL chart,
   open positions, claim center, history)
 - `AgentEcosystemClient.tsx` - `/agents` registry status, onboarding, top
   agents, and recent moves.
-- `LeaderboardClient.tsx` вЂ” `/leaderboard` ranked table
-- `CreateMarketClient.tsx` вЂ” `/create` spec generator + importer
-- `AgentProfileClient.tsx` вЂ” `/agent/:id` profile, moves, reputation
-- `ResolutionClient.tsx` вЂ” `/resolve` source-proof flow
-- `DocsStatusClient.tsx` вЂ” `/docs` live readiness panel
-- `WalletButton.tsx` вЂ” RainbowKit ConnectButton.Custom integration
-- `WalletProviders.tsx` вЂ” wagmi + react-query + RainbowKit root
-- `UserSettingsEffects.tsx` вЂ” applies wallet-scoped preferences
+- `LeaderboardClient.tsx` — `/leaderboard` ranked table
+- `CreateMarketClient.tsx` — `/create` spec generator + importer
+- `AgentProfileClient.tsx` — `/agent/:id` profile, moves, reputation
+- `ResolutionClient.tsx` — `/resolve` source-proof flow
+- `DocsStatusClient.tsx` — `/docs` live readiness panel
+- `WalletButton.tsx` — RainbowKit ConnectButton.Custom integration
+- `WalletProviders.tsx` — wagmi + react-query + RainbowKit root
+- `UserSettingsEffects.tsx` — applies wallet-scoped preferences
   (theme, default chain, notification opt-in)
 
 ### Backend helpers (`services/api/src/`)
 
-- `server.ts` вЂ” Fastify entrypoint, all route handlers, global
+- `server.ts` — Fastify entrypoint, all route handlers, global
   `onRequest` rate-limit hook
-- `auth.ts` вЂ” SIWE message builder, nonce TTL (15 min), session TTL
+- `auth.ts` — SIWE message builder, nonce TTL (15 min), session TTL
   (7 d), cookie serialization, `parseAdminAllowlist()`,
   `isAdminAddress()`
-- `rate-limit.ts` вЂ” in-memory token bucket (30 write / 240 read per
+- `rate-limit.ts` — in-memory token bucket (30 write / 240 read per
   minute per IP), periodic GC, `__resetRateLimitForTests`
-- `db.ts` вЂ” `pg` connection pool, `query()` + `transaction()` wrappers
-- `migrate.ts` вЂ” applies `db/schema.sql` idempotently
-- `market-validation.ts` вЂ” draft validation rules (see below)
-- `user-preferences.ts` вЂ” settings patch validator
-- `importer.ts` вЂ” `configuredImportSources()`, `scanImportSource()`,
+- `db.ts` — `pg` connection pool, `query()` + `transaction()` wrappers
+- `migrate.ts` — applies `db/schema.sql` idempotently
+- `market-validation.ts` — draft validation rules (see below)
+- `user-preferences.ts` — settings patch validator
+- `importer.ts` — `configuredImportSources()`, `scanImportSource()`,
   `validateImportCandidate()`
-- `format.ts` вЂ” `asNumber()`, `walletShort()`, `toIso()` shared
+- `format.ts` — `asNumber()`, `walletShort()`, `toIso()` shared
   serializers
 
 ### Service workers
@@ -737,11 +737,11 @@ Each client component owns a Next.js route or a major lifecycle effect:
 - CLI: `pnpm indexer:backfill <fromBlock> <toBlock>` re-emits without
   touching the cursor
 - Status surface via `indexer_state(last_block, last_block_hash,
-  last_status, last_error, last_reorg_at, updated_at)` в†’
+  last_status, last_error, last_reorg_at, updated_at)` →
   `/api/status.indexer.*`
 
 **`services/mm-agent/`** (AI Market-Maker)
-- Strategy: counter-balance LP вЂ” place a minority-side bet whenever
+- Strategy: counter-balance LP — place a minority-side bet whenever
   `|yes% - 50%| > imbalanceThresholdBps`
 - Config env: `MM_BET_USDC`, `MM_MAX_EXPOSURE`, `MM_IMBALANCE_BPS`,
   `MM_INTERVAL_MS`, `MM_AGENT_HANDLE`, `MM_AGENT_PRIVATE_KEY`
@@ -755,8 +755,8 @@ Each client component owns a Next.js route or a major lifecycle effect:
   context?, reclaimSessionId? }`
 - Returns: `outcome (0|1), evidenceHash, signature, reasoning,
   attestation?`
-- Flow: Claude Sonnet 4.6 (`ANTHROPIC_API_KEY`) в†’ JSON parse в†’ keccak
-  reasoning в†’ optional XOR-fold with Reclaim proofHash в†’ EIP-191 sign
+- Flow: Claude Sonnet 4.6 (`ANTHROPIC_API_KEY`) → JSON parse → keccak
+  reasoning → optional XOR-fold with Reclaim proofHash → EIP-191 sign
 - Env: `JUDGE_MODE`, `JUDGE_HOST`, `JUDGE_PORT`,
   `JUDGE_SUPPORTED_CHAIN_IDS`, `JUDGE_REMOTE_URL`,
   `JUDGE_REMOTE_SECRET`
@@ -766,29 +766,29 @@ Each client component owns a Next.js route or a major lifecycle effect:
 21 tables, grouped by owner:
 
 **Indexed product state** (written by indexer)
-- `markets` вЂ” id, spec, status, chain, pool address, resolution fields
-- `market_stats` вЂ” volume, yes_probability, bettors, hot flag
-- `market_timeline` вЂ” per-event probability + volume snapshots
-- `agents` вЂ” handle, ERC-8004 address, chain ID, registration tx,
+- `markets` — id, spec, status, chain, pool address, resolution fields
+- `market_stats` — volume, yes_probability, bettors, hot flag
+- `market_timeline` — per-event probability + volume snapshots
+- `agents` — handle, ERC-8004 address, chain ID, registration tx,
   reputation, lifetime PnL
-- `agent_reputation_history` вЂ” per-update reputation snapshots
-- `positions` вЂ” bettor, market, side, stake, avg price, shares,
+- `agent_reputation_history` — per-update reputation snapshots
+- `positions` — bettor, market, side, stake, avg price, shares,
   block/tx identity, status
-- `claims` вЂ” payout per position, tx identity
-- `refunds` вЂ” refund-after-grace payouts, tx identity
-- `activity_events` вЂ” feed entries (bet, ai-lp, resolution, claim,
+- `claims` — payout per position, tx identity
+- `refunds` — refund-after-grace payouts, tx identity
+- `activity_events` — feed entries (bet, ai-lp, resolution, claim,
   refund)
-- `notification_events` вЂ” `bet_confirmed`, `market_resolved`,
+- `notification_events` — `bet_confirmed`, `market_resolved`,
   `payout_claimable`
-- `indexer_state` вЂ” per-chain cursor (`last_block`, `last_block_hash`,
+- `indexer_state` — per-chain cursor (`last_block`, `last_block_hash`,
   `last_status`, `last_error`, `last_reorg_at`)
-- `transaction_syncs` вЂ” `/api/sync/transaction` audit log
+- `transaction_syncs` — `/api/sync/transaction` audit log
 
 **SIWE / user**
-- `auth_nonces` вЂ” pending SIWE nonces (TTL 15 min)
-- `auth_sessions` вЂ” issued session tokens (TTL 7 d)
-- `user_settings` вЂ” per-address preferences
-- `watchlist` вЂ” per-address market watch entries
+- `auth_nonces` — pending SIWE nonces (TTL 15 min)
+- `auth_sessions` — issued session tokens (TTL 7 d)
+- `user_settings` — per-address preferences
+- `watchlist` — per-address market watch entries
 - `user_activity_events` - wallet-scoped product events used for retention cohorts.
 
 **Liquidity incentives**
@@ -797,14 +797,14 @@ Each client component owns a Next.js route or a major lifecycle effect:
 - `liquidity_incentive_payouts` - recorded rebate payout transactions.
 
 **Importer (admin)**
-- `import_sources` вЂ” configured public RSS / API feeds
-- `import_candidates` вЂ” normalized drafts, validation errors,
+- `import_sources` — configured public RSS / API feeds
+- `import_candidates` — normalized drafts, validation errors,
   spec hash
-- `import_candidate_sources` вЂ” provenance fields per candidate
-- `import_deployments` вЂ” link candidate в†’ deployed `MarketCreated` tx
+- `import_candidate_sources` — provenance fields per candidate
+- `import_deployments` — link candidate → deployed `MarketCreated` tx
 
 **Proof**
-- `reclaim_proofs` вЂ” verified Reclaim payloads keyed by sessionId
+- `reclaim_proofs` — verified Reclaim payloads keyed by sessionId
   (writes gated by `RECLAIM_PROOF_WRITE_SECRET`)
 
 ### Contract events (`contracts/src/`)
@@ -826,24 +826,24 @@ Each client component owns a Next.js route or a major lifecycle effect:
 
 ### Validation rules
 
-**Market drafts** (`market-validation.ts` вЂ” used by `/api/markets/validate`
+**Market drafts** (`market-validation.ts` — used by `/api/markets/validate`
 and importer `validateImportCandidate`)
-- title: starts with a binary verb (Will / Does / Is / Has вЂ¦), ends
+- title: starts with a binary verb (Will / Does / Is / Has …), ends
   with `?`
 - description: required
 - sourceUrl: required, must be `http://` or `https://`
 - resolutionCriteria: required
 - category: whitelist (`stocks | crypto | sports | soft | macro`)
 - oracleType: whitelist (`chainlink-price | zktls-ai-oracle | manual`)
-- asset: whitelist (`USDC | tokenized-AAPL | tokenized-TSLA | вЂ¦`)
+- asset: whitelist (`USDC | tokenized-AAPL | tokenized-TSLA | …`)
 - deadlineIso: must parse and be in the future
-- feeBps: 0вЂ“500 bps (0вЂ“5%)
+- feeBps: 0–500 bps (0–5%)
 
-**User settings** (`user-preferences.ts` вЂ” used by `PUT /api/settings`)
+**User settings** (`user-preferences.ts` — used by `PUT /api/settings`)
 - `chain`: `arbitrum-sepolia | rhc`
 - `currency`: `USD | USDC`
 - `notificationsEnabled`, `animationsEnabled`, `compactMode`: boolean
-- `defaultStakeUsd`: 1 вЂ“ 100_000
+- `defaultStakeUsd`: 1 – 100_000
 - `explorerPreference`: `default | arbiscan | rhc`
 
 **Importer risk flags** (raised on candidates, surfaced in admin review)
@@ -867,19 +867,19 @@ and importer `validateImportCandidate`)
 - Transfer-resolver authorization
 
 **Backend** (`services/api/src/__tests__/*.test.ts`)
-- `auth.test.ts` вЂ” cookie format, nonce TTL, admin allowlist parse
-- `auth-api.test.ts` вЂ” SIWE nonce/verify route flow
-- `agent-api.test.ts` вЂ” agent listing + detail
-- `bet-preview.test.ts` вЂ” quote generation from pool snapshot
-- `importer.test.ts` вЂ” RSS / JSON parsing + normalization
-- `import-deploy.test.ts` вЂ” deploy verifies factory tx + ties
+- `auth.test.ts` — cookie format, nonce TTL, admin allowlist parse
+- `auth-api.test.ts` — SIWE nonce/verify route flow
+- `agent-api.test.ts` — agent listing + detail
+- `bet-preview.test.ts` — quote generation from pool snapshot
+- `importer.test.ts` — RSS / JSON parsing + normalization
+- `import-deploy.test.ts` — deploy verifies factory tx + ties
   candidate to `MarketCreated`
-- `market-validation.test.ts` вЂ” every draft rule above
-- `reclaim-proofs.test.ts` вЂ” Reclaim proof lifecycle, secret gating
-- `schema-chain-defaults.test.ts` вЂ” DB defaults per chain
-- `transaction-chain-identity.test.ts` вЂ” receipt parsing + event log
+- `market-validation.test.ts` — every draft rule above
+- `reclaim-proofs.test.ts` — Reclaim proof lifecycle, secret gating
+- `schema-chain-defaults.test.ts` — DB defaults per chain
+- `transaction-chain-identity.test.ts` — receipt parsing + event log
   decoding + chain-mismatch rejection
-- `user-preferences.test.ts` вЂ” settings patch validator
+- `user-preferences.test.ts` — settings patch validator
 
 Run everything with `pnpm test` (current count: **128 passing**).
 
@@ -888,10 +888,10 @@ Run everything with `pnpm test` (current count: **128 passing**).
 | Script | npm alias | Purpose |
 |---|---|---|
 | `check-env.ts` | `pnpm env:check [--profile=full]` | Env validation (23 rules, 5 categories) |
-| `compile-abis.ts` | `pnpm contracts:abi` | Solidity в†’ ABI JSON for `src/lib/abi/` |
+| `compile-abis.ts` | `pnpm contracts:abi` | Solidity → ABI JSON for `src/lib/abi/` |
 | `deploy-contracts.ts` | `pnpm contracts:deploy` | Testnet deploy + `.env.local` patcher |
 | `register-feed.ts` | `pnpm contracts:register-feeds` | Wire Chainlink-shape feeds into `PriceOracle` |
-| `e2e-live.ts` | `pnpm e2e:live [--dry]` | Live create в†’ bet в†’ propose в†’ finalize в†’ claim |
+| `e2e-live.ts` | `pnpm e2e:live [--dry]` | Live create → bet → propose → finalize → claim |
 | `seed-market.ts` | manual | Seed a hard market (Chainlink-resolved) |
 | `seed-soft-market.ts` | manual | Seed a soft market (AI-judge-resolved) |
 | `generate-judge-key.ts` | manual | Mint a fresh ECDSA keypair for the AI judge |
@@ -902,7 +902,7 @@ Run everything with `pnpm test` (current count: **128 passing**).
 
 `pnpm env:check` is the authoritative validator. The full list grouped:
 
-**Frontend** вЂ” `NEXT_PUBLIC_BACKEND`,
+**Frontend** — `NEXT_PUBLIC_BACKEND`,
 `NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL`,
 `NEXT_PUBLIC_MARKET_FACTORY_ADDRESS`,
 `NEXT_PUBLIC_STAKE_TOKEN_ADDRESS`,
@@ -923,7 +923,7 @@ Run everything with `pnpm test` (current count: **128 passing**).
 `NEXT_PUBLIC_AI_JUDGE_ENABLED`,
 `NEXT_PUBLIC_BACKEND_URL`
 
-**Backend** вЂ” `DATABASE_URL`, `ARBITRUM_SEPOLIA_RPC_URL`,
+**Backend** — `DATABASE_URL`, `ARBITRUM_SEPOLIA_RPC_URL`,
 `RHC_RPC_URL`, `RHC_CHAIN_ID`, `SIWE_DOMAIN`,
 `JUDGE_PRIVATE_KEY`, `JUDGE_REMOTE_URL`, `JUDGE_REMOTE_SECRET`,
 `QUOTE_SIGNER_PRIVATE_KEY`, `BET_QUOTE_VERIFIER_ADDRESS`,
@@ -934,25 +934,25 @@ Run everything with `pnpm test` (current count: **128 passing**).
 `MARKET_FACTORY_ADDRESS`, `STAKE_TOKEN_ADDRESS`,
 `REPUTATION_ORACLE_ADDRESS`, `BACKEND_API_URL`, `PUBLIC_APP_URL`
 
-**Indexer** вЂ” `INDEXER_RPC_URL`, `INDEXER_CHAIN_ID`,
+**Indexer** — `INDEXER_RPC_URL`, `INDEXER_CHAIN_ID`,
 `INDEXER_ID`, `INDEXER_INTERVAL_MS`,
 `INDEXER_MAX_BLOCK_RANGE`, `INDEXER_CONFIRMATIONS`
 
-**AI Judge worker** вЂ” `JUDGE_MODE`, `JUDGE_HOST`, `JUDGE_PORT`,
+**AI Judge worker** — `JUDGE_MODE`, `JUDGE_HOST`, `JUDGE_PORT`,
 `JUDGE_CHAIN_ID`, `JUDGE_SUPPORTED_CHAIN_IDS`,
 `DSTACK_SIMULATOR_ENDPOINT`, `ANTHROPIC_API_KEY`
 
-**MM agent** вЂ” `MM_AGENT_PRIVATE_KEY`, `MM_AGENT_HANDLE`,
+**MM agent** — `MM_AGENT_PRIVATE_KEY`, `MM_AGENT_HANDLE`,
 `MM_BET_USDC`, `MM_MAX_EXPOSURE`, `MM_IMBALANCE_BPS`,
 `MM_INTERVAL_MS`
 
-**Reclaim / IPFS** вЂ” `RECLAIM_APP_ID`, `RECLAIM_APP_SECRET`,
+**Reclaim / IPFS** — `RECLAIM_APP_ID`, `RECLAIM_APP_SECRET`,
 `RECLAIM_PROVIDER_ID`, `RECLAIM_PUBLIC_BASE_URL`,
 `IPFS_PROVIDER`, `IPFS_API_URL`, `PINATA_JWT`,
 `WEB3_STORAGE_TOKEN`, `PROOF_ANCHOR_DEPLOYER_KEY`,
 `PROOF_ANCHOR_ADDRESS`
 
-**Misc** вЂ” `NODE_ENV`, `PORT`, `PARIAI_TESTNET_ONLY`,
+**Misc** — `NODE_ENV`, `PORT`, `PARIAI_TESTNET_ONLY`,
 `DEPLOYER_PRIVATE_KEY`, `JUDGE_PUBLIC_ADDRESS`,
 `QUOTE_SIGNER_PUBLIC_ADDRESS`
 
@@ -962,7 +962,7 @@ Run everything with `pnpm test` (current count: **128 passing**).
 
 - Never commit secrets. `.env*`, `.data/`, `deployments/*.json` are
   git-ignored.
-- One key per role вЂ” separate deployer / judge / quote signer / proof
+- One key per role — separate deployer / judge / quote signer / proof
   anchor wallets.
 - `NEXT_PUBLIC_BACKEND=api` is the production product path; direct on-chain mode is limited to configured contract reads.
 - AI output is never source of truth alone. It must be bound to
@@ -978,7 +978,7 @@ Run everything with `pnpm test` (current count: **128 passing**).
 
 ## Docs
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) вЂ” full data flow,
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — full data flow,
   contracts, AI roles, indexer model, V2 lifecycle.
-- [`docs/RUNBOOK.md`](docs/RUNBOOK.md) вЂ” bring-up order, incident
+- [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — bring-up order, incident
   triage matrix, live E2E playbook.

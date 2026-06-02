@@ -120,7 +120,7 @@ Future entries appended here when the topic gets re-opened.
 
 Estimate $200-500K total advisory + audit spend for a credible launch.
 
-## Посилання
+## Links
 
 - [docs/GOVERNANCE.md](GOVERNANCE.md) — multisig model that any token would inherit
 - [docs/SECRETS.md](SECRETS.md) — key custody implications

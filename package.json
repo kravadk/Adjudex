@@ -19,7 +19,8 @@
     "env:check": "tsx scripts/check-env.ts",
     "e2e:live": "tsx scripts/e2e-live.ts",
     "indexer:backfill": "pnpm --filter @pariai/indexer backfill",
-    "serve": "pnpm build && pnpm start"
+    "serve": "pnpm build && pnpm start",
+    "prepare": "husky"
   },
   "dependencies": {
     "@icons-pack/react-simple-icons": "^13.13.0",
@@ -47,11 +48,19 @@
     "agentation": "3.0.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
     "playwright": "^1.60.0",
     "solc": "^0.8.35",
     "tailwindcss": "^4",
     "tsx": "^4.22.3",
     "typescript": "^5",
     "vitest": "^4.1.7"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mjs,cjs,js,jsx}": [
+      "eslint --fix --max-warnings 0"
+    ],
+    "*.{json,md,yml,yaml}": []
   }
 }

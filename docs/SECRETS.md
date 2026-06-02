@@ -1,105 +1,105 @@
 # Secrets — Management & Rotation
 
-Цей doc описує **де живуть секрети PariAI**, **який має право їх читати**,
-і **як проводити ротацію** без даунтайму.
+This doc describes **where PariAI secrets live**, **who is allowed to
+read them**, and **how to rotate them** without downtime.
 
-> Не комітьте секрети в репо. `.env*`, `deployments/*.json` (приватні
-> ключі), `audits/` (поки private) — у `.gitignore`. Будь-який pull
-> request, що додає реальний ключ, має бути відхилений.
+> Do not commit secrets to the repo. `.env*`, `deployments/*.json`
+> (private keys), and `audits/` (while private) are in `.gitignore`. Any
+> pull request that adds a real key must be rejected.
 
-## Ролі ключів
+## Key roles
 
-Кожна роль — **окремий wallet**. Ніколи не використовуйте один ключ для
-двох ролей.
+Each role is a **separate wallet**. Never reuse one key for two roles.
 
-| Роль | Env key | Що підписує | Де живе |
+| Role | Env key | What it signs | Where it lives |
 |---|---|---|---|
-| **Deployer** | `DEPLOYER_PRIVATE_KEY` | Deploy/upgrade контрактів | Hardware wallet → Gnosis Safe (S1.C) |
+| **Deployer** | `DEPLOYER_PRIVATE_KEY` | Deploy/upgrade contracts | Hardware wallet → Gnosis Safe (S1.C) |
 | **AI Judge signer** | `JUDGE_PRIVATE_KEY` | EIP-191 verdicts | Phala TEE (production) / dev: local |
 | **Quote signer** | `QUOTE_SIGNER_PRIVATE_KEY` | EIP-712 bet quotes | Backend secret manager |
 | **Proof anchor signer** | `PROOF_ANCHOR_PRIVATE_KEY` | `anchor(cid, sessionId)` calls | Backend secret manager |
-| **MM agent** | `MM_AGENT_PRIVATE_KEY` | Counter-balance trades | Окрема machine, hot wallet з малим балансом |
+| **MM agent** | `MM_AGENT_PRIVATE_KEY` | Counter-balance trades | Separate machine, hot wallet with small balance |
 | **Reclaim shared secret** | `RECLAIM_PROOF_WRITE_SECRET` | Auth Next→backend | Backend secret manager |
 | **Pinata** | `PINATA_JWT` | Pin requests | Backend secret manager |
 | **Anthropic** | `ANTHROPIC_API_KEY` | Claude inference | AI judge only |
-| **Sentry DSN** | `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` | Error capture | Public-OK (DSN з обмеженням project quota) |
+| **Sentry DSN** | `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` | Error capture | Public-OK (DSN with project-quota limits) |
 
-## Secret manager (рекомендація)
+## Secret manager (recommendation)
 
-Для S1 → S2 використовувати **Doppler** (cheapest + cleanest CI / Vercel
-integration) АБО **Infisical** (open-source, можна self-host). AWS Secrets
-Manager — overkill для нашого масштабу.
+For S1 → S2 use **Doppler** (cheapest + cleanest CI / Vercel integration)
+OR **Infisical** (open-source, self-hostable). AWS Secrets Manager is
+overkill for our scale.
 
-**Чому не plain .env.local**: коли є 3+ services × 3+ envs (dev/staging/
-prod), копіювати .env по machines = неминучий витік. Secret manager дає:
-- Audit log (хто читав / змінював)
+**Why not plain .env.local**: with 3+ services × 3+ envs (dev/staging/
+prod), copying `.env` between machines = an inevitable leak. A secret
+manager provides:
+- Audit log (who read / changed)
 - Per-service ACL
-- Rotation без redeploy (live reload)
+- Rotation without redeploy (live reload)
 - CI integration (token-based pull at build/run time)
 
 ## Production flow
 
 ```
 [Doppler project: pariai]
-  ├── config: dev          ← локальна розробка
-  ├── config: staging      ← Sepolia
-  └── config: production   ← Arbitrum One (mainnet, post-audit)
+  |-- config: dev          <- local development
+  |-- config: staging      <- Sepolia
+  |__ config: production   <- Arbitrum One (mainnet, post-audit)
 ```
 
-Кожен service в production витягує свій subset:
+Each service in production pulls its subset:
 
-| Service | Config | Subset (приклади) |
+| Service | Config | Subset (examples) |
 |---|---|---|
 | Next (Vercel) | production | `NEXT_PUBLIC_*`, `RECLAIM_PROOF_WRITE_SECRET` |
 | API (Fastify) | production | `DATABASE_URL`, `JUDGE_PRIVATE_KEY`, `PINATA_JWT`, `SENTRY_DSN` |
-| Indexer | production | `DATABASE_URL`, `INDEXER_RPC_URL`, чітко без signer-ів |
-| AI Judge (Phala CVM) | production | `ANTHROPIC_API_KEY`, derived TEE key (не env!) |
+| Indexer | production | `DATABASE_URL`, `INDEXER_RPC_URL`, explicitly no signer keys |
+| AI Judge (Phala CVM) | production | `ANTHROPIC_API_KEY`, derived TEE key (not env!) |
 | MM Agent | production | `MM_AGENT_PRIVATE_KEY` (hot wallet), `MARKET_FACTORY_ADDRESS` |
 
-## Ротація — playbook
+## Rotation — playbook
 
-### Планова ротація (раз на 90 днів)
+### Scheduled rotation (every 90 days)
 
-1. **Згенерувати новий ключ** на машині розробника (offline якщо
-   можливо): `node -e "console.log(require('viem/accounts').generatePrivateKey())"`
-2. **Зареєструвати новий signer на контракті** перш ніж відключити
-   старий — це eliminates downtime:
-   - `JUDGE`: `AIJudgeVerifier.setSigner(newAddr)` через multisig
-   - `QUOTE`: `BetQuoteVerifier.rotateSigner(newAddr)` через multisig
-   - `PROOF`: `ProofAnchor.setAuthorized(newAddr, true)` через multisig
-3. **Оновити Doppler** — записати новий приватний ключ у production config
-4. **Restart services** (Vercel auto-pulls, Fly/Railway: trigger redeploy)
-5. **Verify** — пройти `pnpm e2e:live --chain=421614` → новий ключ підписує
-6. **Revoke старий**: `setAuthorized(oldAddr, false)` через multisig
-7. **Перевірити audit log** Doppler що старий ключ більше ніхто не читає
+1. **Generate a new key** on the developer machine (offline if possible):
+   `node -e "console.log(require('viem/accounts').generatePrivateKey())"`
+2. **Register the new signer on-chain BEFORE disabling the old one** —
+   this eliminates downtime:
+   - `JUDGE`: `AIJudgeVerifier.setSigner(newAddr)` via multisig
+   - `QUOTE`: `BetQuoteVerifier.rotateSigner(newAddr)` via multisig
+   - `PROOF`: `ProofAnchor.setAuthorized(newAddr, true)` via multisig
+3. **Update Doppler** — write the new private key to the production config
+4. **Restart services** (Vercel auto-pulls; Fly/Railway: trigger redeploy)
+5. **Verify** — run `pnpm e2e:live --chain=421614` → new key signs successfully
+6. **Revoke the old**: `setAuthorized(oldAddr, false)` via multisig
+7. **Inspect Doppler audit log** to confirm the old key is no longer read
 
-### Аварійна ротація (suspected compromise)
+### Emergency rotation (suspected compromise)
 
-1. **Immediate**: revoke compromised key on-chain ( `setAuthorized(addr, false)` )
-2. **Pause critical actions**: якщо це `JUDGE` — пауза challenge submissions
-3. **Forensics**: вибрати з Sentry / RUNBOOK останні 24h tx-events для цього signer-а
-4. **Notify users** (Discord #announcements) — про timeline + impact
-5. **Регулярна ротація flow** (вище) для нового signer-а
-6. **Postmortem** у `docs/incidents/`
+1. **Immediate**: revoke the compromised key on-chain (`setAuthorized(addr, false)`)
+2. **Pause critical actions**: if it's the `JUDGE` key — pause challenge submissions
+3. **Forensics**: collect the last 24h of tx events for that signer from Sentry / RUNBOOK
+4. **Notify users** (Discord #announcements) — timeline + impact
+5. **Run the regular rotation flow** (above) for the new signer
+6. **Postmortem** in `docs/incidents/`
 
-## Поточне (Sepolia / dev) — наразі прийнятно
+## Current (Sepolia / dev) — acceptable for now
 
-| Item | Зараз | Production target |
+| Item | Today | Production target |
 |---|---|---|
-| Deployer ключ | EOA в `.env.local` | Gnosis Safe (S1.C) + hardware wallet signers |
-| AI Judge signer | `JUDGE_MODE=local` дозволений | `JUDGE_MODE=phala`, derived inside CVM |
-| Secret storage | `.env.local` файли | Doppler / Infisical |
+| Deployer key | EOA in `.env.local` | Gnosis Safe (S1.C) + hardware wallet signers |
+| AI Judge signer | `JUDGE_MODE=local` allowed | `JUDGE_MODE=phala`, derived inside CVM |
+| Secret storage | `.env.local` files | Doppler / Infisical |
 | Backup | none | Secret manager backup + offline encrypted copy of mnemonic |
 
 ## CI integration
 
-`pnpm env:check --profile=production` блокує deploy якщо:
-- `JUDGE_MODE=local` (production forbidden)
-- `IPFS_PROVIDER=stub` (production forbidden)
-- `NEXT_PUBLIC_BACKEND=mock` (production forbidden)
-- Будь-який required env відсутній або має неправильний формат
+`pnpm env:check --profile=production` blocks deploy if:
+- `JUDGE_MODE=local` (forbidden in production)
+- `IPFS_PROVIDER=stub` (forbidden in production)
+- `NEXT_PUBLIC_BACKEND=mock` (forbidden in production)
+- Any required env var is missing or malformed
 
-Додати в `.github/workflows/deploy.yml`:
+Add to `.github/workflows/deploy.yml`:
 ```yaml
 - name: Env validation
   run: pnpm env:check --profile=production
@@ -107,16 +107,19 @@ prod), копіювати .env по machines = неминучий витік. Se
     DOPPLER_TOKEN: ${{ secrets.DOPPLER_PRODUCTION_TOKEN }}
 ```
 
-## Що ніколи не робити
+## Things never to do
 
-- Класти приватні ключі в `deployments/*.json` (тільки addresses)
-- Хардкодити DSN/API keys в коді (тільки env-gated)
-- Логувати full request bodies (можуть містити tokens) — Pino redact list уже покриває стандартні поля, але якщо додаєте новий шейп — додайте path
-- Передавати приватні ключі через Slack / email / Discord — тільки secret manager share link або in-person
-- Використовувати той же ключ на testnet і mainnet
-- Скидати ключі по SSH `cat .env` — використовуйте `doppler run -- ...`
+- Put private keys into `deployments/*.json` (addresses only).
+- Hardcode DSN / API keys in code (env-gated only).
+- Log full request bodies (may contain tokens) — the Pino redact list
+  already covers the standard fields, but if you add a new shape, extend
+  the redact paths.
+- Pass private keys via Slack / email / Discord — only secret manager
+  share link or in-person.
+- Use the same key on testnet and mainnet.
+- Dump keys via SSH `cat .env` — use `doppler run -- ...` instead.
 
-## Посилання
+## Links
 
 - [docs/RUNBOOK.md](RUNBOOK.md) — incident response, deploy flow
 - [docs/GOVERNANCE.md](GOVERNANCE.md) — multisig owner setup (S1.C)
