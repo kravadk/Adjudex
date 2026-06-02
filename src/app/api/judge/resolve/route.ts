@@ -323,7 +323,7 @@ async function validateProofBinding(
     };
   }
 
-  const binding = extractPariaiProofBinding(proof);
+  const binding = extractAdjudexProofBinding(proof);
   if (!binding) {
     return {
       ok: false,
@@ -405,7 +405,7 @@ function canonicalResolutionQuestion(market: MarketProofConfig): string | null {
   ].filter(Boolean).join("\n");
 }
 
-function extractPariaiProofBinding(proof: unknown): ProofBindingContext | null {
+function extractAdjudexProofBinding(proof: unknown): ProofBindingContext | null {
   const raw = topLevelClaimContext(proof);
   if (!raw) return null;
   const parsed = parseContext(raw);

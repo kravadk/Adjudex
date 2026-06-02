@@ -1,4 +1,4 @@
-﻿import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import solc from "solc";
 import {
@@ -12,7 +12,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { arbitrumSepolia } from "viem/chains";
 
-const TESTNET_OPT_IN = "PARIAI_TESTNET_ONLY";
+const TESTNET_OPT_IN = "ADJUDEX_TESTNET_ONLY";
 
 type CompiledContract = {
   abi: Abi;

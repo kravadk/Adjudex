@@ -19,10 +19,10 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { arbitrumSepolia } from "viem/chains";
 
 function assertTestnetOptIn() {
-  if (process.env.PARIAI_TESTNET_ONLY !== "1") {
+  if (process.env.ADJUDEX_TESTNET_ONLY !== "1") {
     throw new Error(
       "Refusing to generate/fund a market-maker test wallet without explicit testnet opt-in. " +
-        "Set PARIAI_TESTNET_ONLY=1 only for Arbitrum Sepolia testnet setup.",
+        "Set ADJUDEX_TESTNET_ONLY=1 only for Arbitrum Sepolia testnet setup.",
     );
   }
 }

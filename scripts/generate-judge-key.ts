@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 function assertTestnetOptIn() {
-  if (process.env.PARIAI_TESTNET_ONLY !== "1") {
+  if (process.env.ADJUDEX_TESTNET_ONLY !== "1") {
     throw new Error(
       "Refusing to generate a judge private key without explicit testnet opt-in. " +
-        "Set PARIAI_TESTNET_ONLY=1 only for Arbitrum Sepolia testnet setup.",
+        "Set ADJUDEX_TESTNET_ONLY=1 only for Arbitrum Sepolia testnet setup.",
     );
   }
 }

@@ -22,7 +22,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { arbitrumSepolia } from "viem/chains";
 import solc from "solc";
 
-const TESTNET_OPT_IN = "PARIAI_TESTNET_ONLY";
+const TESTNET_OPT_IN = "ADJUDEX_TESTNET_ONLY";
 
 type CompiledContract = { abi: Abi; evm: { bytecode: { object: string } } };
 

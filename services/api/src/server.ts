@@ -1127,7 +1127,7 @@ server.post<{ Body: { sessionId?: string; providerId?: string; proof?: unknown }
   }
   const { sessionId, providerId, proof } = request.body;
   if (!sessionId || !providerId || proof === undefined) return reply.code(400).send({ error: "reclaim_proof_payload_required" });
-  const binding = extractRequiredPariaiBinding(proof);
+  const binding = extractRequiredAdjudexBinding(proof);
   if (!binding) return reply.code(400).send({ error: "reclaim_proof_binding_required" });
   const canonical = JSON.stringify(proof);
   const proofHash = keccak256(stringToBytes(canonical));
@@ -1971,7 +1971,7 @@ type ReclaimProofBinding = {
   walletAddress: string | null;
 };
 
-function extractRequiredPariaiBinding(proof: unknown): ReclaimProofBinding | null {
+function extractRequiredAdjudexBinding(proof: unknown): ReclaimProofBinding | null {
   const context = topLevelReclaimClaimContext(proof);
   if (!context) return null;
   const parsed = parseJsonObject(context);
