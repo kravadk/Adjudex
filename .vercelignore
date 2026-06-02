@@ -1,0 +1,39 @@
+# Vercel builds only the Next.js app at the repo root. Everything below
+# is irrelevant to that build and just slows down the upload step.
+
+# Backend services (deployed to Fly/Railway/Render, not Vercel)
+services/
+
+# Solidity / Rust contracts (deployed via Hardhat/Foundry separately)
+contracts/
+
+# CLI scripts (env:check, contracts:deploy, e2e:live)
+scripts/
+
+# E2E + Playwright tests (run in CI, not on Vercel)
+tests/
+playwright.config.ts
+
+# Operations / monitoring / audits / planning
+monitoring/
+audits/
+docs/
+config/
+
+# Local-only artefacts
+.husky/
+.next-start.*.log
+chat-history/
+
+# Git internals (defensive — should never be uploaded)
+.git/
+
+# Markdown that's not used by the app at runtime
+*-architecture.md
+FRONTEND-BRIEF.md
+PRODUCT-NOTES.md
+SECURITY.md
+
+# Cache + build artefacts
+.eslintcache
+*.tsbuildinfo
