@@ -26,6 +26,7 @@ import {
 } from "@/components/dashboard/market-atoms";
 import { getServices } from "@/lib/services/provider";
 import { useBet } from "@/lib/hooks/useBet";
+import { isZeroDevGaslessEnabled } from "@/lib/zerodev/gasless-bet";
 import type { ActivityEvent, Market, MarketTimelinePoint } from "@/lib/types/domain";
 import { toMarketView, multiplierFromPct, formatUsd } from "@/lib/market-view";
 
@@ -734,13 +735,14 @@ export function MarketDetailClient({ id }: { id: string }) {
           market={view}
           side={betSide}
           onClose={() => setBetSide(null)}
-          onConfirm={async (stake, onStep) => {
+          gaslessAvailable={isZeroDevGaslessEnabled()}
+          onConfirm={async (stake, onStep, opts) => {
             try {
               await placeBet({
                 marketId: view.id,
                 side: betSide.toUpperCase() as "YES" | "NO",
                 stakeUsd: stake,
-              }, onStep);
+              }, onStep, { gasless: opts.gasless });
               setToast(`Bet placed: ${betSide.toUpperCase()} $${stake}`);
               setTimeout(() => setToast(null), 3500);
             } catch (e) {

@@ -19,7 +19,11 @@ export function useBet() {
   const refreshMarkets = useMarketsStore((state) => state.refresh);
   const refreshPortfolio = usePortfolioStore((state) => state.refresh);
 
-  async function placeBet(input: Omit<BetPreviewInput, "address">, onStep: (step: string) => void = () => undefined) {
+  async function placeBet(
+    input: Omit<BetPreviewInput, "address">,
+    onStep: (step: string) => void = () => undefined,
+    opts: { gasless?: boolean } = {},
+  ) {
     if (!account) throw new Error("Connect wallet before placing a bet.");
     onStep("Preparing backend quote");
     const services = getServices();
@@ -37,7 +41,9 @@ export function useBet() {
 
     const amount = parseUnits(String(input.stakeUsd), 6);
 
-    const useGasless = isZeroDevGaslessEnabled();
+    // Gasless requires the feature flag AND the per-bet opt-in (default on when
+    // available). A user who unticks the toggle falls back to a normal wallet tx.
+    const useGasless = isZeroDevGaslessEnabled() && (opts.gasless ?? true);
     if (STAKE_TOKEN && !useGasless) {
       onStep("Checking USDC allowance");
       const allowance = (await readContract(wagmiConfig, {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, X, Clock } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, X, Clock, Zap } from "lucide-react";
 import { useAccount, useBalance } from "wagmi";
 import type { Address } from "viem";
 import { USER_SETTINGS_EVENT } from "@/components/app/UserSettingsEffects";
@@ -17,13 +17,14 @@ type Props = {
   market: Market;
   side: "yes" | "no";
   onClose: () => void;
-  onConfirm?: (stake: number, onStep: (step: string) => void) => Promise<void> | void;
+  onConfirm?: (stake: number, onStep: (step: string) => void, opts: { gasless: boolean }) => Promise<void> | void;
   walletUsd?: number;
+  gaslessAvailable?: boolean;
 };
 
 const STAKE_TOKEN = process.env.NEXT_PUBLIC_STAKE_TOKEN_ADDRESS as Address | undefined;
 
-export function BetForm({ market, side, onClose, onConfirm, walletUsd }: Props) {
+export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAvailable = false }: Props) {
   const { address } = useAccount();
   const { data: onchainBalance } = useBalance({
     address,
@@ -41,6 +42,7 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd }: Props) 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [gasless, setGasless] = useState(true);
 
   const sideColor = side === "yes" ? "#10b981" : "#ef4444";
   const sideLabel = side.toUpperCase() as "YES" | "NO";
@@ -139,7 +141,7 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd }: Props) 
     setSteps([]);
     try {
       addStep("Waiting for wallet");
-      await onConfirm?.(stake, addStep);
+      await onConfirm?.(stake, addStep, { gasless: gaslessAvailable && gasless });
       addStep("Portfolio and market refreshed");
       setCelebrate(true);
       showToast({
@@ -286,6 +288,33 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd }: Props) 
                 ))}
               </div>
             </div>
+          )}
+
+          {gaslessAvailable && (
+            <button
+              type="button"
+              onClick={() => setGasless((on) => !on)}
+              disabled={submitting}
+              className="flex w-full items-start gap-2.5 rounded-[6px] border px-3 py-2.5 text-left disabled:opacity-50"
+              style={{ borderColor: gasless ? "var(--accent-bright)" : "#2a2a2a", background: "#1f1f1f" }}
+            >
+              <span
+                className="mt-0.5 inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[4px] border"
+                style={{
+                  borderColor: gasless ? "var(--accent-bright)" : "#3a3a3a",
+                  background: gasless ? "var(--accent-bright)" : "transparent",
+                }}
+              >
+                {gasless && <Zap className="h-3 w-3 text-black" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[12px] font-medium text-white">Gasless bet — no ETH needed</span>
+                <span className="block text-[11px] leading-relaxed text-gray-500">
+                  Routed through a ZeroDev smart account; the USDC approval and bet are
+                  sponsored. Untick to sign a normal wallet transaction instead.
+                </span>
+              </span>
+            </button>
           )}
 
           <button
