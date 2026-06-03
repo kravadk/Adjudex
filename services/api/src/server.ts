@@ -1416,6 +1416,86 @@ server.delete<{ Params: { id: string } }>("/api/comments/:id", async (request, r
   return { id: request.params.id, deleted: true };
 });
 
+// --- Public trader profiles + social graph ---
+server.get<{ Params: { address: string } }>("/api/users/:address", async (request) => {
+  const address = request.params.address.toLowerCase();
+  const session = await requireSession(request.headers.cookie);
+
+  const statsRows = await query<{
+    volume_usd: unknown;
+    pnl_usd: unknown;
+    markets_touched: number;
+    positions_count: number;
+    win_rate: unknown;
+    first_position_at: Date | null;
+  }>(
+    `SELECT SUM(stake_usd) AS volume_usd,
+            COALESCE(SUM(payout_usd - stake_usd), 0) AS pnl_usd,
+            COUNT(DISTINCT market_id) AS markets_touched,
+            COUNT(*) AS positions_count,
+            CASE WHEN COUNT(*) = 0 THEN 0 ELSE AVG(CASE WHEN status IN ('claimed') THEN 1 ELSE 0 END) END AS win_rate,
+            MIN(created_at) AS first_position_at
+       FROM positions
+      WHERE lower(address) = $1`,
+    [address]
+  );
+  const s = statsRows.rows[0];
+
+  const counts = await query<{ followers: string; following: string }>(
+    `SELECT
+       (SELECT COUNT(*) FROM user_followers WHERE lower(followee_address) = $1) AS followers,
+       (SELECT COUNT(*) FROM user_followers WHERE lower(follower_address) = $1) AS following`,
+    [address]
+  );
+
+  let isFollowedByMe = false;
+  if (session && session.address.toLowerCase() !== address) {
+    const f = await query(
+      `SELECT 1 FROM user_followers WHERE lower(follower_address) = lower($1) AND lower(followee_address) = $2`,
+      [session.address, address]
+    );
+    isFollowedByMe = (f.rowCount ?? 0) > 0;
+  }
+
+  return {
+    address,
+    volumeUsd: asNumber(s?.volume_usd),
+    pnlUsd: asNumber(s?.pnl_usd),
+    marketsTouched: Number(s?.markets_touched ?? 0),
+    positionsCount: Number(s?.positions_count ?? 0),
+    winRate: asNumber(s?.win_rate),
+    firstPositionAtIso: s?.first_position_at ? toIso(s.first_position_at) : undefined,
+    followerCount: Number(counts.rows[0]?.followers ?? 0),
+    followingCount: Number(counts.rows[0]?.following ?? 0),
+    isFollowedByMe,
+    isSelf: session ? session.address.toLowerCase() === address : false,
+  };
+});
+
+server.post<{ Params: { address: string } }>("/api/users/:address/follow", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const followee = request.params.address.toLowerCase();
+  if (session.address.toLowerCase() === followee) return reply.code(400).send({ error: "cannot_follow_self" });
+  await query(
+    `INSERT INTO user_followers (follower_address, followee_address) VALUES ($1, $2)
+     ON CONFLICT (follower_address, followee_address) DO NOTHING`,
+    [session.address.toLowerCase(), followee]
+  );
+  return { followee, following: true };
+});
+
+server.delete<{ Params: { address: string } }>("/api/users/:address/follow", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const followee = request.params.address.toLowerCase();
+  await query(
+    `DELETE FROM user_followers WHERE lower(follower_address) = lower($1) AND lower(followee_address) = $2`,
+    [session.address, followee]
+  );
+  return { followee, following: false };
+});
+
 server.get("/api/notifications", async (request, reply) => {
   const session = await requireSession(request.headers.cookie);
   if (!session) return reply.code(401).send({ error: "auth_required" });

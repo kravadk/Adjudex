@@ -258,7 +258,17 @@ export function LeaderboardClient() {
                     </tr>
                   );
                 }
-                return <tr key={r.id}>{cells}</tr>;
+                return (
+                  <tr
+                    key={r.id}
+                    onClick={() => {
+                      window.location.href = `/profile/${encodeURIComponent(r.id)}`;
+                    }}
+                    style={{ cursor: "pointer" }}
+                  >
+                    {cells}
+                  </tr>
+                );
               })}
             </tbody>
           </table>

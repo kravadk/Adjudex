@@ -681,3 +681,18 @@ CREATE INDEX IF NOT EXISTS market_comments_market_idx
   ON market_comments (market_id, created_at DESC) WHERE hidden = false;
 CREATE INDEX IF NOT EXISTS market_comments_author_idx
   ON market_comments (lower(author_address), created_at DESC);
+
+-- Social graph between traders (humans). Distinct from agent_followers
+-- (which tracks following AI agents). One row per (follower, followee).
+-- Powers public /profile/[address] follower counts + follow button.
+CREATE TABLE IF NOT EXISTS user_followers (
+  follower_address TEXT NOT NULL,
+  followee_address TEXT NOT NULL,
+  followed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (follower_address, followee_address)
+);
+
+CREATE INDEX IF NOT EXISTS user_followers_followee_idx
+  ON user_followers (lower(followee_address), followed_at DESC);
+CREATE INDEX IF NOT EXISTS user_followers_follower_idx
+  ON user_followers (lower(follower_address), followed_at DESC);
