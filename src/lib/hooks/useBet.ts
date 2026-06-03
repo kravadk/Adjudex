@@ -9,8 +9,8 @@ import type { BetPreviewInput } from "@/lib/types/domain";
 import { useMarketsStore, usePortfolioStore, useUserStore } from "@/lib/store";
 import { wagmiConfig } from "@/lib/wagmi";
 import { isZeroDevGaslessEnabled, placeGaslessBetWithZeroDev } from "@/lib/zerodev/gasless-bet";
+import { stakeTokenForChain } from "@/lib/stake-token";
 
-const STAKE_TOKEN = process.env.NEXT_PUBLIC_STAKE_TOKEN_ADDRESS as Address | undefined;
 const MAX_UINT256 = 2n ** 256n - 1n;
 type SupportedChainId = (typeof wagmiConfig.chains)[number]["id"];
 
@@ -38,16 +38,17 @@ export function useBet() {
       throw new Error(`Market chain ${market.chainId} is not configured in the wallet client.`);
     }
     const chainId = market.chainId;
+    const stakeTokenAddress = stakeTokenForChain(chainId);
 
     const amount = parseUnits(String(input.stakeUsd), 6);
 
     // Gasless requires the feature flag AND the per-bet opt-in (default on when
     // available). A user who unticks the toggle falls back to a normal wallet tx.
     const useGasless = isZeroDevGaslessEnabled() && (opts.gasless ?? true);
-    if (STAKE_TOKEN && !useGasless) {
+    if (stakeTokenAddress && !useGasless) {
       onStep("Checking USDC allowance");
       const allowance = (await readContract(wagmiConfig, {
-        address: STAKE_TOKEN,
+        address: stakeTokenAddress,
         abi: testUsdcAbi,
         functionName: "allowance",
         args: [account.address as Address, market.poolAddress],
@@ -56,13 +57,13 @@ export function useBet() {
       if (allowance < amount) {
         onStep("Approving USDC spend");
         const approveHash = await writeContract(wagmiConfig, {
-          address: STAKE_TOKEN,
+          address: stakeTokenAddress,
           abi: testUsdcAbi,
           functionName: "approve",
           args: [market.poolAddress, MAX_UINT256],
           chainId,
         });
-        await waitForTransactionReceipt(wagmiConfig, { hash: approveHash, chainId });
+        await waitForTransactionReceipt(wagmiConfig, { hash: approveHash, chainId, timeout: 90_000 });
       }
     }
 
@@ -82,6 +83,7 @@ export function useBet() {
         walletClient,
         chainId,
         poolAddress: market.poolAddress,
+        stakeTokenAddress,
         side: input.side,
         stakeUsd: input.stakeUsd,
         onStep,
@@ -99,7 +101,7 @@ export function useBet() {
       });
       onStep(`Transaction submitted: ${transactionHash}`);
       onStep("Confirming transaction");
-      await waitForTransactionReceipt(wagmiConfig, { hash: transactionHash, chainId });
+      await waitForTransactionReceipt(wagmiConfig, { hash: transactionHash, chainId, timeout: 90_000 });
     }
 
     onStep("Recording confirmed transaction in backend");

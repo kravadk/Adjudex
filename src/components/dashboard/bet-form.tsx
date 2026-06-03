@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, X, Clock, Zap } from "lucide-react";
 import { useAccount, useBalance } from "wagmi";
-import type { Address } from "viem";
 import { USER_SETTINGS_EVENT } from "@/components/app/UserSettingsEffects";
 import type { MarketView as Market } from "@/lib/market-view";
 import { formatUsd } from "@/lib/market-view";
 import { getServices } from "@/lib/services/provider";
 import { HARD_CUTOFF_MS } from "@/lib/market-live-status";
+import { stakeTokenForChain } from "@/lib/stake-token";
+import { describeTxError } from "@/lib/utils/decode-error";
 import { ConfettiBurst } from "./confetti-burst";
 import { showToast } from "./toast";
 import type { BetQuote, UserSettings } from "@/lib/types/domain";
@@ -18,21 +19,23 @@ type Props = {
   side: "yes" | "no";
   onClose: () => void;
   onConfirm?: (stake: number, onStep: (step: string) => void, opts: { gasless: boolean }) => Promise<void> | void;
-  walletUsd?: number;
   gaslessAvailable?: boolean;
 };
 
-const STAKE_TOKEN = process.env.NEXT_PUBLIC_STAKE_TOKEN_ADDRESS as Address | undefined;
-
-export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAvailable = false }: Props) {
+export function BetForm({ market, side, onClose, onConfirm, gaslessAvailable = false }: Props) {
   const { address } = useAccount();
-  const { data: onchainBalance } = useBalance({
+  const stakeTokenAddress = stakeTokenForChain(market.chainId);
+  const { data: onchainBalance, isLoading: balanceFetching } = useBalance({
     address,
-    token: STAKE_TOKEN,
-    query: { enabled: Boolean(address && STAKE_TOKEN) },
+    token: stakeTokenAddress,
+    query: { enabled: Boolean(address && stakeTokenAddress) },
   });
 
-  const walletBalance = walletUsd ?? (onchainBalance ? Number(onchainBalance.formatted) : 0);
+  const notConnected = !address;
+  // Distinguish "still loading the balance" from a real zero so we never block
+  // the form as insufficient-balance before the read resolves.
+  const balanceLoading = Boolean(address && stakeTokenAddress) && balanceFetching && !onchainBalance;
+  const walletBalance = onchainBalance ? Number(onchainBalance.formatted) : 0;
   const [stake, setStake] = useState(() => Math.max(1, Math.min(50, Math.floor((walletBalance || 100) / 10))));
   const [stakeTouched, setStakeTouched] = useState(false);
   const [quote, setQuote] = useState<BetQuote | null>(null);
@@ -47,7 +50,7 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAv
   const sideColor = side === "yes" ? "#10b981" : "#ef4444";
   const sideLabel = side.toUpperCase() as "YES" | "NO";
   const maxStake = Math.max(1, Math.floor(walletBalance > 0 ? walletBalance : 1000));
-  const overBalance = stake > Math.floor(walletBalance);
+  const overBalance = !balanceLoading && !notConnected && stake > Math.floor(walletBalance);
   const poolImpact = quote?.poolImpactPct ?? 0;
   const highImpact = poolImpact > 5;
 
@@ -135,7 +138,7 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAv
   }
 
   async function confirm() {
-    if (overBalance || hardCutoff || !quote || quoteLoading || submitting) return;
+    if (notConnected || balanceLoading || overBalance || hardCutoff || !quote || quoteLoading || submitting) return;
     setSubmitting(true);
     setSubmitError(null);
     setSteps([]);
@@ -151,13 +154,14 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAv
       });
       window.setTimeout(onClose, 900);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Transaction failed.";
-      setSubmitError(message);
-      addStep(`Failed: ${message}`);
+      const decoded = describeTxError(error);
+      // A deliberate wallet cancellation is not a failure — surface it quietly.
+      setSubmitError(decoded.rejected ? null : decoded.message);
+      addStep(decoded.rejected ? "Cancelled" : `Failed: ${decoded.message}`);
       showToast({
-        kind: "error",
-        title: "Position failed",
-        body: message.slice(0, 140),
+        kind: decoded.rejected ? "info" : "error",
+        title: decoded.title,
+        body: decoded.message,
       });
     } finally {
       setSubmitting(false);
@@ -248,6 +252,13 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAv
             )}
           </div>
 
+          {notConnected && <Warning>Connect your wallet to place a position.</Warning>}
+          {balanceLoading && (
+            <div className="flex items-center gap-2 rounded-[6px] px-3 py-2 text-[11.5px]" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid #2a2a2a", color: "#9ca3af" }}>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Checking your USDC balance...
+            </div>
+          )}
           {overBalance && <Warning>Insufficient USDC. Balance <span className="font-mono">${walletBalance.toFixed(2)}</span>.</Warning>}
           {highImpact && <Warning>This position has high pool impact. Consider splitting into smaller positions.</Warning>}
           {hardCutoff && (
@@ -319,14 +330,14 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAv
 
           <button
             onClick={() => void confirm()}
-            disabled={overBalance || hardCutoff || !quote || quoteLoading || submitting}
+            disabled={notConnected || balanceLoading || overBalance || hardCutoff || !quote || quoteLoading || submitting}
             className={`inline-flex h-11 w-full items-center justify-between gap-2 rounded-[5px] px-4 text-[12.5px] font-bold uppercase tracking-wider shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${
               side === "yes"
                 ? "bg-[#10b981] text-black hover:bg-[#0ea674]"
                 : "bg-[#ef4444] text-white hover:bg-[#dc2626]"
             }`}
           >
-            <span>{submitting ? "Processing..." : `Open position $${stake}`}</span>
+            <span>{confirmLabel({ submitting, notConnected, balanceLoading, hardCutoff, stake })}</span>
             <span className="font-mono normal-case tracking-normal opacity-95 tabular-nums">
               {quote ? `${formatUsd(quote.potentialPayoutUsd, { compact: true })} payout` : "quote required"}
             </span>
@@ -335,6 +346,20 @@ export function BetForm({ market, side, onClose, onConfirm, walletUsd, gaslessAv
       </div>
     </div>
   );
+}
+
+function confirmLabel(s: {
+  submitting: boolean;
+  notConnected: boolean;
+  balanceLoading: boolean;
+  hardCutoff: boolean;
+  stake: number;
+}): string {
+  if (s.notConnected) return "Connect wallet";
+  if (s.submitting) return "Processing...";
+  if (s.balanceLoading) return "Checking balance...";
+  if (s.hardCutoff) return "Betting closed";
+  return `Open position $${s.stake}`;
 }
 
 function QuoteRow({ label, value, mono, tone }: { label: string; value: string; mono?: boolean; tone?: "warn" }) {

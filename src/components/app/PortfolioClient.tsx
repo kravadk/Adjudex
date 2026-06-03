@@ -14,6 +14,7 @@ import { useMarkets } from "@/lib/hooks/useMarkets";
 import { useWallet } from "@/lib/hooks/useWallet";
 import { toMarketView, formatUsd, type MarketView } from "@/lib/market-view";
 import { wagmiConfig } from "@/lib/wagmi";
+import { describeTxError } from "@/lib/utils/decode-error";
 import type { HistoryRow, Position } from "@/lib/types/domain";
 
 const REFUND_GRACE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -193,7 +194,7 @@ export function PortfolioClient() {
       });
       submittedHash = hash;
       setClaimState({ positionId: position.id, transactionHash: hash, step: "Transaction submitted" });
-      await waitForTransactionReceipt(wagmiConfig, { hash, chainId });
+      await waitForTransactionReceipt(wagmiConfig, { hash, chainId, timeout: 90_000 });
       setClaimState({ positionId: position.id, transactionHash: hash, step: "Backend recording receipt" });
       await syncClaim(position.id, hash, chainId);
       setClaimState({ positionId: position.id, transactionHash: hash, step: "Portfolio updating" });
@@ -207,14 +208,18 @@ export function PortfolioClient() {
       });
       setTimeout(() => setClaimState({}), 3500);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Claim failed.";
+      const decoded = describeTxError(error);
       setClaimState({
         positionId: position.id,
         transactionHash: submittedHash,
-        step: "Claim failed",
-        error: message,
+        step: decoded.rejected ? "Cancelled" : "Claim failed",
+        error: decoded.rejected ? undefined : decoded.message,
       });
-      showToast({ kind: "error", title: "Claim failed", body: message.slice(0, 140) });
+      showToast({
+        kind: decoded.rejected ? "info" : "error",
+        title: decoded.rejected ? decoded.title : "Claim failed",
+        body: decoded.message,
+      });
     }
   }
 
@@ -250,17 +255,23 @@ export function PortfolioClient() {
       });
       submittedHash = hash;
       setClaimState({ positionId: position.id, transactionHash: hash, step: "Refund transaction submitted" });
-      await waitForTransactionReceipt(wagmiConfig, { hash, chainId });
+      await waitForTransactionReceipt(wagmiConfig, { hash, chainId, timeout: 90_000 });
       setClaimState({ positionId: position.id, transactionHash: hash, step: "Backend recording refund" });
       await retrySync(hash, chainId);
       setClaimState({ positionId: position.id, transactionHash: hash, step: "Refund confirmed" });
       setTimeout(() => setClaimState({}), 3500);
     } catch (error) {
+      const decoded = describeTxError(error);
       setClaimState({
         positionId: position.id,
         transactionHash: submittedHash,
-        step: "Refund failed",
-        error: error instanceof Error ? error.message : "Refund failed.",
+        step: decoded.rejected ? "Cancelled" : "Refund failed",
+        error: decoded.rejected ? undefined : decoded.message,
+      });
+      showToast({
+        kind: decoded.rejected ? "info" : "error",
+        title: decoded.rejected ? decoded.title : "Refund failed",
+        body: decoded.message,
       });
     }
   }

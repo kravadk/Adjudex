@@ -12,14 +12,18 @@ export { robinhoodChainTestnet };
 const arbitrumSepoliaRpcUrl = getPublicArbitrumSepoliaRpcUrl();
 const rhcRpcUrl = getPublicRhcRpcUrl();
 
+// Transient-RPC resilience: retry a few times with backoff and cap the wait so
+// a slow/unreachable node surfaces a clean error instead of hanging forever.
+const RPC_TRANSPORT_OPTS = { retryCount: 3, retryDelay: 250, timeout: 20_000 } as const;
+
 export const wagmiConfig = rhcRpcUrl
   ? createConfig({
       chains: [arbitrumSepolia, robinhoodChainTestnet],
       ssr: true,
       connectors: [injected()],
       transports: {
-        [arbitrumSepolia.id]: http(arbitrumSepoliaRpcUrl),
-        [robinhoodChainTestnet.id]: http(rhcRpcUrl),
+        [arbitrumSepolia.id]: http(arbitrumSepoliaRpcUrl, RPC_TRANSPORT_OPTS),
+        [robinhoodChainTestnet.id]: http(rhcRpcUrl, RPC_TRANSPORT_OPTS),
       },
     })
   : createConfig({
@@ -27,6 +31,6 @@ export const wagmiConfig = rhcRpcUrl
       ssr: true,
       connectors: [injected()],
       transports: {
-        [arbitrumSepolia.id]: http(arbitrumSepoliaRpcUrl),
+        [arbitrumSepolia.id]: http(arbitrumSepoliaRpcUrl, RPC_TRANSPORT_OPTS),
       },
     });

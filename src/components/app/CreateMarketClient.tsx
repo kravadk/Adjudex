@@ -11,22 +11,7 @@ import marketFactoryAbi from "@/lib/abi/MarketFactory.json";
 import { getServices } from "@/lib/services/provider";
 import type { ImportCandidate, ImportSource, MarketCategory, MarketSpec, MarketValidationResult, OracleType, SystemStatus } from "@/lib/types/domain";
 import { robinhoodChainTestnet, wagmiConfig } from "@/lib/wagmi";
-
-const SAMPLES = [
-  "Will Microsoft trade above $450 on June 28 open?",
-  "Solana SOL touches $300 before September 30, 2026",
-  "Will the Warriors finish the 2025-26 NBA season with at least 50 wins?",
-  "ECB keeps deposit rate unchanged at July meeting",
-  "Meta ships consumer Orion AR glasses during 2026",
-];
-
-const RHC_SAMPLES = [
-  "Will tokenized AAPL close above $250 on Robinhood Chain by June 30, 2026?",
-  "Will tokenized TSLA trade above $350 by the next US market close?",
-  "Will Robinhood Chain RWA volume exceed $10M in a rolling 24h window?",
-  "Will tokenized NVDA close above $1,200 before the next Friday close?",
-  "Will a listed RHC tokenized stock market keep non-zero liquidity for 7 days?",
-];
+import { describeTxError } from "@/lib/utils/decode-error";
 
 type CreatorDraft = {
   title: string;
@@ -68,7 +53,6 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
   const activeChainId = useChainId();
   const deployChainId = preferredChain === "rhc" ? robinhoodChainTestnet.id : activeChainId;
   const activeChainLabel = chainLabelForId(deployChainId);
-  const samples = preferredChain === "rhc" ? RHC_SAMPLES : SAMPLES;
   const [prompt, setPrompt] = useState("");
   const [draft, setDraft] = useState<CreatorDraft>(initialDraft);
   const [validation, setValidation] = useState<MarketValidationResult | null>(null);
@@ -172,6 +156,7 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
       const receipt = await waitForTransactionReceipt(wagmiConfig, {
         hash: transactionHash,
         chainId: deployTarget.chainId,
+        timeout: 90_000,
       });
       const events = parseEventLogs({
         abi: marketFactoryAbi,
@@ -198,7 +183,8 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
       });
       router.push(`/market/${encodeURIComponent(createdMarket.id)}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not deploy market");
+      const decoded = describeTxError(err);
+      setError(decoded.rejected ? "Request cancelled — nothing was sent." : decoded.message);
     } finally {
       setBusy(false);
     }
@@ -328,6 +314,7 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
       const receipt = await waitForTransactionReceipt(wagmiConfig, {
         hash: transactionHash,
         chainId: deployTarget.chainId,
+        timeout: 90_000,
       });
       const events = parseEventLogs({
         abi: marketFactoryAbi,
@@ -874,31 +861,6 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
                 <li>Resolution and payout status are shown only after confirmed indexed transactions.</li>
                 <li>If proof infrastructure is unavailable, the backend returns an explicit configuration error.</li>
               </ol>
-            </div>
-          </section>
-
-          <section className="panel">
-            <div className="panel-head">
-              <span className="panel-title">Example prompts</span>
-            </div>
-            <div className="panel-body flex flex-col gap-2">
-              {samples.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => {
-                    setPrompt(p);
-                    updateDraft("title", p.endsWith("?") ? p : `Will ${p}?`);
-                  }}
-                  className="text-left px-3 py-2 rounded-[8px] text-[12.5px] leading-relaxed"
-                  style={{
-                    background: "var(--card-inner)",
-                    border: "1px solid var(--line)",
-                    color: "var(--t2)",
-                  }}
-                >
-                  {p}
-                </button>
-              ))}
             </div>
           </section>
         </aside>
