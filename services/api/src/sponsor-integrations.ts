@@ -587,48 +587,120 @@ function gmxFundingApr(rate?: bigint): number | undefined {
   return Number(apr.toFixed(2));
 }
 
+// Generate prediction-market candidates from live GMX market intelligence.
+// Each GMX market yields up to three distinct markets, each resolvable by a
+// single factual check against the GMX API field at the deadline:
+//   1. liquidity  — pool depth stays above a threshold
+//   2. OI balance — long open interest stays above short open interest
+//   3. funding    — long funding rate stays non-negative
+// We frame every question as a check on a named API field so resolution is
+// unambiguous regardless of how GMX renders the value in its own UI.
 export async function buildGmxImportCandidates(limit = 8): Promise<ImportCandidateDraft[]> {
   const summary = await fetchGmxMarkets(limit);
   const deadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  return summary.markets.map((market) => {
+  const now = new Date().toISOString();
+  const sourceUrl = `https://app.gmx.io/#/pools?chain=${summary.chainId}`;
+  const drafts: ImportCandidateDraft[] = [];
+
+  for (const market of summary.markets) {
     const marketLabel = market.symbol ?? market.name;
-    const tokenAddress = market.marketTokenAddress ?? marketLabel;
-    const sourceUrl = `https://app.gmx.io/#/pools?chain=${summary.chainId}`;
-    const totalLiquidityUsd = Number(market.ticker?.totalLiquidityUsd ?? 0);
-    const thresholdUsd = totalLiquidityUsd > 0 ? Math.max(100_000, Math.floor(totalLiquidityUsd * 0.5)) : 100_000;
-    const resolutionCriteria = [
-      `Resolve YES if the GMX API for chain ${summary.chainId} lists ${marketLabel} as an active market and reports at least ${thresholdUsd} USD total pool liquidity before the deadline.`,
-      "Use the marketTokenAddress as the primary identifier.",
-      market.marketTokenAddress ? `marketTokenAddress: ${market.marketTokenAddress}` : "",
-      "Resolve NO if the market is delisted, absent from the GMX API, or reported liquidity is below the threshold at resolution time.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-    return {
-      id: stableSponsorId(`gmx:${summary.chainId}:${tokenAddress}`),
+    const addr = market.marketTokenAddress;
+    const tokenAddress = addr ?? marketLabel;
+    const ticker = market.ticker;
+    const addrLine = addr ? `marketTokenAddress: ${addr}` : "";
+
+    const mk = (
+      kind: string,
+      over: { title: string; question: string; description: string; resolutionCriteria: string; confidence: number },
+    ): ImportCandidateDraft => ({
+      id: stableSponsorId(`gmx:${kind}:${summary.chainId}:${tokenAddress}`),
       sourceId: "gmx",
-      title: `GMX ${marketLabel} liquidity market`,
       sourceUrl,
-      sourcePublishedAtIso: new Date().toISOString(),
+      sourcePublishedAtIso: now,
       eventDateIso: deadline,
       category: "crypto",
-      question: `Will GMX ${marketLabel} keep at least ${formatUsd(thresholdUsd)} listed pool liquidity for the next 7 days?`,
-      description: [
-        `Generated from live GMX market metadata on chain ${summary.chainId}.`,
-        market.marketTokenAddress ? `Market token: ${market.marketTokenAddress}.` : "",
-        market.ticker?.totalLiquidityUsd ? `Current listed pool liquidity is about ${formatUsd(market.ticker.totalLiquidityUsd)}.` : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
       oracleType: "zktls-ai-oracle",
       asset: "USDC",
       deadlineIso: deadline,
-      resolutionCriteria,
-      confidence: market.marketTokenAddress ? 0.82 : 0.64,
       status: "needs_review",
-      riskFlags: market.marketTokenAddress ? [] : ["source_url_missing"],
-    };
-  });
+      riskFlags: addr ? [] : ["source_url_missing"],
+      ...over,
+    });
+
+    // 1) Liquidity-depth market.
+    const totalLiquidityUsd = Number(ticker?.totalLiquidityUsd ?? 0);
+    const thresholdUsd = totalLiquidityUsd > 0 ? Math.max(100_000, Math.floor(totalLiquidityUsd * 0.5)) : 100_000;
+    drafts.push(
+      mk("liquidity", {
+        title: `GMX ${marketLabel} liquidity market`,
+        question: `Will GMX ${marketLabel} keep at least ${formatUsd(thresholdUsd)} listed pool liquidity for the next 7 days?`,
+        description: [
+          `Generated from live GMX market metadata on chain ${summary.chainId}.`,
+          addr ? `Market token: ${addr}.` : "",
+          totalLiquidityUsd > 0 ? `Current listed pool liquidity is about ${formatUsd(totalLiquidityUsd)}.` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        resolutionCriteria: [
+          `Resolve YES if the GMX API for chain ${summary.chainId} lists ${marketLabel} as an active market and reports at least ${thresholdUsd} USD total pool liquidity before the deadline.`,
+          "Use the marketTokenAddress as the primary identifier.",
+          addrLine,
+          "Resolve NO if the market is delisted, absent from the GMX API, or reported liquidity is below the threshold at resolution time.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        confidence: addr ? 0.82 : 0.64,
+      }),
+    );
+
+    // 2) Open-interest-imbalance market (needs both sides reported).
+    const oiLong = Number(ticker?.openInterestLongUsd ?? 0);
+    const oiShort = Number(ticker?.openInterestShortUsd ?? 0);
+    if (addr && oiLong > 0 && oiShort > 0) {
+      const leader = oiLong >= oiShort ? "long" : "short";
+      drafts.push(
+        mk("oi", {
+          title: `GMX ${marketLabel} open-interest imbalance`,
+          question: `Will GMX ${marketLabel} long open interest still exceed short open interest in 7 days?`,
+          description:
+            `Generated from live GMX open interest on chain ${summary.chainId}. ` +
+            `Current long OI ${formatUsd(oiLong)} vs short OI ${formatUsd(oiShort)} (${leader} leads).`,
+          resolutionCriteria: [
+            `Resolve YES if the GMX API for chain ${summary.chainId} reports longInterestUsd greater than shortInterestUsd for ${marketLabel} at the deadline.`,
+            addrLine,
+            "Resolve NO if short open interest is greater than or equal to long, or the market is delisted/absent at resolution time.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          confidence: 0.8,
+        }),
+      );
+    }
+
+    // 3) Funding-direction market (needs a plausible funding estimate).
+    const fundingLong = ticker?.fundingLongAprEstimate;
+    if (addr && fundingLong !== undefined) {
+      drafts.push(
+        mk("funding", {
+          title: `GMX ${marketLabel} funding direction`,
+          question: `Will GMX ${marketLabel} report a non-negative long funding rate in 7 days?`,
+          description:
+            `Generated from live GMX funding on chain ${summary.chainId}. ` +
+            `Current long funding is about ${fundingLong.toFixed(2)}% est. APR.`,
+          resolutionCriteria: [
+            `Resolve YES if the GMX API for chain ${summary.chainId} reports a non-negative fundingRateLong for ${marketLabel} at the deadline.`,
+            addrLine,
+            "Resolve NO if fundingRateLong is negative, or the market is delisted/absent at resolution time.",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          confidence: 0.74,
+        }),
+      );
+    }
+  }
+
+  return drafts;
 }
 
 function configuredGmxChainId(): ContractsChainId {
@@ -688,11 +760,16 @@ function tickerForResponse(ticker?: GmxMarketTicker) {
   if (!ticker) return undefined;
   const totalLiquidityUsd =
     usdBigIntToNumber(ticker.poolAmountLongUsd) + usdBigIntToNumber(ticker.poolAmountShortUsd);
+  const openInterestLongUsd = usdBigIntToNumber(ticker.longInterestUsd);
+  const openInterestShortUsd = usdBigIntToNumber(ticker.shortInterestUsd);
   return {
     symbol: ticker.symbol,
     totalLiquidityUsd,
-    openInterestUsd:
-      usdBigIntToNumber(ticker.longInterestUsd) + usdBigIntToNumber(ticker.shortInterestUsd),
+    openInterestUsd: openInterestLongUsd + openInterestShortUsd,
+    openInterestLongUsd,
+    openInterestShortUsd,
+    fundingLongAprEstimate: gmxFundingApr(ticker.fundingRateLong),
+    fundingShortAprEstimate: gmxFundingApr(ticker.fundingRateShort),
     priceChangePercent24h:
       ticker.priceChangePercent24hBps === undefined ? undefined : Number(ticker.priceChangePercent24hBps) / 100,
   };
