@@ -20,16 +20,47 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use alloy_primitives::{Address, B256, U256};
-use alloy_sol_types::SolValue;
+use alloy_sol_types::{sol, SolValue};
 use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 use sha3::{Digest, Keccak256};
-use stylus_sdk::prelude::*;
+use stylus_sdk::{evm, prelude::*};
 
 sol_interface! {
     interface IParimutuelPool {
         function resolve(uint8 side) external;
         function resolver() external view returns (address);
     }
+}
+
+// Event ABI mirrors AIJudgeVerifier.sol so the Postgres indexer can
+// consume Stylus-resolved markets through the same decoder it uses for
+// the Solidity twin. Topic hashes match because the event signatures are
+// byte-identical between the two implementations.
+sol! {
+    event Proposed(
+        address indexed pool,
+        uint256 indexed marketId,
+        uint8 outcome,
+        bytes32 evidenceHash,
+        uint64 proposedAt
+    );
+    event Challenged(
+        address indexed pool,
+        uint256 indexed marketId,
+        address indexed challenger
+    );
+    event Finalized(
+        address indexed pool,
+        uint256 indexed marketId,
+        uint8 outcome,
+        bytes32 evidenceHash
+    );
+    event Overridden(
+        address indexed pool,
+        uint256 indexed marketId,
+        uint8 outcome,
+        address indexed by
+    );
 }
 
 // Proposal lifecycle status (matches Solidity enum ordering).
@@ -185,30 +216,50 @@ impl AIJudgeVerifier {
         if !self.verify(pool, market_id, outcome, evidence_hash, signature)? {
             return Err(b"bad sig".to_vec());
         }
-        let mut p = self.proposals.setter(market_id);
-        if p.status.get() != STATUS_NONE {
-            return Err(b"exists".to_vec());
+        let proposed_at_u64 = stylus_sdk::block::timestamp();
+        {
+            let mut p = self.proposals.setter(market_id);
+            if p.status.get() != STATUS_NONE {
+                return Err(b"exists".to_vec());
+            }
+            p.pool.set(pool);
+            p.outcome.set(outcome);
+            p.evidence_hash.set(evidence_hash);
+            p.proposed_at
+                .set(U256::from(proposed_at_u64).try_into().unwrap_or(0));
+            p.status.set(STATUS_PENDING);
         }
-        p.pool.set(pool);
-        p.outcome.set(outcome);
-        p.evidence_hash.set(evidence_hash);
-        p.proposed_at
-            .set(U256::from(stylus_sdk::block::timestamp()).try_into().unwrap_or(0));
-        p.status.set(STATUS_PENDING);
+        evm::log(Proposed {
+            pool,
+            marketId: market_id,
+            outcome,
+            evidenceHash: evidence_hash,
+            proposedAt: proposed_at_u64,
+        });
         Ok(())
     }
 
     pub fn challenge(&mut self, market_id: U256) -> Result<(), Vec<u8>> {
-        let mut p = self.proposals.setter(market_id);
-        if p.status.get() != STATUS_PENDING {
-            return Err(b"not pending".to_vec());
+        let pool_addr;
+        let challenger = stylus_sdk::msg::sender();
+        {
+            let mut p = self.proposals.setter(market_id);
+            if p.status.get() != STATUS_PENDING {
+                return Err(b"not pending".to_vec());
+            }
+            let proposed_at: u64 = p.proposed_at.get().to::<u64>();
+            if stylus_sdk::block::timestamp() >= proposed_at + CHALLENGE_WINDOW_SECS {
+                return Err(b"window closed".to_vec());
+            }
+            p.status.set(STATUS_DISPUTED);
+            p.challenger.set(challenger);
+            pool_addr = p.pool.get();
         }
-        let proposed_at: u64 = p.proposed_at.get().to::<u64>();
-        if stylus_sdk::block::timestamp() >= proposed_at + CHALLENGE_WINDOW_SECS {
-            return Err(b"window closed".to_vec());
-        }
-        p.status.set(STATUS_DISPUTED);
-        p.challenger.set(stylus_sdk::msg::sender());
+        evm::log(Challenged {
+            pool: pool_addr,
+            marketId: market_id,
+            challenger,
+        });
         Ok(())
     }
 
@@ -243,7 +294,15 @@ impl AIJudgeVerifier {
             }
             p.pool.get()
         };
-        self.resolve_pool(market_id, pool_addr, outcome)
+        let sender = stylus_sdk::msg::sender();
+        self.resolve_pool(market_id, pool_addr, outcome)?;
+        evm::log(Overridden {
+            pool: pool_addr,
+            marketId: market_id,
+            outcome,
+            by: sender,
+        });
+        Ok(())
     }
 
     // ─── V1 backwards-compat (fast-track only, deprecated) ────────────
@@ -312,8 +371,17 @@ impl AIJudgeVerifier {
         }
         pool.resolve(self, outcome)
             .map_err(|_| b"resolve failed".to_vec())?;
-        let mut p = self.proposals.setter(market_id);
-        p.status.set(STATUS_FINALIZED);
+        let evidence_hash = {
+            let mut p = self.proposals.setter(market_id);
+            p.status.set(STATUS_FINALIZED);
+            p.evidence_hash.get()
+        };
+        evm::log(Finalized {
+            pool: pool_addr,
+            marketId: market_id,
+            outcome,
+            evidenceHash: evidence_hash,
+        });
         Ok(())
     }
 }

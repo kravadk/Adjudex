@@ -10,6 +10,11 @@ contract MarketFactory {
     // keeps governance auditable (immutable, no setter).
     uint256 public immutable feeBps;
     address public immutable feeRecipient;
+    // Address passed into every spawned ParimutuelPool as its quote verifier.
+    // Zero address = quote-aware betting is disabled for every pool the
+    // factory creates. To rotate the verifier deploy a fresh factory; this
+    // keeps the binding immutable for the lifetime of each market.
+    address public immutable quoteVerifier;
     uint256 public nextMarketId = 1;
 
     mapping(uint256 => address) public pools;
@@ -29,7 +34,12 @@ contract MarketFactory {
     );
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
 
-    constructor(address _stakeToken, uint256 _feeBps, address _feeRecipient) {
+    constructor(
+        address _stakeToken,
+        uint256 _feeBps,
+        address _feeRecipient,
+        address _quoteVerifier
+    ) {
         require(_stakeToken != address(0), "stake=0");
         require(
             _feeBps == 0 || _feeRecipient != address(0),
@@ -38,6 +48,9 @@ contract MarketFactory {
         stakeToken = _stakeToken;
         feeBps = _feeBps;
         feeRecipient = _feeRecipient;
+        // Zero allowed — disables the quote feature for every pool spawned
+        // by this factory.
+        quoteVerifier = _quoteVerifier;
     }
 
     // Hard market: creator is the resolver. Used for price-oracle markets
@@ -80,7 +93,8 @@ contract MarketFactory {
             resolver,
             deadline,
             feeBps,
-            feeRecipient
+            feeRecipient,
+            quoteVerifier
         );
         pools[marketId] = address(pool);
         specHashes[marketId] = specHash;

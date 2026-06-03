@@ -7,6 +7,25 @@ interface IERC20 {
     function balanceOf(address a) external view returns (uint256);
 }
 
+// Minimal interface to BetQuoteVerifier. The pool only needs the digest +
+// view-side signature check; replay protection is tracked locally in
+// `quoteConsumed` so the pool retains a self-contained audit trail.
+interface IBetQuoteVerifier {
+    struct BetQuote {
+        address pool;
+        uint256 marketId;
+        uint8 side;
+        uint256 stake;
+        uint256 minShares;
+        uint256 maxPoolImpactBps;
+        uint256 deadline;
+        uint256 nonce;
+        address bettor;
+    }
+    function verify(BetQuote calldata q, bytes calldata signature) external view returns (bool);
+    function hashQuote(BetQuote calldata q) external pure returns (bytes32);
+}
+
 // Parimutuel pool with USDC settlement, soulbound position NFT-shape, and a
 // refund-after-grace fallback so stuck markets never lock capital forever.
 contract ParimutuelPool {
@@ -27,6 +46,16 @@ contract ParimutuelPool {
     // failed to resolve, so it's a 1:1 stake-recovery path.
     uint256 public immutable feeBps;
     address public immutable feeRecipient;
+
+    // Optional BetQuoteVerifier hook. Zero address disables the
+    // betWithQuote() entry point (only plain bet() is callable). When non-
+    // zero, signed BetQuote slips are accepted and tracked per quoteHash.
+    address public immutable quoteVerifier;
+
+    // Quote replay protection. Kept inside the pool (not delegated to the
+    // verifier) so a redeployed verifier never re-opens an already-consumed
+    // quote on this pool.
+    mapping(bytes32 => bool) public quoteConsumed;
 
     // Mutable so the creator can hand off resolution authority to a soft-
     // market verifier (AIJudgeVerifier) post-construction.
@@ -58,6 +87,12 @@ contract ParimutuelPool {
     event ResolverTransferred(address indexed previousResolver, address indexed newResolver);
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
     event FeeCollected(address indexed recipient, uint256 amount, uint256 indexed positionId);
+    event QuoteApplied(
+        bytes32 indexed quoteHash,
+        address indexed bettor,
+        uint256 nonce,
+        uint256 indexed positionId
+    );
 
     modifier nonReentrant() {
         require(_lock == 1, "reentrancy");
@@ -72,7 +107,8 @@ contract ParimutuelPool {
         address _resolver,
         uint256 _deadline,
         uint256 _feeBps,
-        address _feeRecipient
+        address _feeRecipient,
+        address _quoteVerifier
     ) {
         require(stakeToken != address(0), "stake=0");
         require(_resolver != address(0), "resolver=0");
@@ -91,6 +127,9 @@ contract ParimutuelPool {
         deadline = _deadline;
         feeBps = _feeBps;
         feeRecipient = _feeRecipient;
+        // Zero is allowed — disables the quote-aware entry point so the
+        // pool falls back to plain bet() only.
+        quoteVerifier = _quoteVerifier;
     }
 
     function getYesPct() external view returns (uint256) {
@@ -117,6 +156,38 @@ contract ParimutuelPool {
 
     // CEI: Checks -> Effects -> Interactions. transferFrom is the last step.
     function bet(uint8 side, uint256 amount) external nonReentrant returns (uint256 positionId) {
+        return _placeBet(msg.sender, side, amount);
+    }
+
+    // Quote-aware entry point. The backend signs a BetQuote that binds
+    // (pool, side, stake, deadline, nonce, bettor); the pool re-verifies
+    // here so an MEV bot cannot replay an old quote or steer a user to a
+    // worse pool. Slippage params (minShares, maxPoolImpactBps) are
+    // signature-bound but pool-side enforcement of them lands in
+    // BetQuote v2; for now, the front-end is the source of truth.
+    function betWithQuote(
+        IBetQuoteVerifier.BetQuote calldata q,
+        bytes calldata signature
+    ) external nonReentrant returns (uint256 positionId) {
+        require(quoteVerifier != address(0), "quote disabled");
+        require(q.pool == address(this), "wrong pool");
+        require(q.bettor == msg.sender, "bettor mismatch");
+        require(block.timestamp <= q.deadline, "expired");
+
+        bytes32 quoteHash = IBetQuoteVerifier(quoteVerifier).hashQuote(q);
+        require(!quoteConsumed[quoteHash], "quote consumed");
+        require(IBetQuoteVerifier(quoteVerifier).verify(q, signature), "bad sig");
+        quoteConsumed[quoteHash] = true;
+
+        positionId = _placeBet(msg.sender, q.side, q.stake);
+        emit QuoteApplied(quoteHash, msg.sender, q.nonce, positionId);
+    }
+
+    function _placeBet(
+        address bettor,
+        uint8 side,
+        uint256 amount
+    ) internal returns (uint256 positionId) {
         require(!resolved, "resolved");
         require(block.timestamp < deadline, "deadline passed");
         require(side <= uint8(Side.NO), "bad side");
@@ -128,18 +199,18 @@ contract ParimutuelPool {
 
         positionId = nextPositionId++;
         positions[positionId] = Position({
-            bettor: msg.sender,
+            bettor: bettor,
             side: Side(side),
             amount: amount,
             claimed: false
         });
-        ownerOf[positionId] = msg.sender;
-        balanceOf[msg.sender] += 1;
+        ownerOf[positionId] = bettor;
+        balanceOf[bettor] += 1;
 
-        emit BetPlaced(msg.sender, side, amount, positionId);
-        emit Transfer(address(0), msg.sender, positionId);
+        emit BetPlaced(bettor, side, amount, positionId);
+        emit Transfer(address(0), bettor, positionId);
 
-        require(stake.transferFrom(msg.sender, address(this), amount), "transferFrom failed");
+        require(stake.transferFrom(bettor, address(this), amount), "transferFrom failed");
     }
 
     function resolve(uint8 side) external nonReentrant {

@@ -32,8 +32,15 @@ contract PriceOracle {
     mapping(bytes32 => ManualPrice) public manual;
     mapping(bytes32 => address) public feeds;
 
+    // Maximum allowed age of a Chainlink reading (seconds). Default 1 hour
+    // — anything older is treated as stale and reverts. Owner can tune for
+    // specific feed cadences (e.g. NAV-style feeds with daily updates).
+    // Manual prices skip this check; testnet operators take responsibility.
+    uint256 public maxStaleSec = 3600;
+
     event PriceSet(bytes32 indexed key, uint256 price, uint256 updatedAt);
     event FeedSet(bytes32 indexed key, address feed);
+    event MaxStaleSecSet(uint256 oldValue, uint256 newValue);
 
     constructor() { owner = msg.sender; }
 
@@ -52,11 +59,24 @@ contract PriceOracle {
         emit FeedSet(key, aggregator);
     }
 
+    function setMaxStaleSec(uint256 newValue) external onlyOwner {
+        require(newValue > 0, "stale=0");
+        emit MaxStaleSecSet(maxStaleSec, newValue);
+        maxStaleSec = newValue;
+    }
+
     function getPrice(bytes32 key) external view returns (uint256 price, uint256 updatedAt) {
         address feed = feeds[key];
         if (feed != address(0)) {
             (, int256 answer, , uint256 ts, ) = AggregatorV3Interface(feed).latestRoundData();
             require(answer > 0, "bad feed");
+            // Staleness guard: a frozen Chainlink feed (RPC outage, sequencer
+            // halt, or oracle stalling on the operator's side) would otherwise
+            // return a confidently wrong number. Revert so callers either fall
+            // back to a manual price or refuse the trade.
+            require(ts != 0, "no timestamp");
+            require(block.timestamp >= ts, "future timestamp");
+            require(block.timestamp - ts <= maxStaleSec, "stale price");
             uint8 dec = AggregatorV3Interface(feed).decimals();
             uint256 raw = uint256(answer);
             if (dec == 8) return (raw, ts);

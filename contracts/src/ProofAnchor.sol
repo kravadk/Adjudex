@@ -22,6 +22,12 @@ pragma solidity ^0.8.26;
 // Duplicate anchors for the same sessionId are rejected so the first
 // publisher binds the hash.
 contract ProofAnchor {
+    // Owner can `overrideAnchor()` to correct a malicious first-publisher
+    // binding. Originally there was no override — a contaminated sessionId
+    // was permanent. Override path emits a distinct event so indexers can
+    // re-derive the canonical proofHash for the affected session.
+    address public immutable owner;
+
     struct Anchor {
         bytes32 proofHash;
         bytes cid;
@@ -39,6 +45,22 @@ contract ProofAnchor {
         uint64 anchoredAt
     );
 
+    event AnchorOverridden(
+        bytes32 indexed sessionIdHash,
+        bytes32 indexed oldProofHash,
+        bytes32 indexed newProofHash,
+        address publisher,
+        bytes cid,
+        uint64 overriddenAt
+    );
+
+    constructor() { owner = msg.sender; }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "not owner");
+        _;
+    }
+
     function anchor(string calldata sessionId, bytes32 proofHash, bytes calldata cid) external {
         require(proofHash != bytes32(0), "proofHash=0");
         require(cid.length > 0, "cid empty");
@@ -52,6 +74,37 @@ contract ProofAnchor {
             anchoredAt: uint64(block.timestamp)
         });
         emit ProofAnchored(key, proofHash, msg.sender, cid, uint64(block.timestamp));
+    }
+
+    // Override the binding for a specific sessionId. The original anchor
+    // stays accessible via event history; only the active mapping value
+    // changes. Owner is the governance Safe in production.
+    function overrideAnchor(
+        string calldata sessionId,
+        bytes32 newProofHash,
+        bytes calldata newCid
+    ) external onlyOwner {
+        require(newProofHash != bytes32(0), "proofHash=0");
+        require(newCid.length > 0, "cid empty");
+        bytes32 key = keccak256(bytes(sessionId));
+        Anchor memory previous = anchors[key];
+        require(previous.proofHash != bytes32(0), "not anchored");
+        require(previous.proofHash != newProofHash, "no change");
+
+        anchors[key] = Anchor({
+            proofHash: newProofHash,
+            cid: newCid,
+            publisher: msg.sender,
+            anchoredAt: uint64(block.timestamp)
+        });
+        emit AnchorOverridden(
+            key,
+            previous.proofHash,
+            newProofHash,
+            msg.sender,
+            newCid,
+            uint64(block.timestamp)
+        );
     }
 
     function getAnchor(string calldata sessionId)

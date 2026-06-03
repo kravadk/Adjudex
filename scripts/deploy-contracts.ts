@@ -139,7 +139,9 @@ async function main() {
   writeAbi(root, "ProofAnchor", proofAnchor.abi);
   writeAbi(root, "BetQuoteVerifier", betQuoteVerifier.abi);
 
-  // 2. MarketFactory(stakeToken=TestUSDC)
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
+
+  // 1. TestUSDC
   console.log("\n> Deploying TestUSDC...");
   const usdcHash = await walletClient.deployContract({
     abi: usdc.abi,
@@ -153,51 +155,8 @@ async function main() {
   const usdcAddress = usdcReceipt.contractAddress!;
   console.log(`  ok TestUSDC: ${usdcAddress}`);
 
-  // 1. TestUSDC
-  console.log("\n> Deploying MarketFactory...");
-  // Fee config: 150 bps (1.5%) by default. Recipient defaults to the
-  // deployer EOA — transfer to the governance Safe after deploy via
-  // scripts/transfer-ownership.ts (or manually if not yet ownable).
-  const feeBps = BigInt(process.env.MARKET_FACTORY_FEE_BPS ?? "150");
-  const feeRecipient = (process.env.MARKET_FACTORY_FEE_RECIPIENT ??
-    account.address) as `0x${string}`;
-  if (feeBps > 500n) throw new Error(`feeBps too high: ${feeBps} > 500`);
-  console.log(`  fee: ${feeBps} bps to ${feeRecipient}`);
-  const factoryArgs = encodeAbiParameters(
-    [
-      { type: "address" },
-      { type: "uint256" },
-      { type: "address" },
-    ],
-    [usdcAddress, feeBps, feeRecipient],
-  );
-  const factoryHash = await walletClient.deployContract({
-    abi: factory.abi,
-    bytecode: (`0x${factory.evm.bytecode.object}` + factoryArgs.slice(2)) as Hex,
-  });
-  console.log(`  tx: ${factoryHash}`);
-  const factoryReceipt = await publicClient.waitForTransactionReceipt({ hash: factoryHash });
-  if (factoryReceipt.status !== "success") {
-    throw new Error(`MarketFactory deploy reverted: ${factoryHash}`);
-  }
-  const factoryAddress = factoryReceipt.contractAddress!;
-  console.log(`  ok MarketFactory: ${factoryAddress}`);
-
-  // 3. ReputationOracle
-  console.log("\n> Deploying ReputationOracle...");
-  const repHash = await walletClient.deployContract({
-    abi: reputation.abi,
-    bytecode: `0x${reputation.evm.bytecode.object}` as Hex,
-  });
-  console.log(`  tx: ${repHash}`);
-  const repReceipt = await publicClient.waitForTransactionReceipt({ hash: repHash });
-  if (repReceipt.status !== "success") {
-    throw new Error(`ReputationOracle deploy reverted: ${repHash}`);
-  }
-  const repAddress = repReceipt.contractAddress!;
-  console.log(`  ok ReputationOracle: ${repAddress}`);
-
-  // 4. AIJudgeVerifier(judge=JUDGE_PUBLIC_ADDRESS)
+  // 2. AIJudgeVerifier (optional, moved BEFORE MarketFactory so its
+  //    address is available for ReputationOracle constructor).
   let judgeAddress: `0x${string}` | "" = "";
   let judgeHash: `0x${string}` | "" = "";
   const judgePublic = process.env.JUDGE_PUBLIC_ADDRESS as `0x${string}` | undefined;
@@ -217,45 +176,8 @@ async function main() {
     console.log("\nskip Skipping AIJudgeVerifier (JUDGE_PUBLIC_ADDRESS not set)");
   }
 
-  // 4b. PriceOracle
-  console.log("\n> Deploying PriceOracle...");
-  const priceHash = await walletClient.deployContract({
-    abi: priceOracle.abi,
-    bytecode: `0x${priceOracle.evm.bytecode.object}` as Hex,
-  });
-  console.log(`  tx: ${priceHash}`);
-  const priceReceipt = await publicClient.waitForTransactionReceipt({ hash: priceHash });
-  if (priceReceipt.status !== "success") throw new Error(`PriceOracle reverted: ${priceHash}`);
-  const priceAddress = priceReceipt.contractAddress!;
-  console.log(`  ok PriceOracle: ${priceAddress}`);
-
-  // 4c. TokenizedStockAdapter
-  console.log("\n> Deploying TokenizedStockAdapter...");
-  const stockHash = await walletClient.deployContract({
-    abi: stockAdapter.abi,
-    bytecode: `0x${stockAdapter.evm.bytecode.object}` as Hex,
-  });
-  console.log(`  tx: ${stockHash}`);
-  const stockReceipt = await publicClient.waitForTransactionReceipt({ hash: stockHash });
-  if (stockReceipt.status !== "success") throw new Error(`TokenizedStockAdapter reverted: ${stockHash}`);
-  const stockAddress = stockReceipt.contractAddress!;
-  console.log(`  ok TokenizedStockAdapter: ${stockAddress}`);
-
-  // 4d. ProofAnchor (Reclaim proof CID anchor + ProofAnchored event)
-  console.log("\n> Deploying ProofAnchor...");
-  const anchorHash = await walletClient.deployContract({
-    abi: proofAnchor.abi,
-    bytecode: `0x${proofAnchor.evm.bytecode.object}` as Hex,
-  });
-  console.log(`  tx: ${anchorHash}`);
-  const anchorReceipt = await publicClient.waitForTransactionReceipt({ hash: anchorHash });
-  if (anchorReceipt.status !== "success") {
-    throw new Error(`ProofAnchor deploy reverted: ${anchorHash}`);
-  }
-  const anchorAddress = anchorReceipt.contractAddress!;
-  console.log(`  ok ProofAnchor: ${anchorAddress}`);
-
-  // 4e. BetQuoteVerifier(quoteSigner=QUOTE_SIGNER_PUBLIC_ADDRESS)
+  // 3. BetQuoteVerifier (optional, moved BEFORE MarketFactory so its
+  //    address can be baked into the factory immutable).
   let quoteVerifierAddress: `0x${string}` | "" = "";
   let quoteVerifierHash: `0x${string}` | "" = "";
   const quoteSignerPublic = process.env.QUOTE_SIGNER_PUBLIC_ADDRESS as
@@ -281,6 +203,99 @@ async function main() {
   } else {
     console.log("\nskip Skipping BetQuoteVerifier (QUOTE_SIGNER_PUBLIC_ADDRESS not set)");
   }
+
+  // 4. MarketFactory(stakeToken, feeBps, feeRecipient, quoteVerifier)
+  console.log("\n> Deploying MarketFactory...");
+  // Fee config: 150 bps (1.5%) by default. Recipient defaults to the
+  // deployer EOA — transfer to the governance Safe after deploy via
+  // scripts/transfer-ownership.ts (or manually if not yet ownable).
+  const feeBps = BigInt(process.env.MARKET_FACTORY_FEE_BPS ?? "150");
+  const feeRecipient = (process.env.MARKET_FACTORY_FEE_RECIPIENT ??
+    account.address) as `0x${string}`;
+  if (feeBps > 500n) throw new Error(`feeBps too high: ${feeBps} > 500`);
+  console.log(`  fee: ${feeBps} bps to ${feeRecipient}`);
+  console.log(
+    `  quoteVerifier: ${quoteVerifierAddress || `${ZERO_ADDRESS} (disabled)`}`,
+  );
+  const factoryArgs = encodeAbiParameters(
+    [
+      { type: "address" },
+      { type: "uint256" },
+      { type: "address" },
+      { type: "address" },
+    ],
+    [usdcAddress, feeBps, feeRecipient, (quoteVerifierAddress || ZERO_ADDRESS) as `0x${string}`],
+  );
+  const factoryHash = await walletClient.deployContract({
+    abi: factory.abi,
+    bytecode: (`0x${factory.evm.bytecode.object}` + factoryArgs.slice(2)) as Hex,
+  });
+  console.log(`  tx: ${factoryHash}`);
+  const factoryReceipt = await publicClient.waitForTransactionReceipt({ hash: factoryHash });
+  if (factoryReceipt.status !== "success") {
+    throw new Error(`MarketFactory deploy reverted: ${factoryHash}`);
+  }
+  const factoryAddress = factoryReceipt.contractAddress!;
+  console.log(`  ok MarketFactory: ${factoryAddress}`);
+
+  // 5. ReputationOracle(judge)
+  console.log("\n> Deploying ReputationOracle...");
+  console.log(
+    `  judge: ${judgeAddress || `${ZERO_ADDRESS} (use rotateJudge later)`}`,
+  );
+  const repArgs = encodeAbiParameters(
+    [{ type: "address" }],
+    [(judgeAddress || ZERO_ADDRESS) as `0x${string}`],
+  );
+  const repHash = await walletClient.deployContract({
+    abi: reputation.abi,
+    bytecode: (`0x${reputation.evm.bytecode.object}` + repArgs.slice(2)) as Hex,
+  });
+  console.log(`  tx: ${repHash}`);
+  const repReceipt = await publicClient.waitForTransactionReceipt({ hash: repHash });
+  if (repReceipt.status !== "success") {
+    throw new Error(`ReputationOracle deploy reverted: ${repHash}`);
+  }
+  const repAddress = repReceipt.contractAddress!;
+  console.log(`  ok ReputationOracle: ${repAddress}`);
+
+  // 6. PriceOracle
+  console.log("\n> Deploying PriceOracle...");
+  const priceHash = await walletClient.deployContract({
+    abi: priceOracle.abi,
+    bytecode: `0x${priceOracle.evm.bytecode.object}` as Hex,
+  });
+  console.log(`  tx: ${priceHash}`);
+  const priceReceipt = await publicClient.waitForTransactionReceipt({ hash: priceHash });
+  if (priceReceipt.status !== "success") throw new Error(`PriceOracle reverted: ${priceHash}`);
+  const priceAddress = priceReceipt.contractAddress!;
+  console.log(`  ok PriceOracle: ${priceAddress}`);
+
+  // 7. TokenizedStockAdapter
+  console.log("\n> Deploying TokenizedStockAdapter...");
+  const stockHash = await walletClient.deployContract({
+    abi: stockAdapter.abi,
+    bytecode: `0x${stockAdapter.evm.bytecode.object}` as Hex,
+  });
+  console.log(`  tx: ${stockHash}`);
+  const stockReceipt = await publicClient.waitForTransactionReceipt({ hash: stockHash });
+  if (stockReceipt.status !== "success") throw new Error(`TokenizedStockAdapter reverted: ${stockHash}`);
+  const stockAddress = stockReceipt.contractAddress!;
+  console.log(`  ok TokenizedStockAdapter: ${stockAddress}`);
+
+  // 8. ProofAnchor (Reclaim proof CID anchor + ProofAnchored event)
+  console.log("\n> Deploying ProofAnchor...");
+  const anchorHash = await walletClient.deployContract({
+    abi: proofAnchor.abi,
+    bytecode: `0x${proofAnchor.evm.bytecode.object}` as Hex,
+  });
+  console.log(`  tx: ${anchorHash}`);
+  const anchorReceipt = await publicClient.waitForTransactionReceipt({ hash: anchorHash });
+  if (anchorReceipt.status !== "success") {
+    throw new Error(`ProofAnchor deploy reverted: ${anchorHash}`);
+  }
+  const anchorAddress = anchorReceipt.contractAddress!;
+  console.log(`  ok ProofAnchor: ${anchorAddress}`);
 
   // 5. Persist deployment record
   const deploymentsDir = join(root, "deployments");
