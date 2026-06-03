@@ -2,11 +2,12 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 // Registry for tokenized stocks (xStocks/Ondo-style). Markets reference assets
 // by ticker. `active` lets the operator handle corp actions (delisting, ticker
 // change) without breaking already-settled markets.
-contract TokenizedStockAdapter is Ownable {
+contract TokenizedStockAdapter is Ownable2Step {
     struct Asset {
         address token;
         bool active;

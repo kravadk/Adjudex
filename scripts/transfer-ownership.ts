@@ -13,12 +13,19 @@
 //
 // Coverage:
 //   AIJudgeVerifier  — has transferOwnership(address) ✅
-//   MarketFactory    — no owner pattern (permissionless) — SKIP, document gap
-//   ProofAnchor      — OpenZeppelin Ownable + transferOwnership(address) ✅
+//   MarketFactory    — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
+//   ProofAnchor      — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
 //   BetQuoteVerifier — immutable _quoteSigner        — SKIP, document gap
 //   ReputationOracle — no owner pattern              — SKIP, document gap
 //   PriceOracle      — owner without transferOwnership — SKIP (contract change needed)
-//   TokenizedStockAdapter — OpenZeppelin Ownable + transferOwnership(address) ✅
+//   TokenizedStockAdapter — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
+//
+// TWO-STEP OWNERSHIP: MarketFactory, ProofAnchor, and TokenizedStockAdapter
+// use OpenZeppelin Ownable2Step. transferOwnership() here only sets the
+// pendingOwner — the transfer is NOT complete until the new owner (the Safe)
+// calls acceptOwnership() itself. AIJudgeVerifier still uses single-step
+// Ownable and completes immediately. This script initiates the handshake;
+// finish it from the Safe.
 //
 // See docs/GOVERNANCE.md for the contract-change list required to make
 // all contracts multisig-owned before mainnet.
@@ -67,6 +74,10 @@ type Target = {
   name: string;
   key: keyof Deployments;
   supportsTransfer: boolean;
+  // OpenZeppelin Ownable2Step: transferOwnership only sets pendingOwner; the
+  // Safe must call acceptOwnership() to finish. Single-step Ownable contracts
+  // (twoStep omitted/false) complete in one tx.
+  twoStep?: boolean;
   note?: string;
 };
 
@@ -79,13 +90,14 @@ const TARGETS: Target[] = [
   {
     name: "MarketFactory",
     key: "marketFactory",
-    supportsTransfer: false,
-    note: "Contract has no owner; treat as permissionless. No transfer needed.",
+    supportsTransfer: true,
+    twoStep: true,
   },
   {
     name: "ProofAnchor",
     key: "proofAnchor",
     supportsTransfer: true,
+    twoStep: true,
   },
   {
     name: "BetQuoteVerifier",
@@ -103,6 +115,7 @@ const TARGETS: Target[] = [
     name: "TokenizedStockAdapter",
     key: "tokenizedStockAdapter",
     supportsTransfer: true,
+    twoStep: true,
   },
 ];
 
@@ -183,7 +196,10 @@ async function main() {
         continue;
       }
       if (dryRun) {
-        console.log(`[DRY] would call ${target.name}.transferOwnership(${safeAddress})`);
+        console.log(
+          `[DRY] would call ${target.name}.transferOwnership(${safeAddress})` +
+            (target.twoStep ? " (2-step: Safe must then acceptOwnership())" : ""),
+        );
         transferred.push(target.name);
         continue;
       }
@@ -199,7 +215,14 @@ async function main() {
         failed.push({ name: target.name, reason: `tx reverted (${hash})` });
         continue;
       }
-      console.log(`[OK] ${target.name} owner transferred (block ${receipt.blockNumber})`);
+      if (target.twoStep) {
+        console.log(
+          `[OK] ${target.name} pendingOwner set to Safe (block ${receipt.blockNumber}); ` +
+            "transfer completes when the Safe calls acceptOwnership()",
+        );
+      } else {
+        console.log(`[OK] ${target.name} owner transferred (block ${receipt.blockNumber})`);
+      }
       transferred.push(target.name);
     } catch (err) {
       failed.push({

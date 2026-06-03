@@ -2,8 +2,15 @@
 pragma solidity ^0.8.26;
 
 import {ParimutuelPool} from "./ParimutuelPool.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
-contract MarketFactory {
+// Ownable2Step: ownership transfer is a two-step handshake (transferOwnership
+// sets a pendingOwner; the new owner must acceptOwnership) so a typo'd
+// address can never strand the factory. Pausable lets the owner halt new
+// market creation in an emergency without touching already-deployed pools.
+contract MarketFactory is Ownable2Step, Pausable {
     address public immutable stakeToken;
     // Global fee config applied to every pool the factory creates. 150 = 1.5%.
     // A new factory must be deployed to change the rate or recipient — this
@@ -39,7 +46,7 @@ contract MarketFactory {
         uint256 _feeBps,
         address _feeRecipient,
         address _quoteVerifier
-    ) {
+    ) Ownable(msg.sender) {
         require(_stakeToken != address(0), "stake=0");
         require(
             _feeBps == 0 || _feeRecipient != address(0),
@@ -85,7 +92,7 @@ contract MarketFactory {
         uint256 deadline,
         address resolver,
         string memory specUri
-    ) internal returns (uint256 marketId) {
+    ) internal whenNotPaused returns (uint256 marketId) {
         marketId = nextMarketId++;
         ParimutuelPool pool = new ParimutuelPool(
             stakeToken,
@@ -100,6 +107,16 @@ contract MarketFactory {
         specHashes[marketId] = specHash;
         if (bytes(specUri).length > 0) specUris[marketId] = specUri;
         emit MarketCreated(marketId, address(pool), specHash, msg.sender, resolver, deadline, specUri);
+    }
+
+    // Emergency stop for new market creation. Existing pools are independent
+    // contracts and keep operating (bet/claim/resolve) regardless.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     function getMarket(uint256 marketId) external view returns (address pool) {

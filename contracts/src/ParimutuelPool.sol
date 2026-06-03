@@ -2,7 +2,9 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 // Minimal interface to BetQuoteVerifier. The pool only needs the digest +
 // view-side signature check; replay protection is tracked locally in
@@ -25,7 +27,9 @@ interface IBetQuoteVerifier {
 
 // Parimutuel pool with USDC settlement, soulbound position NFT-shape, and a
 // refund-after-grace fallback so stuck markets never lock capital forever.
-contract ParimutuelPool is ReentrancyGuard {
+contract ParimutuelPool is ReentrancyGuard, Pausable {
+    using SafeERC20 for IERC20;
+
     enum Side { YES, NO }
 
     IERC20 public immutable stake;
@@ -143,8 +147,22 @@ contract ParimutuelPool is ReentrancyGuard {
     }
 
     // CEI: Checks -> Effects -> Interactions. transferFrom is the last step.
-    function bet(uint8 side, uint256 amount) external nonReentrant returns (uint256 positionId) {
+    function bet(uint8 side, uint256 amount) external nonReentrant whenNotPaused returns (uint256 positionId) {
         return _placeBet(msg.sender, side, amount);
+    }
+
+    // Emergency stop for NEW exposure only. The resolver can pause betting
+    // (e.g. a disputed feed, a UI bug, a depeg) without trapping capital —
+    // claim() and refundAfterGrace() stay open while paused so users always
+    // have an exit. Resolution itself is unaffected.
+    function pause() external {
+        require(msg.sender == resolver, "not resolver");
+        _pause();
+    }
+
+    function unpause() external {
+        require(msg.sender == resolver, "not resolver");
+        _unpause();
     }
 
     // Quote-aware entry point. The backend signs a BetQuote that binds
@@ -156,7 +174,7 @@ contract ParimutuelPool is ReentrancyGuard {
     function betWithQuote(
         IBetQuoteVerifier.BetQuote calldata q,
         bytes calldata signature
-    ) external nonReentrant returns (uint256 positionId) {
+    ) external nonReentrant whenNotPaused returns (uint256 positionId) {
         require(quoteVerifier != address(0), "quote disabled");
         require(q.pool == address(this), "wrong pool");
         require(q.bettor == msg.sender, "bettor mismatch");
@@ -198,7 +216,7 @@ contract ParimutuelPool is ReentrancyGuard {
         emit BetPlaced(bettor, side, amount, positionId);
         emit Transfer(address(0), bettor, positionId);
 
-        require(stake.transferFrom(bettor, address(this), amount), "transferFrom failed");
+        stake.safeTransferFrom(bettor, address(this), amount);
     }
 
     function resolve(uint8 side) external nonReentrant {
@@ -241,10 +259,10 @@ contract ParimutuelPool is ReentrancyGuard {
         emit Claimed(msg.sender, positionId, payout);
         if (fee > 0) {
             emit FeeCollected(feeRecipient, fee, positionId);
-            require(stake.transfer(feeRecipient, fee), "fee transfer failed");
+            stake.safeTransfer(feeRecipient, fee);
         }
         if (payout > 0) {
-            require(stake.transfer(msg.sender, payout), "transfer failed");
+            stake.safeTransfer(msg.sender, payout);
         }
     }
 
@@ -259,6 +277,6 @@ contract ParimutuelPool is ReentrancyGuard {
         position.claimed = true;
         amount = position.amount;
         emit Refunded(msg.sender, positionId, amount);
-        require(stake.transfer(msg.sender, amount), "transfer failed");
+        stake.safeTransfer(msg.sender, amount);
     }
 }

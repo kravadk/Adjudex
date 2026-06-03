@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 // ProofAnchor — public registry that emits a discoverable on-chain event
 // for every Reclaim zkTLS proof captured off-chain.
@@ -23,7 +24,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 // AIJudgeVerifier verdict that references this `proofHash`, not by msg.sender.
 // Duplicate anchors for the same sessionId are rejected so the first
 // publisher binds the hash.
-contract ProofAnchor is Ownable {
+contract ProofAnchor is Ownable2Step {
     // Owner can `overrideAnchor()` to correct a malicious first-publisher
     // binding. Originally there was no override — a contaminated sessionId
     // was permanent. Override path emits a distinct event so indexers can

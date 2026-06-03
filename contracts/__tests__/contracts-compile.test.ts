@@ -71,6 +71,12 @@ describe("contracts", () => {
         "REFUND_GRACE",
         "ResolverTransferred",
         "Refunded",
+        // OZ production hardening: resolver-gated emergency pause.
+        "pause",
+        "unpause",
+        "paused",
+        "Paused",
+        "Unpaused",
       ]),
     );
   });
@@ -89,6 +95,14 @@ describe("contracts", () => {
         "stakeToken",
         "specHashes",
         "specUris",
+        // OZ production hardening: 2-step ownership + pausable creation.
+        "owner",
+        "pendingOwner",
+        "transferOwnership",
+        "acceptOwnership",
+        "pause",
+        "unpause",
+        "paused",
       ]),
     );
   });
@@ -181,6 +195,9 @@ describe("contracts", () => {
         "owner",
         "transferOwnership",
         "AssetRegistered",
+        // OZ production hardening: 2-step ownership handshake.
+        "pendingOwner",
+        "acceptOwnership",
       ]),
     );
   });
@@ -327,6 +344,9 @@ describe("v2 invariants", () => {
         "owner",
         "transferOwnership",
         "ProofAnchored",
+        // OZ production hardening: 2-step ownership handshake.
+        "pendingOwner",
+        "acceptOwnership",
       ]),
     );
   });
