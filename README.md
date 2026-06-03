@@ -107,11 +107,38 @@ createMarket -> approve -> bet -> indexer picks up event ->
 - `<SystemStatusDrawer>` shows live `/api/status` per chain.
 
 **Multi-chain ready**
-- Arbitrum Sepolia today; RHC (Robinhood Chain) config + UI surfaces
-  are wired and render `unavailable` until real RPC + factory + indexer
-  are configured.
+- Arbitrum Sepolia today; Robinhood Chain (RHC, `46630`) is deploy-ready:
+  `pnpm contracts:deploy:rhc` (with a `DRY_RUN=1` preview), a dedicated
+  `/rhc` markets tab, an RHC-native `/rhc/create` flow, and a second
+  indexer process — see [`docs/RHC-DEPLOY.md`](docs/RHC-DEPLOY.md).
 - Stylus Rust port of `AIJudgeVerifier` V2 (k256 ECDSA, sha3 keccak,
   same ABI) for native Rust execution on Arbitrum.
+
+**Sponsor & ecosystem integrations**
+- **GMX** market intelligence (`@gmx-io/sdk` v2): live liquidity / open
+  interest / funding / OHLCV / trades. Powers GMX **signal cards** on
+  crypto market pages, auto-generated **liquidity / OI-imbalance /
+  funding** markets (`POST /api/import/gmx/scan`), and a live GMX snapshot
+  folded into the AI-judge `evidenceHash` for GMX-sourced verdicts.
+- **RWA / tokenized stocks**: `POST /api/import/rwa/scan` generates
+  tokenized-equity (AAPL/TSLA/NVDA/…) and RWA-volume market drafts for RHC.
+- **Dune** transparency: results proxy + admin refresh + reproducible query
+  templates, surfaced on a public **/analytics/sponsors** proof-of-traction
+  page (cross-chain volume / markets / bettors / payouts).
+- **ZeroDev** gasless: kernel smart-account first-bet via paymaster/bundler,
+  exposed as a per-bet "Gasless" toggle in the BetForm
+  (`NEXT_PUBLIC_ZERODEV_GASLESS_ENABLED`).
+- **Fhenix** sealed-market prototype (`contracts/prototypes`, encrypted
+  `euint64` positions with post-deadline reveal — prototype, not deployed).
+- **OpenZeppelin** hardening: every owned contract on `Ownable2Step`;
+  `ParimutuelPool` + `MarketFactory` `Pausable`; `ParimutuelPool` uses
+  `SafeERC20` + `ReentrancyGuard` on every value path.
+- **AWS** App Runner blueprints + CloudWatch alarms fed by EMF metrics
+  (`WebhookFailures` / `ResolutionFailures` / `RpcLagBlocks`, gated by
+  `CLOUDWATCH_EMF`). See [`docs/AWS.md`](docs/AWS.md).
+- **Developer surfaces**: outbound **webhooks** (HMAC-signed,
+  `market.resolved` / `market.created`) and an MCP server
+  (`services/mcp-server`) wrapping the read API as agent tools.
 
 ## What is on chain today
 
@@ -127,6 +154,15 @@ createMarket -> approve -> bet -> indexer picks up event ->
 | `TokenizedStockAdapter` | Registry of tokenized-equity adapters (TSLA, AAPL, …). |
 | `TestUSDC`              | ERC-20 with public `mint()` for testnet. |
 | `TestAggregatorV3`      | Chainlink-shape test feed for `PriceOracle` testing. |
+
+**OpenZeppelin hardening:** `MarketFactory`, `AIJudgeVerifier`, `ProofAnchor`,
+`ReputationOracle`, `PriceOracle`, and `TokenizedStockAdapter` use
+`Ownable2Step` (transfer → accept handshake). `MarketFactory` and
+`ParimutuelPool` are `Pausable` (creation / new-bets only — `claim` and
+`refundAfterGrace` stay open). `ParimutuelPool` settles via `SafeERC20` with
+`ReentrancyGuard` on `bet` / `betWithQuote` / `resolve` / `claim` /
+`refundAfterGrace`. Run `scripts/transfer-ownership.ts` to hand every owner to
+a governance Safe (the Safe calls `acceptOwnership` to finish).
 
 Stylus port: `contracts/stylus/ai-judge-verifier` mirrors the V2 Solidity
 ABI in pure Rust (k256 ECDSA, sha3 keccak). Build with
@@ -409,6 +445,10 @@ touching the live cursor.
 | `/agent/:id`        | Agent profile, recent moves with tx proof, reputation |
 | `/create`           | Spec generator + Market Importer flow |
 | `/resolve`          | Source-proof resolution UI (`<ResolutionClient>`) |
+| `/rhc`              | Robinhood Chain markets tab (indexed RHC markets + RPC/indexer health) |
+| `/rhc/create`       | RHC-native market creation flow (RHC factory + RWA samples) |
+| `/integrations`     | Sponsor integration status: Alchemy / RHC / Dune / GMX / ZeroDev / Fhenix / OZ / AWS |
+| `/analytics/sponsors` | Public proof-of-traction: cross-chain totals + Dune-backed metrics + query templates |
 | `/docs`             | In-app live status + proof panel (`<DocsStatusClient>`) — backend, RPC, factory, indexer readiness |
 | `/api/status`       | Live readiness JSON (DB, RPC, factory, indexer per chain) |
 

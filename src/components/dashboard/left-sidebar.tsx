@@ -4,9 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
+  Boxes,
   Compass,
   Crown,
   Gift,
+  Layers,
   Send,
   Settings,
   Target,
@@ -32,6 +35,9 @@ const NAV: Item[] = [
   { href: "/referrals", match: "/referrals", label: "Referrals", Icon: Gift },
   { href: "/quests", match: "/quests", label: "Quests", Icon: Target },
   { href: "/portfolio", match: "/portfolio", label: "Profile", Icon: User },
+  { href: "/rhc", match: "/rhc", label: "Robinhood Chain", Icon: Layers },
+  { href: "/analytics/sponsors", match: "/analytics/sponsors", label: "Traction", Icon: BarChart3 },
+  { href: "/integrations", match: "/integrations", label: "Integrations", Icon: Boxes },
   { href: "/settings", match: "/settings", label: "Settings", Icon: Settings },
 ];
 
