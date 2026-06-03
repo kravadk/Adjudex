@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, ExternalLink, Info, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Info, LineChart, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useChainId } from "wagmi";
 import { getBytecode, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { keccak256, parseEventLogs, toBytes, type Address } from "viem";
@@ -234,6 +234,25 @@ export function CreateMarketClient() {
       }
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Could not scan import sources.");
+    } finally {
+      setImportBusy(null);
+    }
+  }
+
+  async function scanGmxMarkets() {
+    setImportBusy("gmx");
+    setImportError(null);
+    try {
+      const result = await postJson<{
+        candidates: ImportCandidate[];
+        sourceErrors: Array<{ sourceId: string; error: string }>;
+      }>("/api/import/gmx/scan?limit=8", {});
+      setCandidates((rows) => mergeCandidates(result.candidates, rows));
+      if (result.sourceErrors.length > 0) {
+        setImportError(result.sourceErrors.map((e) => `${e.sourceId}: ${e.error}`).join("; "));
+      }
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Could not scan GMX markets.");
     } finally {
       setImportBusy(null);
     }
@@ -559,6 +578,15 @@ export function CreateMarketClient() {
                 <Info className="w-3.5 h-3.5" style={{ color: "var(--t4)" }} />
               </span>
               <div className="flex-1" />
+              <button
+                onClick={scanGmxMarkets}
+                disabled={importBusy === "gmx"}
+                className="btn ghost"
+                style={{ opacity: importBusy === "gmx" ? 0.55 : 1 }}
+              >
+                <LineChart className="w-3.5 h-3.5" />
+                {importBusy === "gmx" ? "Loading GMX..." : "GMX markets"}
+              </button>
               <button
                 onClick={scanSources}
                 disabled={importBusy === "scan"}
@@ -1161,6 +1189,15 @@ async function assertFactoryHasCode(factoryAddress: Address, chainId: SupportedC
   if (!bytecode || bytecode === "0x") {
     throw new Error(`No MarketFactory contract code was found at ${factoryAddress} on active chain ${chainId}.`);
   }
+}
+
+function mergeCandidates(next: ImportCandidate[], current: ImportCandidate[]) {
+  const byId = new Map<string, ImportCandidate>();
+  for (const candidate of next) byId.set(candidate.id, candidate);
+  for (const candidate of current) {
+    if (!byId.has(candidate.id)) byId.set(candidate.id, candidate);
+  }
+  return Array.from(byId.values());
 }
 
 async function getJson<T>(url: string): Promise<T> {

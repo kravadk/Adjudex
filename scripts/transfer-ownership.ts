@@ -14,11 +14,11 @@
 // Coverage:
 //   AIJudgeVerifier  — has transferOwnership(address) ✅
 //   MarketFactory    — no owner pattern (permissionless) — SKIP, document gap
-//   ProofAnchor      — no owner pattern              — SKIP, document gap
+//   ProofAnchor      — OpenZeppelin Ownable + transferOwnership(address) ✅
 //   BetQuoteVerifier — immutable _quoteSigner        — SKIP, document gap
 //   ReputationOracle — no owner pattern              — SKIP, document gap
 //   PriceOracle      — owner without transferOwnership — SKIP (contract change needed)
-//   TokenizedStockAdapter — owner without transferOwnership — SKIP
+//   TokenizedStockAdapter — OpenZeppelin Ownable + transferOwnership(address) ✅
 //
 // See docs/GOVERNANCE.md for the contract-change list required to make
 // all contracts multisig-owned before mainnet.
@@ -43,6 +43,7 @@ type Deployments = Record<string, string | number | undefined> & {
   proofAnchor?: string;
   betQuoteVerifier?: string;
   reputationOracle?: string;
+  tokenizedStockAdapter?: string;
 };
 
 const TRANSFER_OWNERSHIP_ABI = [
@@ -84,8 +85,7 @@ const TARGETS: Target[] = [
   {
     name: "ProofAnchor",
     key: "proofAnchor",
-    supportsTransfer: false,
-    note: "Contract has no owner pattern; mint-anyone style. No transfer needed.",
+    supportsTransfer: true,
   },
   {
     name: "BetQuoteVerifier",
@@ -98,6 +98,11 @@ const TARGETS: Target[] = [
     key: "reputationOracle",
     supportsTransfer: false,
     note: "Permissionless self-attest. No owner.",
+  },
+  {
+    name: "TokenizedStockAdapter",
+    key: "tokenizedStockAdapter",
+    supportsTransfer: true,
   },
 ];
 

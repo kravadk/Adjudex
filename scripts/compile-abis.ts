@@ -8,6 +8,13 @@ import solc from "solc";
 const root = process.cwd();
 const src = join(root, "contracts", "src");
 
+function findImports(importPath: string) {
+  if (importPath.startsWith("@openzeppelin/")) {
+    return { contents: readFileSync(join(root, "node_modules", importPath), "utf8") };
+  }
+  return { error: `Unsupported import: ${importPath}` };
+}
+
 const sources = {
   "ParimutuelPool.sol": { content: readFileSync(join(src, "ParimutuelPool.sol"), "utf8") },
   "MarketFactory.sol": { content: readFileSync(join(src, "MarketFactory.sol"), "utf8") },
@@ -30,7 +37,7 @@ const input = {
   },
 };
 
-const output = JSON.parse(solc.compile(JSON.stringify(input))) as {
+const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports })) as {
   errors?: Array<{ severity: string; formattedMessage: string }>;
   contracts: Record<string, Record<string, { abi: unknown }>>;
 };

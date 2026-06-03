@@ -1,18 +1,25 @@
 import { createConfig, http } from "wagmi";
 import { arbitrumSepolia } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
-import { robinhoodChainTestnet } from "@/lib/onchain-config";
+import {
+  getPublicArbitrumSepoliaRpcUrl,
+  getPublicRhcRpcUrl,
+  robinhoodChainTestnet,
+} from "@/lib/onchain-config";
 
 export { robinhoodChainTestnet };
 
-export const wagmiConfig = process.env.NEXT_PUBLIC_RHC_RPC_URL
+const arbitrumSepoliaRpcUrl = getPublicArbitrumSepoliaRpcUrl();
+const rhcRpcUrl = getPublicRhcRpcUrl();
+
+export const wagmiConfig = rhcRpcUrl
   ? createConfig({
       chains: [arbitrumSepolia, robinhoodChainTestnet],
       ssr: true,
       connectors: [injected()],
       transports: {
-        [arbitrumSepolia.id]: http(process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL),
-        [robinhoodChainTestnet.id]: http(process.env.NEXT_PUBLIC_RHC_RPC_URL),
+        [arbitrumSepolia.id]: http(arbitrumSepoliaRpcUrl),
+        [robinhoodChainTestnet.id]: http(rhcRpcUrl),
       },
     })
   : createConfig({
@@ -20,6 +27,6 @@ export const wagmiConfig = process.env.NEXT_PUBLIC_RHC_RPC_URL
       ssr: true,
       connectors: [injected()],
       transports: {
-        [arbitrumSepolia.id]: http(process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL),
+        [arbitrumSepolia.id]: http(arbitrumSepoliaRpcUrl),
       },
     });

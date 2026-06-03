@@ -55,11 +55,11 @@ Each signer holds their key in a hardware wallet (Ledger / Trezor).
 |---|---|---|---|
 | **AIJudgeVerifier** | [0xb0d1a133104b93d31bbb3ff6e766d38c7152bcef](https://sepolia.arbiscan.io/address/0xb0d1a133104b93d31bbb3ff6e766d38c7152bcef) | `owner` + `transferOwnership` | yes |
 | **MarketFactory** | [0xe6c4876e1447ffad3fb5a4e3729d08852154b8f1](https://sepolia.arbiscan.io/address/0xe6c4876e1447ffad3fb5a4e3729d08852154b8f1) | Permissionless (no owner) | N/A |
-| **ProofAnchor** | from deployments | Permissionless | N/A |
+| **ProofAnchor** | from deployments | OpenZeppelin `Ownable` + `transferOwnership` | yes |
 | **BetQuoteVerifier** | from deployments | Immutable `_quoteSigner` | no (requires contract change) |
 | **ReputationOracle** | [0xc867f72546c27360f05ee93e782d6fbbf2335cf1](https://sepolia.arbiscan.io/address/0xc867f72546c27360f05ee93e782d6fbbf2335cf1) | Self-attest, permissionless | N/A |
 | **PriceOracle** | [0xf41055a507e42aa142fe7943aa8a742d9ffcdb9c](https://sepolia.arbiscan.io/address/0xf41055a507e42aa142fe7943aa8a742d9ffcdb9c) | `owner` WITHOUT `transferOwnership` | no (requires contract change) |
-| **TokenizedStockAdapter** | [0x1c90df5f08c87655ee79e6f925d003094708d88e](https://sepolia.arbiscan.io/address/0x1c90df5f08c87655ee79e6f925d003094708d88e) | `owner` WITHOUT `transferOwnership` | no (requires contract change) |
+| **TokenizedStockAdapter** | [0x1c90df5f08c87655ee79e6f925d003094708d88e](https://sepolia.arbiscan.io/address/0x1c90df5f08c87655ee79e6f925d003094708d88e) | OpenZeppelin `Ownable` + `transferOwnership` | yes |
 
 ## Pre-mainnet contract changes
 
@@ -103,10 +103,7 @@ function transferOwnership(address newOwner) external onlyOwner {
 }
 ```
 
-### 3. `TokenizedStockAdapter` — add `transferOwnership`
-Same as PriceOracle.
-
-### 4. (optional) `MarketFactory` — add pausable
+### 3. (optional) `MarketFactory` — add pausable
 Currently permissionless. For mainnet it's useful to add an emergency
 pause:
 ```solidity

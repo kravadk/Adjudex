@@ -1,5 +1,96 @@
 [
   {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "spender",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "allowance",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "needed",
+        "type": "uint256"
+      }
+    ],
+    "name": "ERC20InsufficientAllowance",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "balance",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "needed",
+        "type": "uint256"
+      }
+    ],
+    "name": "ERC20InsufficientBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "approver",
+        "type": "address"
+      }
+    ],
+    "name": "ERC20InvalidApprover",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "receiver",
+        "type": "address"
+      }
+    ],
+    "name": "ERC20InvalidReceiver",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      }
+    ],
+    "name": "ERC20InvalidSender",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "spender",
+        "type": "address"
+      }
+    ],
+    "name": "ERC20InvalidSpender",
+    "type": "error"
+  },
+  {
     "anonymous": false,
     "inputs": [
       {
@@ -17,7 +108,7 @@
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "amount",
+        "name": "value",
         "type": "uint256"
       }
     ],
@@ -42,7 +133,7 @@
       {
         "indexed": false,
         "internalType": "uint256",
-        "name": "amount",
+        "name": "value",
         "type": "uint256"
       }
     ],
@@ -53,12 +144,12 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "owner",
         "type": "address"
       },
       {
         "internalType": "address",
-        "name": "",
+        "name": "spender",
         "type": "address"
       }
     ],
@@ -82,7 +173,7 @@
       },
       {
         "internalType": "uint256",
-        "name": "amount",
+        "name": "value",
         "type": "uint256"
       }
     ],
@@ -101,7 +192,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "account",
         "type": "address"
       }
     ],
@@ -126,7 +217,7 @@
         "type": "uint8"
       }
     ],
-    "stateMutability": "view",
+    "stateMutability": "pure",
     "type": "function"
   },
   {
@@ -195,7 +286,7 @@
       },
       {
         "internalType": "uint256",
-        "name": "amount",
+        "name": "value",
         "type": "uint256"
       }
     ],
@@ -224,7 +315,7 @@
       },
       {
         "internalType": "uint256",
-        "name": "amount",
+        "name": "value",
         "type": "uint256"
       }
     ],

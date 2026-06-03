@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-interface IERC20 {
-    function transfer(address to, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    function balanceOf(address a) external view returns (uint256);
-}
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 // Minimal interface to BetQuoteVerifier. The pool only needs the digest +
 // view-side signature check; replay protection is tracked locally in
@@ -28,7 +25,7 @@ interface IBetQuoteVerifier {
 
 // Parimutuel pool with USDC settlement, soulbound position NFT-shape, and a
 // refund-after-grace fallback so stuck markets never lock capital forever.
-contract ParimutuelPool {
+contract ParimutuelPool is ReentrancyGuard {
     enum Side { YES, NO }
 
     IERC20 public immutable stake;
@@ -68,8 +65,6 @@ contract ParimutuelPool {
     bool public resolved;
     Side public resolvedSide;
 
-    uint256 private _lock = 1;
-
     struct Position {
         address bettor;
         Side side;
@@ -93,13 +88,6 @@ contract ParimutuelPool {
         uint256 nonce,
         uint256 indexed positionId
     );
-
-    modifier nonReentrant() {
-        require(_lock == 1, "reentrancy");
-        _lock = 2;
-        _;
-        _lock = 1;
-    }
 
     constructor(
         address stakeToken,

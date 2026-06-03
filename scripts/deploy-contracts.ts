@@ -35,6 +35,12 @@ function assertTestnetOptIn() {
 
 function compile(root: string): SolcOutput {
   const src = join(root, "contracts", "src");
+  const findImports = (importPath: string) => {
+    if (importPath.startsWith("@openzeppelin/")) {
+      return { contents: readFileSync(join(root, "node_modules", importPath), "utf8") };
+    }
+    return { error: `Unsupported import: ${importPath}` };
+  };
   const input = {
     language: "Solidity",
     sources: {
@@ -54,7 +60,7 @@ function compile(root: string): SolcOutput {
       outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
     },
   };
-  const output = JSON.parse(solc.compile(JSON.stringify(input))) as SolcOutput;
+  const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports })) as SolcOutput;
   const errors = output.errors?.filter((e) => e.severity === "error") ?? [];
   if (errors.length > 0) {
     throw new Error(errors.map((e) => e.formattedMessage).join("\n"));
@@ -368,4 +374,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

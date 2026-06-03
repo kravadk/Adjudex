@@ -32,6 +32,8 @@ import { startMatchResolveWorker } from "./match-resolve-worker";
 import { startWebhookWorker } from "./webhook-worker";
 import { registerWebhookRoutes } from "./webhook-routes";
 import { enqueueMarketResolved } from "./webhooks";
+import { registerSponsorIntegrationRoutes } from "./sponsor-routes";
+import { buildGmxImportCandidates, configuredArbitrumSepoliaRpcUrl, configuredRhcRpcUrl, executeDuneSummary } from "./sponsor-integrations";
 import { applyGeoBlock } from "./geo-block";
 import {
   createStripeCheckoutSession,
@@ -153,9 +155,9 @@ server.get("/health", async (_request, reply) => {
 
 server.get("/api/status", async () => {
   const database = await checkDatabase();
-  const arbitrumRpc = await checkRpc(process.env.ARBITRUM_SEPOLIA_RPC_URL, 421614);
+  const arbitrumRpc = await checkRpc(configuredArbitrumSepoliaRpcUrl(), 421614);
   const rhcChainId = Number(process.env.RHC_CHAIN_ID ?? 46630);
-  const rhcRpc = await checkRpc(process.env.RHC_RPC_URL, rhcChainId);
+  const rhcRpc = await checkRpc(configuredRhcRpcUrl(), rhcChainId);
   const rpc = {
     ok: arbitrumRpc.ok || rhcRpc.ok,
     configured: arbitrumRpc.configured || rhcRpc.configured,
@@ -197,7 +199,7 @@ server.get("/api/status", async () => {
 });
 
 server.get("/api/markets", async (request) => {
-  const params = request.query as { category?: string; hotOnly?: string; query?: string };
+  const params = request.query as { category?: string; hotOnly?: string; query?: string; chainId?: string };
   const cacheKey = marketsCacheKey(params);
   if (cacheKey) {
     const cached = await redisGetJson<ReturnType<typeof toMarket>[]>(cacheKey).catch((error) => {
@@ -218,6 +220,13 @@ server.get("/api/markets", async (request) => {
   if (params.query) {
     values.push(`%${params.query}%`);
     where.push(`(m.title ILIKE $${values.length} OR m.description ILIKE $${values.length})`);
+  }
+  if (params.chainId) {
+    const chainId = Number(params.chainId);
+    if (Number.isSafeInteger(chainId) && chainId > 0) {
+      values.push(chainId);
+      where.push(`m.chain_id = $${values.length}`);
+    }
   }
 
   const result = await query<MarketRow>(
@@ -1518,6 +1527,19 @@ server.get("/api/quests", async (request) => {
 // --- Webhooks (developer integrations) ---
 registerWebhookRoutes(server, { requireSession });
 
+// --- Sponsor / partner integrations ---
+registerSponsorIntegrationRoutes(server);
+
+server.post("/api/integrations/dune/summary/refresh", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+  const result = await executeDuneSummary();
+  if ("error" in result && result.configured) {
+    return reply.code(502).send(result);
+  }
+  return result;
+});
+
 server.get("/api/notifications", async (request, reply) => {
   const session = await requireSession(request.headers.cookie);
   if (!session) return reply.code(401).send({ error: "auth_required" });
@@ -1691,6 +1713,26 @@ server.post("/api/import/scan", async (request, reply) => {
     scannedSources: sources.length,
     candidates: candidates.map(toImportCandidate),
     sourceErrors,
+  };
+});
+
+server.post<{ Querystring: { limit?: string } }>("/api/import/gmx/scan", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+
+  const limit = clampInteger(Number(request.query.limit ?? 8), 1, 20);
+  const drafts = await buildGmxImportCandidates(limit);
+  const candidates: ImportCandidateRow[] = [];
+  for (const draft of drafts) {
+    const candidateId = await upsertImportCandidate(draft);
+    const row = await getImportCandidate(candidateId);
+    if (row) candidates.push(row);
+  }
+
+  return {
+    scannedSources: 1,
+    candidates: candidates.map(toImportCandidate),
+    sourceErrors: [],
   };
 });
 
@@ -2417,8 +2459,8 @@ function configuredReputationOracleAddress(chainId?: number) {
 
 function rpcConfigForChain(chainId: number) {
   const rhcChainId = Number(process.env.RHC_CHAIN_ID ?? 46630);
-  if (chainId === 421614) return { supported: true, rpcUrl: process.env.ARBITRUM_SEPOLIA_RPC_URL };
-  if (chainId === rhcChainId) return { supported: true, rpcUrl: process.env.RHC_RPC_URL };
+  if (chainId === 421614) return { supported: true, rpcUrl: configuredArbitrumSepoliaRpcUrl() };
+  if (chainId === rhcChainId) return { supported: true, rpcUrl: configuredRhcRpcUrl() };
   return { supported: false, rpcUrl: undefined };
 }
 

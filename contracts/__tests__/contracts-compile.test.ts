@@ -3,6 +3,13 @@ import { join } from "node:path";
 import solc from "solc";
 import { describe, expect, it } from "vitest";
 
+function findImports(importPath: string) {
+  if (importPath.startsWith("@openzeppelin/")) {
+    return { contents: readFileSync(join(process.cwd(), "node_modules", importPath), "utf8") };
+  }
+  return { error: `Unsupported import: ${importPath}` };
+}
+
 function compileContracts() {
   const root = join(process.cwd(), "contracts", "src");
   const input = {
@@ -24,7 +31,7 @@ function compileContracts() {
       outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
     },
   };
-  return JSON.parse(solc.compile(JSON.stringify(input))) as {
+  return JSON.parse(solc.compile(JSON.stringify(input), { import: findImports })) as {
     errors?: Array<{ severity: "error" | "warning"; formattedMessage: string }>;
     contracts: Record<string, Record<string, { abi: Array<{ type: string; name?: string }>; evm: { bytecode: { object: string } } }>>;
   };
@@ -35,7 +42,7 @@ describe("contracts", () => {
     const output = compileContracts();
     const errors = output.errors?.filter((e) => e.severity === "error") ?? [];
     expect(errors.map((e) => e.formattedMessage)).toEqual([]);
-  });
+  }, 20_000);
 
   it("ParimutuelPool exposes USDC-aware ABI", () => {
     const output = compileContracts();
@@ -107,7 +114,16 @@ describe("contracts", () => {
     const usdc = output.contracts["TestUSDC.sol"].TestUSDC;
     const names = usdc.abi.map((item) => item.name).filter(Boolean);
     expect(names).toEqual(
-      expect.arrayContaining(["transfer", "transferFrom", "approve", "balanceOf", "allowance", "mint"]),
+      expect.arrayContaining([
+        "transfer",
+        "transferFrom",
+        "approve",
+        "balanceOf",
+        "allowance",
+        "mint",
+        "decimals",
+        "totalSupply",
+      ]),
     );
   });
 
@@ -157,7 +173,15 @@ describe("contracts", () => {
     const v = output.contracts["TokenizedStockAdapter.sol"].TokenizedStockAdapter;
     const names = v.abi.map((item) => item.name).filter(Boolean);
     expect(names).toEqual(
-      expect.arrayContaining(["register", "setActive", "tokenOf", "tickerCount", "AssetRegistered"]),
+      expect.arrayContaining([
+        "register",
+        "setActive",
+        "tokenOf",
+        "tickerCount",
+        "owner",
+        "transferOwnership",
+        "AssetRegistered",
+      ]),
     );
   });
 
@@ -300,6 +324,8 @@ describe("v2 invariants", () => {
         "getAnchorByKey",
         "isAnchored",
         "anchors",
+        "owner",
+        "transferOwnership",
         "ProofAnchored",
       ]),
     );

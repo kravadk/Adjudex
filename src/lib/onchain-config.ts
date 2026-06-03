@@ -13,6 +13,8 @@ const PUBLIC_ENV: Record<string, string | undefined> = {
   NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL:
     process.env.NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL,
+  NEXT_PUBLIC_ALCHEMY_ARBITRUM_SEPOLIA_API_KEY:
+    process.env.NEXT_PUBLIC_ALCHEMY_ARBITRUM_SEPOLIA_API_KEY,
   NEXT_PUBLIC_MARKET_FACTORY_ADDRESS:
     process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS,
   NEXT_PUBLIC_REPUTATION_ORACLE_ADDRESS:
@@ -28,6 +30,7 @@ const PUBLIC_ENV: Record<string, string | undefined> = {
     process.env.NEXT_PUBLIC_TOKENIZED_STOCK_ADAPTER_ADDRESS,
   NEXT_PUBLIC_RHC_CHAIN_ID: process.env.NEXT_PUBLIC_RHC_CHAIN_ID,
   NEXT_PUBLIC_RHC_RPC_URL: process.env.NEXT_PUBLIC_RHC_RPC_URL,
+  NEXT_PUBLIC_ALCHEMY_RHC_API_KEY: process.env.NEXT_PUBLIC_ALCHEMY_RHC_API_KEY,
   NEXT_PUBLIC_RHC_EXPLORER_URL: process.env.NEXT_PUBLIC_RHC_EXPLORER_URL,
   NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS:
     process.env.NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS,
@@ -80,7 +83,28 @@ export function getRhcChainId(): number {
   );
 }
 
-const rhcPublicRpcUrl = readEnv("NEXT_PUBLIC_RHC_RPC_URL");
+export function alchemyPublicRpcUrl(
+  network: "arb-sepolia" | "arb-mainnet" | "robinhood-testnet",
+  apiKey?: string,
+): string | undefined {
+  return apiKey ? `https://${network}.g.alchemy.com/v2/${apiKey}` : undefined;
+}
+
+export function getPublicArbitrumSepoliaRpcUrl(): string | undefined {
+  return (
+    readEnv("NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL") ??
+    alchemyPublicRpcUrl("arb-sepolia", readEnv("NEXT_PUBLIC_ALCHEMY_ARBITRUM_SEPOLIA_API_KEY"))
+  );
+}
+
+export function getPublicRhcRpcUrl(): string | undefined {
+  return (
+    readEnv("NEXT_PUBLIC_RHC_RPC_URL") ??
+    alchemyPublicRpcUrl("robinhood-testnet", readEnv("NEXT_PUBLIC_ALCHEMY_RHC_API_KEY"))
+  );
+}
+
+const rhcPublicRpcUrl = getPublicRhcRpcUrl();
 
 export const robinhoodChainTestnet = defineChain({
   id: getRhcChainId(),
@@ -149,12 +173,12 @@ export function resolveDirectOnchainConfig(serviceName: string): DirectOnchainCo
   const explicit = explicitDirectConfig(serviceName);
   if (explicit) return explicit;
 
-  const rhcRpcUrl = readEnv("NEXT_PUBLIC_RHC_RPC_URL");
+  const rhcRpcUrl = getPublicRhcRpcUrl();
   const rhcFactoryAddress = readAddressEnv("NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS");
   if (rhcRpcUrl || rhcFactoryAddress) {
     if (!rhcRpcUrl || !rhcFactoryAddress) {
       throw new Error(
-        `${serviceName} detected RHC configuration. Set both NEXT_PUBLIC_RHC_RPC_URL and NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS, or set the NEXT_PUBLIC_ONCHAIN_* variables explicitly.`,
+        `${serviceName} detected RHC configuration. Set NEXT_PUBLIC_RHC_RPC_URL or NEXT_PUBLIC_ALCHEMY_RHC_API_KEY, plus NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS, or set the NEXT_PUBLIC_ONCHAIN_* variables explicitly.`,
       );
     }
     const chainId = getRhcChainId();
@@ -166,7 +190,7 @@ export function resolveDirectOnchainConfig(serviceName: string): DirectOnchainCo
     };
   }
 
-  const rpcUrl = readEnv("NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL");
+  const rpcUrl = getPublicArbitrumSepoliaRpcUrl();
   const factoryAddress = readAddressEnv("NEXT_PUBLIC_MARKET_FACTORY_ADDRESS");
   if (!rpcUrl || !factoryAddress) {
     throw new Error(

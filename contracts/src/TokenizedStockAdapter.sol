@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 // Registry for tokenized stocks (xStocks/Ondo-style). Markets reference assets
 // by ticker. `active` lets the operator handle corp actions (delisting, ticker
 // change) without breaking already-settled markets.
-contract TokenizedStockAdapter {
-    address public immutable owner;
-
+contract TokenizedStockAdapter is Ownable {
     struct Asset {
         address token;
         bool active;
@@ -18,12 +18,7 @@ contract TokenizedStockAdapter {
     event AssetRegistered(bytes32 indexed ticker, address token);
     event AssetActiveSet(bytes32 indexed ticker, bool active);
 
-    constructor() { owner = msg.sender; }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
-    }
+    constructor() Ownable(msg.sender) {}
 
     function register(string calldata ticker, address token) external onlyOwner returns (bytes32 key) {
         require(token != address(0), "token=0");

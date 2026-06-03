@@ -91,8 +91,10 @@ pnpm tsx scripts/transfer-ownership.ts
 # Review output. If OK, run without DRY_RUN.
 ```
 
-**WARNING**: for mainnet `BetQuoteVerifier` + `PriceOracle` + `TokenizedStockAdapter`
-require contract changes (add `transferOwnership`) — see [GOVERNANCE.md](GOVERNANCE.md#pre-mainnet-contract-changes).
+**WARNING**: for mainnet `BetQuoteVerifier` + `PriceOracle`
+still require contract changes before they can be fully multisig-owned — see
+[GOVERNANCE.md](GOVERNANCE.md#pre-mainnet-contract-changes). `ProofAnchor`
+and `TokenizedStockAdapter` now use OpenZeppelin `Ownable`.
 
 ## Step 5. Wire frontend to mainnet
 

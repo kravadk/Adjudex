@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 // ProofAnchor — public registry that emits a discoverable on-chain event
 // for every Reclaim zkTLS proof captured off-chain.
 //
@@ -21,13 +23,11 @@ pragma solidity ^0.8.26;
 // AIJudgeVerifier verdict that references this `proofHash`, not by msg.sender.
 // Duplicate anchors for the same sessionId are rejected so the first
 // publisher binds the hash.
-contract ProofAnchor {
+contract ProofAnchor is Ownable {
     // Owner can `overrideAnchor()` to correct a malicious first-publisher
     // binding. Originally there was no override — a contaminated sessionId
     // was permanent. Override path emits a distinct event so indexers can
     // re-derive the canonical proofHash for the affected session.
-    address public immutable owner;
-
     struct Anchor {
         bytes32 proofHash;
         bytes cid;
@@ -54,12 +54,7 @@ contract ProofAnchor {
         uint64 overriddenAt
     );
 
-    constructor() { owner = msg.sender; }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
-    }
+    constructor() Ownable(msg.sender) {}
 
     function anchor(string calldata sessionId, bytes32 proofHash, bytes calldata cid) external {
         require(proofHash != bytes32(0), "proofHash=0");

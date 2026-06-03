@@ -989,7 +989,9 @@ describe("transaction chain and log identity", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const positionLookup = state.query.mock.calls.find(([sql]) => String(sql).includes("FROM positions"));
+    const positionLookup = state.query.mock.calls.find(
+      ([sql]) => String(sql).includes("SELECT * FROM positions") && String(sql).includes("AND chain_id = $6"),
+    );
     expect(positionLookup?.[0]).toContain("AND chain_id = $6");
     expect(positionLookup?.[1]).toEqual([
       "pos-1",

@@ -157,6 +157,7 @@ export type MarketFilters = {
   category?: MarketCategory | "all";
   hotOnly?: boolean;
   query?: string;
+  chainId?: number;
 };
 
 export type MarketSpec = {

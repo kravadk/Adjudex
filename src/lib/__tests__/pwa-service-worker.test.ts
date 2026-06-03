@@ -10,8 +10,8 @@ describe("PWA service worker", () => {
     expect(source).toContain("if (isApiRequest(url)) return;");
   });
 
-  it("only pre-caches the offline shell", () => {
-    expect(source).toContain('const SHELL_URLS = ["/offline"]');
+  it("only pre-caches the offline shell assets", () => {
+    expect(source).toContain('const SHELL_URLS = ["/offline", "/logo.png"]');
     expect(source).not.toContain("/portfolio");
     expect(source).not.toContain("/market/");
   });

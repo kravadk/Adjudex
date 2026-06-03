@@ -126,6 +126,27 @@ timeout is retried, then marked `failed`.
 
 ---
 
+## Sponsor Integrations
+
+```
+GET /api/integrations/sponsors      -> usage/configuration evidence
+GET /api/integrations/dune/summary  -> Dune query result rows
+POST /api/integrations/dune/summary/refresh -> execute configured Dune query
+GET /api/integrations/gmx/markets   -> GMX SDK market snapshot
+POST /api/import/gmx/scan           -> upsert GMX market candidates into importer
+GET /api/integrations/zerodev/session-policy -> bounded gasless/session-key policy
+GET /api/integrations/fhenix/prototype -> sealed-market prototype readiness
+```
+
+`DUNE_API_KEY` + `DUNE_ADJUDEX_SUMMARY_QUERY_ID` enable live Dune data.
+`GMX_CHAIN_ID` defaults to Arbitrum One (`42161`) and uses the GMX SDK API.
+`ZERODEV_PROJECT_ID` plus paymaster/bundler env enables the session policy.
+`FHENIX_RPC_URL` + `FHENIX_CHAIN_ID` mark the sealed-market prototype ready.
+Alchemy RPC fallback is supported via `ALCHEMY_ARBITRUM_SEPOLIA_API_KEY`
+and `ALCHEMY_RHC_API_KEY` when direct RPC URLs are not set.
+
+---
+
 ## Errors
 
 Standard HTTP codes. Body is `{ "error": "snake_case_code" }`, e.g.
