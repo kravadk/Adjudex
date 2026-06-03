@@ -131,12 +131,60 @@ function patchEnvLocal(root: string, patches: Record<string, string>) {
   writeFileSync(envPath, body);
 }
 
+// DRY_RUN=1: compile + print the deploy plan without touching the chain.
+// Needs no funds and no live RPC, so the deploy path (especially DEPLOY_CHAIN=
+// rhc) can be verified before spending gas.
+function printDeployPlan(
+  root: string,
+  chain: Chain,
+  env: "arb" | "rhc",
+  rpcUrl: string | undefined,
+  privateKey: Hex | undefined,
+): void {
+  const compiled = compile(root);
+  const account = privateKey ? privateKeyToAccount(privateKey) : null;
+  const order: Array<[string, string]> = [
+    ["TestUSDC.sol", "TestUSDC"],
+    ["AIJudgeVerifier.sol", "AIJudgeVerifier"],
+    ["BetQuoteVerifier.sol", "BetQuoteVerifier"],
+    ["MarketFactory.sol", "MarketFactory"],
+    ["ReputationOracle.sol", "ReputationOracle"],
+    ["PriceOracle.sol", "PriceOracle"],
+    ["TokenizedStockAdapter.sol", "TokenizedStockAdapter"],
+    ["ProofAnchor.sol", "ProofAnchor"],
+  ];
+  console.log("DRY RUN - no transactions will be sent.\n");
+  console.log(`Target chain:  ${chain.name} (${chain.id}) [${env}]`);
+  console.log(`RPC:           ${rpcUrl ? "configured" : "MISSING"}`);
+  console.log(`Deployer:      ${account ? account.address : "DEPLOYER_PRIVATE_KEY not set"}`);
+  console.log(`Writes:        deployments/${chain.id}.json + .env.local patches`);
+  console.log("\nContracts compiled OK. Deploy order (bytecode size):");
+  for (const [file, name] of order) {
+    const compiledContract = compiled.contracts[file]?.[name];
+    const bytes = compiledContract ? compiledContract.evm.bytecode.object.length / 2 : 0;
+    console.log(`  - ${name}: ${bytes.toLocaleString("en-US")} bytes`);
+  }
+  console.log(
+    "\nTo deploy for real: set ADJUDEX_TESTNET_ONLY=1, a funded DEPLOYER_PRIVATE_KEY, " +
+      (env === "rhc" ? "RHC_RPC_URL or ALCHEMY_RHC_API_KEY, " : "ARBITRUM_SEPOLIA_RPC_URL, ") +
+      "and re-run without DRY_RUN=1.",
+  );
+}
+
 async function main() {
-  assertTestnetOptIn();
+  const dryRun = process.env.DRY_RUN === "1";
+  if (!dryRun) assertTestnetOptIn();
 
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY as Hex | undefined;
   const target = targetDeploymentChain();
   const rpcUrl = target.rpcUrl;
+  const root = process.cwd();
+  const chain = target.chain;
+
+  if (dryRun) {
+    printDeployPlan(root, chain, target.env, rpcUrl, privateKey);
+    return;
+  }
 
   if (!privateKey || !rpcUrl) {
     throw new Error(
@@ -146,9 +194,7 @@ async function main() {
     );
   }
 
-  const root = process.cwd();
   const account = privateKeyToAccount(privateKey);
-  const chain = target.chain;
   const transport = http(rpcUrl);
   const walletClient = createWalletClient({ account, chain, transport });
   const publicClient = createPublicClient({ chain, transport });
