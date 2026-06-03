@@ -46,6 +46,30 @@ type GmxMarketTicker = {
   longInterestUsd?: bigint;
   shortInterestUsd?: bigint;
   priceChangePercent24hBps?: bigint;
+  // Funding factor per second, GMX 1e30-scaled. Sign tells which side pays;
+  // magnitude is only annualized as an estimate (see gmxFundingApr).
+  fundingRateLong?: bigint;
+  fundingRateShort?: bigint;
+};
+
+type GmxMarketInfoRow = {
+  name?: string;
+  symbol?: string;
+  marketToken?: string;
+  marketTokenAddress?: string;
+  indexToken?: string;
+  indexTokenAddress?: string;
+  longToken?: string;
+  longTokenAddress?: string;
+  shortToken?: string;
+  shortTokenAddress?: string;
+  isListed?: boolean;
+  openInterestLong?: string | number | bigint;
+  openInterestShort?: string | number | bigint;
+  availableLiquidityLong?: string | number | bigint;
+  availableLiquidityShort?: string | number | bigint;
+  fundingRateLong?: string | number | bigint;
+  fundingRateShort?: string | number | bigint;
 };
 
 const GMX_SUPPORTED_CHAIN_IDS = new Set<ContractsChainId>([42161, 421614, 43114, 43113, 3637, 4326]);
@@ -103,6 +127,7 @@ export function sponsorStatuses(): SponsorStatus[] {
       configured: Boolean(process.env.DUNE_API_KEY && process.env.DUNE_ADJUDEX_SUMMARY_QUERY_ID),
       evidence: [
         "Backend Dune results proxy at /api/integrations/dune/summary.",
+        "Reusable SQL templates are exposed at /api/integrations/dune/templates for traction, accuracy, chain comparison, and webhook delivery.",
         "Set DUNE_API_KEY and DUNE_ADJUDEX_SUMMARY_QUERY_ID for live dashboard data.",
       ],
     },
@@ -112,7 +137,8 @@ export function sponsorStatuses(): SponsorStatus[] {
       used: true,
       configured: true,
       evidence: [
-        "@gmx-io/sdk is installed and used by /api/integrations/gmx/markets.",
+        "@gmx-io/sdk is installed and used by /api/integrations/gmx/markets and /api/integrations/gmx/signal.",
+        "GMX signal endpoint reads markets, tickers, rates, APY, annualized performance, OHLCV candles, and recent trades for market evidence.",
         `GMX chain id defaults to ${configuredGmxChainId()}.`,
       ],
     },
@@ -134,6 +160,7 @@ export function sponsorStatuses(): SponsorStatus[] {
       configured: Boolean(process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION),
       evidence: [
         "AWS App Runner blueprints live in infra/aws/apprunner-api.yaml and infra/aws/apprunner-web.yaml.",
+        "CloudWatch alarms and encrypted S3 evidence export bucket live in infra/aws/ops-alarms.yaml.",
         "Production runbook for App Runner, RDS, Redis, and Secrets Manager lives in docs/AWS.md.",
         process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION
           ? "AWS region env is configured."
@@ -148,6 +175,7 @@ export function sponsorStatuses(): SponsorStatus[] {
       evidence: [
         "Bounded session-key policy is exposed at /api/integrations/zerodev/session-policy.",
         "Policy restricts calls to market creation, betting, claims, and refunds with zero native value.",
+        "Client gasless bet flow uses ZeroDev Kernel account, ECDSA validator, bundler RPC, and optional paymaster sponsorship when NEXT_PUBLIC_ZERODEV_GASLESS_ENABLED=1.",
         zeroDevPolicy.configured
           ? "ZeroDev project/paymaster env is configured."
           : "Set ZERODEV_PROJECT_ID and ZERODEV_PAYMASTER_POLICY_ID or ZERODEV_BUNDLER_RPC_URL.",
@@ -161,6 +189,7 @@ export function sponsorStatuses(): SponsorStatus[] {
       evidence: [
         "Sealed-market prototype lives at contracts/prototypes/FhenixSealedMarketPrototype.sol.",
         "Prototype uses CoFHE encrypted amounts and public-total reveal flow after deadline.",
+        "@fhenixprotocol/cofhe-contracts is installed and pnpm contracts:compile:fhenix produces a prototype ABI.",
         fhenixPrototypeStatus().configured
           ? "Fhenix RPC/toolchain env is configured."
           : "Set FHENIX_RPC_URL and FHENIX_CHAIN_ID before deploying the prototype.",
@@ -242,13 +271,83 @@ export function fhenixPrototypeStatus() {
     rpcConfigured: Boolean(rpcUrl),
     prototypeContract: "contracts/prototypes/FhenixSealedMarketPrototype.sol",
     requiredPackage: packageName,
-    compileCommand: `pnpm add -D ${packageName} && solc/contracts toolchain with Fhenix import remapping`,
+    compileCommand: "pnpm contracts:compile:fhenix",
     capabilities: [
       "encrypted YES/NO amount inputs",
       "per-wallet encrypted position storage",
       "resolver-triggered public total reveal after deadline",
     ],
   };
+}
+
+export function duneQueryTemplates() {
+  return [
+    {
+      id: "adjudex-volume-users-markets",
+      title: "Adjudex volume, users, markets",
+      description: "Core traction panel for volume, active wallets, markets, and payouts.",
+      sql: [
+        "SELECT",
+        "  date_trunc('day', created_at) AS day,",
+        "  count(DISTINCT market_id) AS markets_touched,",
+        "  count(DISTINCT lower(address)) AS active_wallets,",
+        "  sum(stake_usd) AS volume_usd",
+        "FROM positions",
+        "GROUP BY 1",
+        "ORDER BY 1 DESC;",
+      ].join("\n"),
+    },
+    {
+      id: "adjudex-resolution-accuracy",
+      title: "Resolution accuracy and payout lifecycle",
+      description: "Resolved markets, claimable/claimed positions, and payout totals.",
+      sql: [
+        "SELECT",
+        "  m.chain_id,",
+        "  count(*) FILTER (WHERE m.status = 'resolved') AS resolved_markets,",
+        "  count(c.id) AS claims,",
+        "  coalesce(sum(c.payout_usd), 0) AS payout_usd",
+        "FROM markets m",
+        "LEFT JOIN positions p ON p.market_id = m.id AND p.chain_id = m.chain_id",
+        "LEFT JOIN claims c ON c.position_id = p.id AND c.chain_id = p.chain_id",
+        "GROUP BY 1",
+        "ORDER BY 1;",
+      ].join("\n"),
+    },
+    {
+      id: "adjudex-rhc-vs-arbitrum",
+      title: "Robinhood Chain vs Arbitrum",
+      description: "Compare market count, volume, bettors, and resolved market share by chain.",
+      sql: [
+        "SELECT",
+        "  m.chain_id,",
+        "  count(*) AS markets,",
+        "  coalesce(sum(s.volume_usd), 0) AS volume_usd,",
+        "  coalesce(sum(s.bettors), 0) AS bettors,",
+        "  count(*) FILTER (WHERE m.status = 'resolved') AS resolved_markets",
+        "FROM markets m",
+        "LEFT JOIN market_stats s ON s.market_id = m.id",
+        "GROUP BY 1",
+        "ORDER BY volume_usd DESC;",
+      ].join("\n"),
+    },
+    {
+      id: "adjudex-webhook-delivery",
+      title: "Webhook delivery reliability",
+      description: "Success rate, retries, and failed endpoints for market.resolved webhooks.",
+      sql: [
+        "SELECT",
+        "  event,",
+        "  status,",
+        "  count(*) AS deliveries,",
+        "  avg(attempts) AS avg_attempts,",
+        "  max(attempts) AS max_attempts",
+        "FROM webhook_deliveries",
+        "GROUP BY 1, 2",
+        "ORDER BY deliveries DESC;",
+      ].join("\n"),
+    },
+  ];
 }
 
 export async function fetchDuneSummary(fetchImpl: FetchLike = fetch) {
@@ -310,18 +409,9 @@ export async function executeDuneSummary(fetchImpl: FetchLike = fetch) {
 }
 
 export async function fetchGmxMarkets(limit = 12) {
-  const { GmxApiSdk } = await import("@gmx-io/sdk/v2");
   const chainId = configuredGmxChainId();
   const apiUrl = process.env.GMX_API_URL?.trim() || defaultGmxApiUrl(chainId);
-  const sdk = new GmxApiSdk({ chainId, apiUrl });
-  const markets = (await sdk.fetchMarkets()) as GmxMarket[];
-  const addresses = markets
-    .map((market) => market.marketTokenAddress)
-    .filter((address): address is string => Boolean(address))
-    .slice(0, Math.max(1, Math.min(limit, 50)));
-  const tickers = addresses.length
-    ? ((await sdk.fetchMarketsTickers({ addresses }).catch(() => [])) as GmxMarketTicker[])
-    : [];
+  const { markets, tickers } = await fetchGmxMarketsInfoSnapshot(apiUrl);
   const tickersByAddress = new Map(
     tickers
       .filter((ticker) => ticker.marketTokenAddress)
@@ -342,6 +432,159 @@ export async function fetchGmxMarkets(limit = 12) {
       ticker: market.marketTokenAddress ? tickerForResponse(tickersByAddress.get(market.marketTokenAddress.toLowerCase())) : undefined,
     })),
   };
+}
+
+// Live GMX market-intelligence signal for a single token (e.g. "BTC"), used
+// as a context card on crypto market pages. Returns confident metrics
+// (liquidity, long/short open interest, 24h price change) plus a best-effort
+// annualized funding estimate that is hidden when the scaling looks
+// implausible — we never surface a number we can't stand behind.
+export async function fetchGmxSignal(rawSymbol: string, input: { marketTokenAddress?: string; limit?: number } = {}) {
+  const symbol = normalizeGmxBase(rawSymbol);
+  const requestedAddress = input.marketTokenAddress?.trim();
+  const limit = Math.max(1, Math.min(input.limit ?? 24, 100));
+  if (!symbol && !requestedAddress) return { configured: true, found: false, symbol: rawSymbol };
+
+  const { GmxApiSdk } = await import("@gmx-io/sdk/v2");
+  const chainId = configuredGmxChainId();
+  const apiUrl = process.env.GMX_API_URL?.trim() || defaultGmxApiUrl(chainId);
+  const sdk = new GmxApiSdk({ chainId, apiUrl });
+  const { tickers } = await fetchGmxMarketsInfoSnapshot(apiUrl);
+
+  const ticker =
+    tickers.find((item) => requestedAddress && item.marketTokenAddress?.toLowerCase() === requestedAddress.toLowerCase()) ??
+    tickers.find((item) => normalizeGmxBase(item.symbol) === symbol);
+  if (!ticker) {
+    return { configured: true, chainId, symbol, marketTokenAddress: requestedAddress, found: false };
+  }
+  const marketTokenAddress = ticker.marketTokenAddress;
+  const marketSymbol = ticker.symbol ?? rawSymbol;
+  const [rates, apy, performance, ohlcv, trades] = await Promise.all([
+    marketTokenAddress
+      ? sdk.fetchRates({ period: "7d", averageBy: "1d", address: marketTokenAddress }).catch(() => [])
+      : Promise.resolve([]),
+    sdk.fetchApy({ period: "7d" }).catch(() => ({ markets: {}, glvs: {} })),
+    marketTokenAddress
+      ? sdk.fetchPerformanceAnnualized({ period: "30d", address: marketTokenAddress }).catch(() => [])
+      : Promise.resolve([]),
+    marketSymbol
+      ? sdk.fetchOhlcv({ symbol: marketSymbol, timeframe: "1h", limit }).catch(() => [])
+      : Promise.resolve([]),
+    marketTokenAddress
+      ? sdk.searchTrades({
+          forAllAccounts: true,
+          marketsDirections: [{ marketAddress: marketTokenAddress, direction: "any" }],
+          limit: Math.min(limit, 25),
+        }).catch(() => ({ trades: [], nextCursor: null, hasMore: false }))
+      : Promise.resolve({ trades: [], nextCursor: null, hasMore: false }),
+  ]);
+  const rate = Array.isArray(rates) ? rates[0] : undefined;
+  // The catch-fallback gives `markets: {}` (no index signature), so narrow to
+  // a string-keyed record before looking the market up by either casing.
+  const apyMarkets = (apy.markets ?? {}) as Record<string, unknown>;
+  const apyEntry = marketTokenAddress
+    ? apyMarkets[marketTokenAddress] ?? apyMarkets[marketTokenAddress.toLowerCase()]
+    : undefined;
+
+  return {
+    configured: true,
+    found: true,
+    chainId,
+    symbol,
+    market: marketSymbol,
+    marketTokenAddress,
+    liquidityUsd: usdBigIntToNumber(ticker.poolAmountLongUsd) + usdBigIntToNumber(ticker.poolAmountShortUsd),
+    openInterestLongUsd: usdBigIntToNumber(ticker.longInterestUsd),
+    openInterestShortUsd: usdBigIntToNumber(ticker.shortInterestUsd),
+    priceChangePercent24h:
+      ticker.priceChangePercent24hBps === undefined ? undefined : Number(ticker.priceChangePercent24hBps) / 100,
+    fundingLongAprEstimate: gmxFundingApr(ticker.fundingRateLong),
+    fundingShortAprEstimate: gmxFundingApr(ticker.fundingRateShort),
+    rates: rate
+      ? {
+          marketAddress: rate.marketAddress,
+          latest: rate.ratesSnapshots?.at(-1),
+          snapshots: rate.ratesSnapshots?.slice(-7) ?? [],
+        }
+      : undefined,
+    apy: apyEntry,
+    performance: Array.isArray(performance) ? performance[0] : undefined,
+    ohlcv: Array.isArray(ohlcv) ? ohlcv.slice(-limit) : [],
+    trades: {
+      hasMore: trades.hasMore,
+      nextCursor: trades.nextCursor,
+      rows: trades.trades.slice(0, Math.min(limit, 25)).map((trade) => ({
+        id: trade.id,
+        eventName: trade.eventName,
+        account: trade.account,
+        timestamp: trade.timestamp,
+        transactionHash: trade.transactionHash,
+        marketAddress: trade.marketAddress,
+        isLong: trade.isLong,
+        sizeDeltaUsd: usdBigIntToNumber(trade.sizeDeltaUsd),
+        pnlUsd: usdBigIntToNumber(trade.pnlUsd),
+        priceImpactUsd: usdBigIntToNumber(trade.priceImpactUsd),
+      })),
+    },
+    evidence: {
+      source: "GMX API + GMX SDK v2",
+      fields: ["markets/info", "rates", "apy", "performance", "ohlcv", "trades"],
+      resolutionUse:
+        "Use the marketTokenAddress, latest rate snapshot, hourly OHLCV candles, and recent trade timestamps as cited settlement evidence.",
+    },
+    sourceUrl: `https://app.gmx.io/#/trade?chain=${chainId}`,
+  };
+}
+
+async function fetchGmxMarketsInfoSnapshot(apiUrl: string) {
+  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/markets/info`, {
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new Error(`GMX markets/info failed with ${response.status}`);
+  }
+  const body = (await response.json()) as { markets?: GmxMarketInfoRow[] } | GmxMarketInfoRow[];
+  const rows = Array.isArray(body) ? body : Array.isArray(body.markets) ? body.markets : [];
+  const markets: GmxMarket[] = rows.map((row) => ({
+    name: row.name ?? row.symbol,
+    symbol: row.symbol ?? row.name,
+    marketTokenAddress: row.marketTokenAddress ?? row.marketToken,
+    indexTokenAddress: row.indexTokenAddress ?? row.indexToken,
+    longTokenAddress: row.longTokenAddress ?? row.longToken,
+    shortTokenAddress: row.shortTokenAddress ?? row.shortToken,
+    isListed: row.isListed,
+  }));
+  const tickers: GmxMarketTicker[] = rows.map((row) => ({
+    symbol: row.symbol ?? row.name,
+    marketTokenAddress: row.marketTokenAddress ?? row.marketToken,
+    poolAmountLongUsd: toOptionalBigInt(row.availableLiquidityLong),
+    poolAmountShortUsd: toOptionalBigInt(row.availableLiquidityShort),
+    longInterestUsd: toOptionalBigInt(row.openInterestLong),
+    shortInterestUsd: toOptionalBigInt(row.openInterestShort),
+    fundingRateLong: toOptionalBigInt(row.fundingRateLong),
+    fundingRateShort: toOptionalBigInt(row.fundingRateShort),
+  }));
+  return { markets, tickers };
+}
+
+// Reduce a free-form symbol ("BTC/USD [WBTC-USDC]", "eth", "SOL") to its base
+// ticker for matching against a market-page heuristic symbol.
+function normalizeGmxBase(symbol?: string): string {
+  if (!symbol) return "";
+  const head = symbol.trim().toUpperCase().split(/[/\s\-[]/)[0];
+  return head.replace(/[^A-Z0-9]/g, "");
+}
+
+// GMX funding factor is a per-second, 1e30-scaled rate. Annualize to a %.
+// Hide implausible magnitudes (|APR| > 1000%) rather than show a number that
+// likely reflects a scaling mismatch.
+function gmxFundingApr(rate?: bigint): number | undefined {
+  if (rate === undefined) return undefined;
+  const perSecond = Number(rate) / 1e30;
+  if (!Number.isFinite(perSecond)) return undefined;
+  const apr = perSecond * 31_536_000 * 100;
+  if (!Number.isFinite(apr) || Math.abs(apr) > 1000) return undefined;
+  return Number(apr.toFixed(2));
 }
 
 export async function buildGmxImportCandidates(limit = 8): Promise<ImportCandidateDraft[]> {
@@ -392,6 +635,15 @@ function configuredGmxChainId(): ContractsChainId {
   const chainId = Number(process.env.GMX_CHAIN_ID ?? "42161");
   if (GMX_SUPPORTED_CHAIN_IDS.has(chainId as ContractsChainId)) return chainId as ContractsChainId;
   return 42161;
+}
+
+function toOptionalBigInt(value: string | number | bigint | undefined): bigint | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  try {
+    return BigInt(value);
+  } catch {
+    return undefined;
+  }
 }
 
 function defaultGmxApiUrl(chainId: ContractsChainId) {

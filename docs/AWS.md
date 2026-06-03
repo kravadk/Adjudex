@@ -6,6 +6,7 @@ This project can run on AWS with two App Runner services, RDS Postgres, and a Re
 
 - API service: use `infra/aws/apprunner-api.yaml`, health check `/api/status`.
 - Web service: use `infra/aws/apprunner-web.yaml`, health check `/`.
+- Ops alarms and audit storage: use `infra/aws/ops-alarms.yaml`.
 - Database: RDS Postgres 16+ with SSL required.
 - Cache/rate limits: ElastiCache Serverless for Redis or Upstash-compatible Redis REST.
 - Secrets: AWS Secrets Manager injected as App Runner environment variables.
@@ -22,6 +23,8 @@ This project can run on AWS with two App Runner services, RDS Postgres, and a Re
 - `RECLAIM_APP_ID`, `RECLAIM_APP_SECRET`, `RECLAIM_PROVIDER_ID`
 - `DUNE_API_KEY`, `DUNE_ADJUDEX_SUMMARY_QUERY_ID`
 - `ZERODEV_PROJECT_ID` and paymaster/bundler config when gasless flow is enabled
+- `AWS_REGION`
+- `RESOLUTION_EVIDENCE_BUCKET`
 
 ## Release Checks
 
@@ -30,3 +33,5 @@ This project can run on AWS with two App Runner services, RDS Postgres, and a Re
 3. Confirm `/integrations` shows configured Dune, GMX, RHC, ZeroDev, and AWS evidence.
 4. Keep `MATCH_INGEST_ENABLED=0` until market factory, judge, and creator wallets are verified.
 5. Enable App Runner auto deployments only after the first manual deployment passes smoke tests.
+6. Publish app metrics into the `Adjudex` CloudWatch namespace for `WebhookFailures`, `ResolutionFailures`, and `RpcLagBlocks`.
+7. Export pinned resolution evidence and audit-log snapshots to `RESOLUTION_EVIDENCE_BUCKET`.

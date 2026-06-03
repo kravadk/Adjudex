@@ -20,6 +20,14 @@ const SAMPLES = [
   "Meta ships consumer Orion AR glasses during 2026",
 ];
 
+const RHC_SAMPLES = [
+  "Will tokenized AAPL close above $250 on Robinhood Chain by June 30, 2026?",
+  "Will tokenized TSLA trade above $350 by the next US market close?",
+  "Will Robinhood Chain RWA volume exceed $10M in a rolling 24h window?",
+  "Will tokenized NVDA close above $1,200 before the next Friday close?",
+  "Will a listed RHC tokenized stock market keep non-zero liquidity for 7 days?",
+];
+
 type CreatorDraft = {
   title: string;
   description: string;
@@ -55,10 +63,12 @@ const initialDraft: CreatorDraft = {
   escalationPolicy: "If the source is unavailable or contradictory, mark the market as resolving and require manual escalation with cited proof.",
 };
 
-export function CreateMarketClient() {
+export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" }) {
   const router = useRouter();
   const activeChainId = useChainId();
-  const activeChainLabel = chainLabelForId(activeChainId);
+  const deployChainId = preferredChain === "rhc" ? robinhoodChainTestnet.id : activeChainId;
+  const activeChainLabel = chainLabelForId(deployChainId);
+  const samples = preferredChain === "rhc" ? RHC_SAMPLES : SAMPLES;
   const [prompt, setPrompt] = useState("");
   const [draft, setDraft] = useState<CreatorDraft>(initialDraft);
   const [validation, setValidation] = useState<MarketValidationResult | null>(null);
@@ -142,7 +152,7 @@ export function CreateMarketClient() {
     setError(null);
     setBusy(true);
     try {
-      const deployTarget = await resolveDeployTarget(activeChainId);
+      const deployTarget = await resolveDeployTarget(deployChainId);
       const validationResult = await postJson<MarketValidationResult>("/api/markets/validate", spec);
       setValidation(validationResult);
       if (!validationResult.ok) {
@@ -287,7 +297,7 @@ export function CreateMarketClient() {
       if (!revalidated.specHash || !revalidated.specUri || !revalidated.deadlineIso) {
         throw new Error("Backend validation did not return a deployable candidate.");
       }
-      const deployTarget = await resolveDeployTarget(activeChainId);
+      const deployTarget = await resolveDeployTarget(deployChainId);
       const deadline = BigInt(Math.floor(new Date(revalidated.deadlineIso).getTime() / 1000));
       const transactionHash = await writeContract(wagmiConfig, {
         address: deployTarget.factoryAddress,
@@ -844,7 +854,7 @@ export function CreateMarketClient() {
               <span className="panel-title">Example prompts</span>
             </div>
             <div className="panel-body flex flex-col gap-2">
-              {SAMPLES.map((p) => (
+              {samples.map((p) => (
                 <button
                   key={p}
                   onClick={() => {

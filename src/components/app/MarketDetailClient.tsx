@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Share2, Flame, Bot, Star, Copy, ExternalLink } from "lucide-react";
+import { BarChart3, ChevronLeft, Share2, Flame, Bot, Star, Copy, ExternalLink, LineChart } from "lucide-react";
 import { BetButton } from "@/components/dashboard/bet-button";
 import { BetForm } from "@/components/dashboard/bet-form";
 import { ProbabilityBar } from "@/components/dashboard/probability-bar";
@@ -424,6 +424,8 @@ export function MarketDetailClient({ id }: { id: string }) {
           />
         </div>
 
+        <GmxSignalCards market={market} />
+
         {/* Trading surface — peer-pool primitives beside the trade form.
             Pool depth + reprice triggers replace CLOB liquidity + tape.
             Decision sidebar mirrors "Use this page to make a trading
@@ -752,6 +754,155 @@ export function MarketDetailClient({ id }: { id: string }) {
   );
 }
 
+type GmxSignal = {
+  configured: boolean;
+  found: boolean;
+  symbol?: string;
+  market?: string;
+  marketTokenAddress?: string;
+  liquidityUsd?: number;
+  openInterestLongUsd?: number;
+  openInterestShortUsd?: number;
+  priceChangePercent24h?: number;
+  fundingLongAprEstimate?: number;
+  fundingShortAprEstimate?: number;
+  apy?: { apy?: number; baseApy?: number; bonusApr?: number };
+  performance?: { performance?: string };
+  ohlcv?: Array<{ timestamp: number; close: string }>;
+  trades?: { rows: Array<{ id: string; eventName: string; timestamp: number; transactionHash: string }> };
+  sourceUrl?: string;
+  evidence?: { fields?: string[]; resolutionUse?: string };
+};
+
+function GmxSignalCards({ market }: { market: Market }) {
+  const descriptor = gmxDescriptorForMarket(market);
+  const [signal, setSignal] = useState<GmxSignal | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!descriptor) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams();
+      if (descriptor.symbol) params.set("symbol", descriptor.symbol);
+      if (descriptor.marketTokenAddress) params.set("marketTokenAddress", descriptor.marketTokenAddress);
+      params.set("limit", "24");
+      void fetch(`/api/integrations/gmx/signal?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await response.text());
+          return response.json() as Promise<GmxSignal>;
+        })
+        .then((nextSignal) => {
+          setSignal(nextSignal);
+          setError(null);
+        })
+        .catch((nextError) => {
+          if (controller.signal.aborted) return;
+          setSignal(null);
+          setError(nextError instanceof Error ? nextError.message : "GMX signal unavailable.");
+        });
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+    // descriptor is recomputed each render from `market`; depend on its stable
+    // primitive fields, not the object identity, to avoid a refetch loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [descriptor?.symbol, descriptor?.marketTokenAddress]);
+
+  if (!descriptor) return null;
+  if (error || signal?.found === false) {
+    return (
+      <div className="panel p-4 mb-5 border-[#34312e]">
+        <div className="flex items-center gap-2 text-[12px] text-gray-400">
+          <LineChart className="h-4 w-4" />
+          GMX signal unavailable for {descriptor.symbol ?? descriptor.marketTokenAddress}.
+        </div>
+      </div>
+    );
+  }
+  if (!signal) {
+    return (
+      <div className="panel p-4 mb-5">
+        <div className="flex items-center gap-2 text-[12px] text-gray-500">
+          <LineChart className="h-4 w-4" />
+          Loading GMX market intelligence...
+        </div>
+      </div>
+    );
+  }
+
+  const totalOi = (signal.openInterestLongUsd ?? 0) + (signal.openInterestShortUsd ?? 0);
+  const lastClose = signal.ohlcv?.at(-1)?.close;
+  const recentTrade = signal.trades?.rows?.[0];
+
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <LineChart className="h-4 w-4 text-[#CCE9E7]" />
+        <span className="text-[11px] text-gray-500">GMX signal cards</span>
+        <span className="caps">{signal.market ?? signal.symbol ?? "market"}</span>
+        <div className="flex-1" />
+        {signal.sourceUrl && (
+          <a href={signal.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-[#CCE9E7]">
+            GMX <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <TrustItem label="Liquidity" value={formatUsd(signal.liquidityUsd ?? 0)} />
+        <TrustItem label="Open interest" value={formatUsd(totalOi)} />
+        <TrustItem label="24h move" value={signal.priceChangePercent24h === undefined ? undefined : `${signal.priceChangePercent24h.toFixed(2)}%`} />
+        <TrustItem label="GMX APY" value={signal.apy?.apy === undefined ? undefined : `${(signal.apy.apy * 100).toFixed(2)}%`} optional />
+        <TrustItem label="Funding long APR" value={signal.fundingLongAprEstimate === undefined ? undefined : `${signal.fundingLongAprEstimate.toFixed(2)}%`} optional />
+        <TrustItem label="Funding short APR" value={signal.fundingShortAprEstimate === undefined ? undefined : `${signal.fundingShortAprEstimate.toFixed(2)}%`} optional />
+        <TrustItem label="Last 1h close" value={lastClose} mono optional />
+        <TrustItem label="30d performance" value={signal.performance?.performance} optional />
+      </div>
+      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        <div className="rounded-[8px] border border-[#34312e] bg-[#211f1e] p-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-3.5 w-3.5 text-[#CCE9E7]" />
+            <span className="caps">OHLCV evidence</span>
+          </div>
+          <div className="mt-2 text-[12px] text-gray-400">
+            {signal.ohlcv?.length ? `${signal.ohlcv.length} hourly candles loaded from GMX SDK.` : "No OHLCV candles returned."}
+          </div>
+        </div>
+        <div className="rounded-[8px] border border-[#34312e] bg-[#211f1e] p-3">
+          <div className="flex items-center gap-2">
+            <ExternalLink className="h-3.5 w-3.5 text-[#CCE9E7]" />
+            <span className="caps">Recent trade evidence</span>
+          </div>
+          <div className="mt-2 text-[12px] text-gray-400">
+            {recentTrade
+              ? `${recentTrade.eventName} at ${new Date(recentTrade.timestamp * 1000).toLocaleString()}`
+              : "No recent GMX trades returned."}
+          </div>
+        </div>
+      </div>
+      {signal.evidence?.resolutionUse && (
+        <p className="mt-3 text-[12px] leading-relaxed text-gray-500">
+          {signal.evidence.resolutionUse}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function gmxDescriptorForMarket(market: Market): { symbol?: string; marketTokenAddress?: string } | null {
+  const haystack = [market.title, market.description, market.sourceUrl, market.resolutionCriteria].filter(Boolean).join("\n");
+  const address = haystack.match(/marketTokenAddress:\s*(0x[a-fA-F0-9]{40})/)?.[1];
+  const symbol = haystack.match(/\b(BTC|ETH|SOL|ARB|AVAX|LINK|DOGE|XRP|BNB)\b/i)?.[1]?.toUpperCase();
+  const gmxSource = /gmx\.io|GMX/i.test(haystack);
+  if (!address && !symbol && !gmxSource) return null;
+  return { symbol, marketTokenAddress: address };
+}
+
 function toActivity(e: {
   kind: string;
   side?: string;
@@ -977,4 +1128,3 @@ function formatAgo(iso: string): string {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 }
-

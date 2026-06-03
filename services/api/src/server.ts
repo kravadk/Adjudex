@@ -1677,6 +1677,89 @@ server.get<{ Querystring: { limit?: string } }>("/api/analytics/retention", asyn
   };
 });
 
+server.get("/api/analytics/chains", async () => {
+  const rows = await query<{
+    chain_id: number;
+    markets: string;
+    open_markets: string;
+    resolved_markets: string;
+    volume_usd: unknown;
+    bettors: unknown;
+    positions: string;
+    payouts_usd: unknown;
+  }>(
+    `SELECT
+       m.chain_id,
+       count(*)::text AS markets,
+       count(*) FILTER (WHERE m.status = 'open')::text AS open_markets,
+       count(*) FILTER (WHERE m.status IN ('resolved', 'claimable'))::text AS resolved_markets,
+       COALESCE(sum(s.volume_usd), 0) AS volume_usd,
+       COALESCE(sum(s.bettors), 0) AS bettors,
+       count(DISTINCT p.id)::text AS positions,
+       COALESCE(sum(c.payout_usd), 0) AS payouts_usd
+     FROM markets m
+     LEFT JOIN market_stats s ON s.market_id = m.id
+     LEFT JOIN positions p ON p.market_id = m.id AND p.chain_id = m.chain_id
+     LEFT JOIN claims c ON c.position_id = p.id AND c.chain_id = p.chain_id
+     GROUP BY m.chain_id
+     ORDER BY volume_usd DESC, markets DESC`
+  );
+  return {
+    generatedAtIso: new Date().toISOString(),
+    rows: rows.rows.map((row) => ({
+      chainId: row.chain_id,
+      markets: Number(row.markets),
+      openMarkets: Number(row.open_markets),
+      resolvedMarkets: Number(row.resolved_markets),
+      volumeUsd: asNumber(row.volume_usd),
+      bettors: asNumber(row.bettors),
+      positions: Number(row.positions),
+      payoutsUsd: asNumber(row.payouts_usd),
+    })),
+  };
+});
+
+server.get("/api/analytics/webhooks", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+  const rows = await query<{
+    event: string;
+    status: string;
+    deliveries: string;
+    avg_attempts: unknown;
+    max_attempts: unknown;
+    failed_endpoints: string;
+  }>(
+    `SELECT
+       d.event,
+       d.status,
+       count(*)::text AS deliveries,
+       COALESCE(avg(d.attempts), 0) AS avg_attempts,
+       COALESCE(max(d.attempts), 0) AS max_attempts,
+       count(DISTINCT s.url) FILTER (WHERE d.status = 'failed')::text AS failed_endpoints
+     FROM webhook_deliveries d
+     JOIN webhook_subscriptions s ON s.id = d.subscription_id
+     GROUP BY d.event, d.status
+     ORDER BY deliveries DESC`
+  );
+  const total = rows.rows.reduce((sum, row) => sum + Number(row.deliveries), 0);
+  const delivered = rows.rows
+    .filter((row) => row.status === "delivered")
+    .reduce((sum, row) => sum + Number(row.deliveries), 0);
+  return {
+    generatedAtIso: new Date().toISOString(),
+    successRate: total === 0 ? null : delivered / total,
+    rows: rows.rows.map((row) => ({
+      event: row.event,
+      status: row.status,
+      deliveries: Number(row.deliveries),
+      avgAttempts: asNumber(row.avg_attempts),
+      maxAttempts: asNumber(row.max_attempts),
+      failedEndpoints: Number(row.failed_endpoints),
+    })),
+  };
+});
+
 server.get("/api/import/sources", async () => {
   const sources = await ensureImportSources();
   return sources.map(toImportSourceResponse);

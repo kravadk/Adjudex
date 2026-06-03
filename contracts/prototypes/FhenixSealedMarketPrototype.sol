@@ -12,8 +12,6 @@ pragma solidity ^0.8.26;
 import "@fhenixprotocol/cofhe-contracts/FHE.sol";
 
 contract FhenixSealedMarketPrototype {
-    using FHE for euint64;
-
     struct SealedPosition {
         euint64 yesAmount;
         euint64 noAmount;
@@ -43,18 +41,18 @@ contract FhenixSealedMarketPrototype {
     function betYes(InEuint64 calldata encryptedAmount) external {
         require(block.timestamp < deadline, "closed");
         euint64 amount = FHE.asEuint64(encryptedAmount);
-        positions[msg.sender].yesAmount = positions[msg.sender].yesAmount.add(amount);
+        positions[msg.sender].yesAmount = FHE.add(positions[msg.sender].yesAmount, amount);
         positions[msg.sender].updatedAt = block.timestamp;
-        totalYes = totalYes.add(amount);
+        totalYes = FHE.add(totalYes, amount);
         emit SealedBet(msg.sender, 0);
     }
 
     function betNo(InEuint64 calldata encryptedAmount) external {
         require(block.timestamp < deadline, "closed");
         euint64 amount = FHE.asEuint64(encryptedAmount);
-        positions[msg.sender].noAmount = positions[msg.sender].noAmount.add(amount);
+        positions[msg.sender].noAmount = FHE.add(positions[msg.sender].noAmount, amount);
         positions[msg.sender].updatedAt = block.timestamp;
-        totalNo = totalNo.add(amount);
+        totalNo = FHE.add(totalNo, amount);
         emit SealedBet(msg.sender, 1);
     }
 

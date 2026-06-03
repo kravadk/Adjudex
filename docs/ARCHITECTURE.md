@@ -590,8 +590,11 @@ Frontend reads same values from `NEXT_PUBLIC_*_ADDRESS` env vars that
 | `ProofAnchor` | `NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS` |
 | `BetQuoteVerifier` | `NEXT_PUBLIC_BET_QUOTE_VERIFIER_ADDRESS` |
 
-RHC support is config/UI-ready but renders unavailable until real RPC,
-factory, backend, and indexer state are all configured.
+Robinhood Chain uses the same contract stack through `pnpm contracts:deploy:rhc`.
+That command targets chain id `46630` by default, writes `deployments/46630.json`,
+and patches `RHC_*` / `NEXT_PUBLIC_RHC_*` env keys. The `/rhc` and
+`/rhc/create` surfaces render unavailable until RPC, factory, backend, and
+indexer state are configured.
 
 ## 14. Operational readiness checklist
 

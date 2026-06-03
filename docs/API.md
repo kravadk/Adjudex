@@ -132,10 +132,14 @@ timeout is retried, then marked `failed`.
 GET /api/integrations/sponsors      -> usage/configuration evidence
 GET /api/integrations/dune/summary  -> Dune query result rows
 POST /api/integrations/dune/summary/refresh -> execute configured Dune query
+GET /api/integrations/dune/templates -> Dune SQL templates for traction dashboards
 GET /api/integrations/gmx/markets   -> GMX SDK market snapshot
+GET /api/integrations/gmx/signal    -> GMX ticker/rates/APY/OHLCV/trade evidence
 POST /api/import/gmx/scan           -> upsert GMX market candidates into importer
 GET /api/integrations/zerodev/session-policy -> bounded gasless/session-key policy
 GET /api/integrations/fhenix/prototype -> sealed-market prototype readiness
+GET /api/analytics/chains           -> RHC vs Arbitrum market/volume dashboard
+GET /api/analytics/webhooks         -> webhook delivery analytics (admin)
 ```
 
 `DUNE_API_KEY` + `DUNE_ADJUDEX_SUMMARY_QUERY_ID` enable live Dune data.

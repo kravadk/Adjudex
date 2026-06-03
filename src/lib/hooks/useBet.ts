@@ -1,6 +1,6 @@
 "use client";
 
-import { readContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { getWalletClient, readContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { parseUnits, type Address } from "viem";
 import parimutuelPoolAbi from "@/lib/abi/ParimutuelPool.json";
 import testUsdcAbi from "@/lib/abi/TestUSDC.json";
@@ -8,6 +8,7 @@ import { getServices } from "@/lib/services/provider";
 import type { BetPreviewInput } from "@/lib/types/domain";
 import { useMarketsStore, usePortfolioStore, useUserStore } from "@/lib/store";
 import { wagmiConfig } from "@/lib/wagmi";
+import { isZeroDevGaslessEnabled, placeGaslessBetWithZeroDev } from "@/lib/zerodev/gasless-bet";
 
 const STAKE_TOKEN = process.env.NEXT_PUBLIC_STAKE_TOKEN_ADDRESS as Address | undefined;
 const MAX_UINT256 = 2n ** 256n - 1n;
@@ -36,7 +37,8 @@ export function useBet() {
 
     const amount = parseUnits(String(input.stakeUsd), 6);
 
-    if (STAKE_TOKEN) {
+    const useGasless = isZeroDevGaslessEnabled();
+    if (STAKE_TOKEN && !useGasless) {
       onStep("Checking USDC allowance");
       const allowance = (await readContract(wagmiConfig, {
         address: STAKE_TOKEN,
@@ -65,22 +67,39 @@ export function useBet() {
       functionName: "nextPositionId",
       chainId,
     });
-    onStep("Waiting for wallet signature");
-    const transactionHash = await writeContract(wagmiConfig, {
-      address: market.poolAddress,
-      abi: parimutuelPoolAbi,
-      functionName: "bet",
-      args: [input.side === "YES" ? 0 : 1, amount],
-      chainId,
-    });
-    onStep(`Transaction submitted: ${transactionHash}`);
-    onStep("Confirming transaction");
-    await waitForTransactionReceipt(wagmiConfig, { hash: transactionHash, chainId });
+    let transactionHash: `0x${string}`;
+    let bettorAddress = account.address;
+    if (useGasless) {
+      onStep("Using ZeroDev gasless smart account");
+      const walletClient = await getWalletClient(wagmiConfig, { chainId });
+      const gasless = await placeGaslessBetWithZeroDev({
+        walletClient,
+        chainId,
+        poolAddress: market.poolAddress,
+        side: input.side,
+        stakeUsd: input.stakeUsd,
+        onStep,
+      });
+      transactionHash = gasless.transactionHash;
+      bettorAddress = gasless.smartAccountAddress;
+    } else {
+      onStep("Waiting for wallet signature");
+      transactionHash = await writeContract(wagmiConfig, {
+        address: market.poolAddress,
+        abi: parimutuelPoolAbi,
+        functionName: "bet",
+        args: [input.side === "YES" ? 0 : 1, amount],
+        chainId,
+      });
+      onStep(`Transaction submitted: ${transactionHash}`);
+      onStep("Confirming transaction");
+      await waitForTransactionReceipt(wagmiConfig, { hash: transactionHash, chainId });
+    }
 
     onStep("Recording confirmed transaction in backend");
     const receipt = await services.betService.placeBet({
       ...quote,
-      address: account.address,
+      address: bettorAddress,
       transactionHash,
       positionId: `${market.id}#${String(positionId)}`,
       chainId,

@@ -32,10 +32,31 @@ type GmxSummary = {
   }>;
 };
 
+type DuneTemplate = { id: string; title: string; description: string; sql: string };
+type ChainAnalytics = {
+  rows: Array<{
+    chainId: number;
+    markets: number;
+    openMarkets: number;
+    resolvedMarkets: number;
+    volumeUsd: number;
+    bettors: number;
+    positions: number;
+    payoutsUsd: number;
+  }>;
+};
+type WebhookAnalytics = {
+  successRate: number | null;
+  rows: Array<{ event: string; status: string; deliveries: number; avgAttempts: number; maxAttempts: number; failedEndpoints: number }>;
+};
+
 export function SponsorIntegrationsClient() {
   const [statuses, setStatuses] = useState<SponsorStatus[]>([]);
   const [dune, setDune] = useState<DuneSummary | null>(null);
   const [gmx, setGmx] = useState<GmxSummary | null>(null);
+  const [templates, setTemplates] = useState<DuneTemplate[]>([]);
+  const [chains, setChains] = useState<ChainAnalytics | null>(null);
+  const [webhooks, setWebhooks] = useState<WebhookAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +65,20 @@ export function SponsorIntegrationsClient() {
     setLoading(true);
     setError(null);
     try {
-      const [nextStatuses, nextDune, nextGmx] = await Promise.all([
+      const [nextStatuses, nextDune, nextGmx, nextTemplates, nextChains, nextWebhooks] = await Promise.all([
         getJson<SponsorStatus[]>("/api/integrations/sponsors"),
         getJson<DuneSummary>("/api/integrations/dune/summary"),
         getJson<GmxSummary>("/api/integrations/gmx/markets?limit=6"),
+        getJson<DuneTemplate[]>("/api/integrations/dune/templates"),
+        getJson<ChainAnalytics>("/api/analytics/chains"),
+        getJson<WebhookAnalytics>("/api/analytics/webhooks").catch(() => null),
       ]);
       setStatuses(nextStatuses);
       setDune(nextDune);
       setGmx(nextGmx);
+      setTemplates(nextTemplates);
+      setChains(nextChains);
+      setWebhooks(nextWebhooks);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Integration dashboard unavailable.");
     } finally {
@@ -195,6 +222,97 @@ export function SponsorIntegrationsClient() {
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <div className="rounded-[8px] border p-4" style={{ borderColor: "var(--line)", background: "var(--card)" }}>
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" style={{ color: "var(--accent-bright)" }} />
+            <h2 className="text-[14px] font-semibold" style={{ color: "var(--tx)" }}>
+              RHC vs Arbitrum
+            </h2>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {(chains?.rows ?? []).map((row) => (
+              <div key={row.chainId} className="rounded-[8px] border p-3" style={{ borderColor: "var(--line-soft)", background: "#211f1e" }}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-mono text-[13px]" style={{ color: "var(--tx)" }}>
+                    chain {row.chainId}
+                  </div>
+                  <div className="text-[11px]" style={{ color: "var(--t3)" }}>
+                    {row.markets} markets
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Metric label="Volume" value={formatUsd(row.volumeUsd)} />
+                  <Metric label="Bettors" value={row.bettors} />
+                  <Metric label="Resolved" value={row.resolvedMarkets} />
+                  <Metric label="Payouts" value={formatUsd(row.payoutsUsd)} />
+                </div>
+              </div>
+            ))}
+            {(chains?.rows ?? []).length === 0 && (
+              <div className="rounded-[8px] border p-3 text-[12px]" style={{ borderColor: "var(--line-soft)", color: "var(--t3)" }}>
+                No indexed chain analytics yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[8px] border p-4" style={{ borderColor: "var(--line)", background: "var(--card)" }}>
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" style={{ color: "var(--accent-bright)" }} />
+            <h2 className="text-[14px] font-semibold" style={{ color: "var(--tx)" }}>
+              Webhook Delivery
+            </h2>
+            <div className="flex-1" />
+            <span className="font-mono text-[11px]" style={{ color: "var(--t3)" }}>
+              {webhooks?.successRate === null || webhooks?.successRate === undefined
+                ? "admin only"
+                : `${(webhooks.successRate * 100).toFixed(1)}% success`}
+            </span>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {(webhooks?.rows ?? []).map((row) => (
+              <div key={`${row.event}:${row.status}`} className="grid grid-cols-2 gap-2 rounded-[8px] border p-3 sm:grid-cols-5" style={{ borderColor: "var(--line-soft)", background: "#211f1e" }}>
+                <Metric label="Event" value={row.event} />
+                <Metric label="Status" value={row.status} />
+                <Metric label="Deliveries" value={row.deliveries} />
+                <Metric label="Avg attempts" value={row.avgAttempts.toFixed(2)} />
+                <Metric label="Failed URLs" value={row.failedEndpoints} />
+              </div>
+            ))}
+            {(webhooks?.rows ?? []).length === 0 && (
+              <div className="rounded-[8px] border p-3 text-[12px]" style={{ borderColor: "var(--line-soft)", color: "var(--t3)" }}>
+                Sign in as admin to view delivery reliability, retries, and failed endpoints.
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-4 rounded-[8px] border p-4" style={{ borderColor: "var(--line)", background: "var(--card)" }}>
+        <div className="flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" style={{ color: "var(--accent-bright)" }} />
+          <h2 className="text-[14px] font-semibold" style={{ color: "var(--tx)" }}>
+            Dune Query Templates
+          </h2>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {templates.map((template) => (
+            <div key={template.id} className="rounded-[8px] border p-3" style={{ borderColor: "var(--line-soft)", background: "#211f1e" }}>
+              <div className="text-[13px] font-semibold" style={{ color: "var(--tx)" }}>
+                {template.title}
+              </div>
+              <p className="mt-1 text-[12px]" style={{ color: "var(--t3)" }}>
+                {template.description}
+              </p>
+              <pre className="mt-2 max-h-[160px] overflow-auto rounded-[6px] border p-2 text-[10.5px]" style={{ borderColor: "var(--line-soft)", color: "var(--t2)" }}>
+                {template.sql}
+              </pre>
+            </div>
+          ))}
         </div>
       </section>
     </div>

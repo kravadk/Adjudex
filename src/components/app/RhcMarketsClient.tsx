@@ -74,7 +74,7 @@ export function RhcMarketsClient() {
             <span className="d" />
             {ready ? "RHC ready" : "RHC unavailable"}
           </span>
-          <Link href="/create" className="btn primary">
+          <Link href="/rhc/create" className="btn primary">
             <Plus className="h-3.5 w-3.5" />
             New RHC market
           </Link>

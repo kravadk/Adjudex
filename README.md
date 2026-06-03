@@ -595,6 +595,7 @@ docs/                       ARCHITECTURE.md, RUNBOOK.md
 pnpm contracts:compile         # vitest + solc compile + invariant tests
 pnpm contracts:abi             # write ABI JSONs to src/lib/abi/
 pnpm contracts:deploy          # deploy to ARBITRUM_SEPOLIA_RPC_URL
+pnpm contracts:deploy:rhc      # deploy the same stack to Robinhood Chain testnet
 pnpm contracts:register-feeds  # register Chainlink-shape PriceOracle feeds
 ```
 
@@ -603,6 +604,11 @@ pnpm contracts:register-feeds  # register Chainlink-shape PriceOracle feeds
 Requires `DEPLOYER_PRIVATE_KEY`. Set `JUDGE_PUBLIC_ADDRESS` and
 `QUOTE_SIGNER_PUBLIC_ADDRESS` to also deploy `AIJudgeVerifier` and
 `BetQuoteVerifier`.
+
+For Robinhood Chain, set `ADJUDEX_TESTNET_ONLY=1`, `RHC_RPC_URL` or
+`ALCHEMY_RHC_API_KEY`, and run `pnpm contracts:deploy:rhc`. That writes
+`deployments/46630.json` by default and patches `RHC_*` plus
+`NEXT_PUBLIC_RHC_*` addresses for `/rhc` and `/rhc/create`.
 
 `contracts:register-feeds` reads `scripts/register-feed.ts` config and
 sets price feeds on `PriceOracle` for the configured asset symbols.
@@ -900,7 +906,7 @@ Run everything with `pnpm test` (current count: **128 passing**).
 |---|---|---|
 | `check-env.ts` | `pnpm env:check [--profile=full]` | Env validation (23 rules, 5 categories) |
 | `compile-abis.ts` | `pnpm contracts:abi` | Solidity → ABI JSON for `src/lib/abi/` |
-| `deploy-contracts.ts` | `pnpm contracts:deploy` | Testnet deploy + `.env.local` patcher |
+| `deploy-contracts.ts` | `pnpm contracts:deploy` / `pnpm contracts:deploy:rhc` | Arbitrum Sepolia or Robinhood Chain testnet deploy + `.env.local` patcher |
 | `register-feed.ts` | `pnpm contracts:register-feeds` | Wire Chainlink-shape feeds into `PriceOracle` |
 | `e2e-live.ts` | `pnpm e2e:live [--dry]` | Live create → bet → propose → finalize → claim |
 | `seed-market.ts` | manual | Seed a hard market (Chainlink-resolved) |

@@ -6,6 +6,7 @@ import {
   createWalletClient,
   http,
   type Abi,
+  type Chain,
   type Hex,
   encodeAbiParameters,
 } from "viem";
@@ -13,6 +14,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { arbitrumSepolia } from "viem/chains";
 
 const TESTNET_OPT_IN = "ADJUDEX_TESTNET_ONLY";
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
 type CompiledContract = {
   abi: Abi;
@@ -31,6 +33,46 @@ function assertTestnetOptIn() {
         `Set ${TESTNET_OPT_IN}=1 only for Arbitrum Sepolia testnet deployment.`,
     );
   }
+}
+
+function alchemyRpcUrl(network: "arb-sepolia" | "robinhood-testnet", apiKey?: string) {
+  const key = apiKey?.trim();
+  if (!key) return undefined;
+  return `https://${network}.g.alchemy.com/v2/${key}`;
+}
+
+function targetDeploymentChain(): { chain: Chain; rpcUrl?: string; env: "arb" | "rhc"; explorerBase: string } {
+  const target = (process.env.DEPLOY_CHAIN ?? process.env.CONTRACT_DEPLOY_CHAIN ?? "arbitrum-sepolia").toLowerCase();
+  if (target === "rhc" || target === "robinhood" || target === "robinhood-chain") {
+    const chainId = Number(process.env.RHC_CHAIN_ID ?? "46630");
+    const rpcUrl =
+      process.env.RHC_RPC_URL?.trim() ||
+      alchemyRpcUrl("robinhood-testnet", process.env.ALCHEMY_RHC_API_KEY);
+    const explorerBase = process.env.RHC_EXPLORER_URL ?? process.env.NEXT_PUBLIC_RHC_EXPLORER_URL ?? "";
+    return {
+      env: "rhc",
+      rpcUrl,
+      explorerBase,
+      chain: {
+        id: chainId,
+        name: "Robinhood Chain Testnet",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: rpcUrl ? [rpcUrl] : [] } },
+        blockExplorers: explorerBase ? { default: { name: "RHC Explorer", url: explorerBase } } : undefined,
+        testnet: true,
+      },
+    };
+  }
+
+  const rpcUrl =
+    process.env.ARBITRUM_SEPOLIA_RPC_URL?.trim() ||
+    alchemyRpcUrl("arb-sepolia", process.env.ALCHEMY_ARBITRUM_SEPOLIA_API_KEY);
+  return {
+    env: "arb",
+    chain: arbitrumSepolia,
+    rpcUrl,
+    explorerBase: "https://sepolia.arbiscan.io",
+  };
 }
 
 function compile(root: string): SolcOutput {
@@ -93,24 +135,27 @@ async function main() {
   assertTestnetOptIn();
 
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY as Hex | undefined;
-  const rpcUrl = process.env.ARBITRUM_SEPOLIA_RPC_URL;
+  const target = targetDeploymentChain();
+  const rpcUrl = target.rpcUrl;
 
   if (!privateKey || !rpcUrl) {
     throw new Error(
-      "Set DEPLOYER_PRIVATE_KEY and ARBITRUM_SEPOLIA_RPC_URL before running contracts:deploy.",
+      target.env === "rhc"
+        ? "Set DEPLOYER_PRIVATE_KEY plus RHC_RPC_URL or ALCHEMY_RHC_API_KEY before running DEPLOY_CHAIN=rhc contracts:deploy."
+        : "Set DEPLOYER_PRIVATE_KEY plus ARBITRUM_SEPOLIA_RPC_URL or ALCHEMY_ARBITRUM_SEPOLIA_API_KEY before running contracts:deploy.",
     );
   }
 
   const root = process.cwd();
   const account = privateKeyToAccount(privateKey);
-  const chain = arbitrumSepolia;
+  const chain = target.chain;
   const transport = http(rpcUrl);
   const walletClient = createWalletClient({ account, chain, transport });
   const publicClient = createPublicClient({ chain, transport });
   const chainId = await publicClient.getChainId();
-  if (chainId !== arbitrumSepolia.id) {
+  if (chainId !== chain.id) {
     throw new Error(
-      `Refusing test collateral/oracle deployment on chain ${chainId}; expected Arbitrum Sepolia (${arbitrumSepolia.id}).`,
+      `Refusing deployment on chain ${chainId}; expected ${chain.name} (${chain.id}).`,
     );
   }
 
@@ -144,8 +189,6 @@ async function main() {
   writeAbi(root, "TestAggregatorV3", testAggregator.abi);
   writeAbi(root, "ProofAnchor", proofAnchor.abi);
   writeAbi(root, "BetQuoteVerifier", betQuoteVerifier.abi);
-
-  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
   // 1. TestUSDC
   console.log("\n> Deploying TestUSDC...");
@@ -334,27 +377,46 @@ async function main() {
   );
 
   // 6. Patch .env.local
-  const patches: Record<string, string> = {
-    STAKE_TOKEN_ADDRESS: usdcAddress,
-    NEXT_PUBLIC_STAKE_TOKEN_ADDRESS: usdcAddress,
-    MARKET_FACTORY_ADDRESS: factoryAddress,
-    NEXT_PUBLIC_MARKET_FACTORY_ADDRESS: factoryAddress,
-    REPUTATION_ORACLE_ADDRESS: repAddress,
-    NEXT_PUBLIC_REPUTATION_ORACLE_ADDRESS: repAddress,
-  };
+  const patches: Record<string, string> =
+    target.env === "rhc"
+      ? {
+          RHC_STAKE_TOKEN_ADDRESS: usdcAddress,
+          NEXT_PUBLIC_RHC_STAKE_TOKEN_ADDRESS: usdcAddress,
+          RHC_MARKET_FACTORY_ADDRESS: factoryAddress,
+          NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS: factoryAddress,
+          RHC_REPUTATION_ORACLE_ADDRESS: repAddress,
+          NEXT_PUBLIC_RHC_REPUTATION_ORACLE_ADDRESS: repAddress,
+          RHC_CHAIN_ID: String(chain.id),
+          NEXT_PUBLIC_RHC_CHAIN_ID: String(chain.id),
+        }
+      : {
+          STAKE_TOKEN_ADDRESS: usdcAddress,
+          NEXT_PUBLIC_STAKE_TOKEN_ADDRESS: usdcAddress,
+          MARKET_FACTORY_ADDRESS: factoryAddress,
+          NEXT_PUBLIC_MARKET_FACTORY_ADDRESS: factoryAddress,
+          REPUTATION_ORACLE_ADDRESS: repAddress,
+          NEXT_PUBLIC_REPUTATION_ORACLE_ADDRESS: repAddress,
+        };
   if (judgeAddress) {
-    patches.AI_JUDGE_VERIFIER_ADDRESS = judgeAddress;
-    patches.NEXT_PUBLIC_AI_JUDGE_VERIFIER_ADDRESS = judgeAddress;
+    if (target.env === "rhc") {
+      patches.RHC_AI_JUDGE_VERIFIER_ADDRESS = judgeAddress;
+      patches.NEXT_PUBLIC_RHC_AI_JUDGE_VERIFIER_ADDRESS = judgeAddress;
+    } else {
+      patches.AI_JUDGE_VERIFIER_ADDRESS = judgeAddress;
+      patches.NEXT_PUBLIC_AI_JUDGE_VERIFIER_ADDRESS = judgeAddress;
+    }
   }
-  patches.PRICE_ORACLE_ADDRESS = priceAddress;
-  patches.NEXT_PUBLIC_PRICE_ORACLE_ADDRESS = priceAddress;
-  patches.TOKENIZED_STOCK_ADAPTER_ADDRESS = stockAddress;
-  patches.NEXT_PUBLIC_TOKENIZED_STOCK_ADAPTER_ADDRESS = stockAddress;
-  patches.PROOF_ANCHOR_ADDRESS = anchorAddress;
-  patches.NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS = anchorAddress;
+  const prefix = target.env === "rhc" ? "RHC_" : "";
+  const publicPrefix = target.env === "rhc" ? "NEXT_PUBLIC_RHC_" : "NEXT_PUBLIC_";
+  patches[`${prefix}PRICE_ORACLE_ADDRESS`] = priceAddress;
+  patches[`${publicPrefix}PRICE_ORACLE_ADDRESS`] = priceAddress;
+  patches[`${prefix}TOKENIZED_STOCK_ADAPTER_ADDRESS`] = stockAddress;
+  patches[`${publicPrefix}TOKENIZED_STOCK_ADAPTER_ADDRESS`] = stockAddress;
+  patches[`${prefix}PROOF_ANCHOR_ADDRESS`] = anchorAddress;
+  patches[`${publicPrefix}PROOF_ANCHOR_ADDRESS`] = anchorAddress;
   if (quoteVerifierAddress) {
-    patches.BET_QUOTE_VERIFIER_ADDRESS = quoteVerifierAddress;
-    patches.NEXT_PUBLIC_BET_QUOTE_VERIFIER_ADDRESS = quoteVerifierAddress;
+    patches[`${prefix}BET_QUOTE_VERIFIER_ADDRESS`] = quoteVerifierAddress;
+    patches[`${publicPrefix}BET_QUOTE_VERIFIER_ADDRESS`] = quoteVerifierAddress;
   }
   patchEnvLocal(root, patches);
 
@@ -365,9 +427,13 @@ async function main() {
   console.log(`  deployments/${chain.id}.json written`);
   console.log(`  .env.local patched`);
   console.log(`\nView on explorer:`);
-  console.log(`  https://sepolia.arbiscan.io/address/${usdcAddress}`);
-  console.log(`  https://sepolia.arbiscan.io/address/${factoryAddress}`);
-  console.log(`  https://sepolia.arbiscan.io/address/${repAddress}`);
+  if (target.explorerBase) {
+    console.log(`  ${target.explorerBase.replace(/\/$/, "")}/address/${usdcAddress}`);
+    console.log(`  ${target.explorerBase.replace(/\/$/, "")}/address/${factoryAddress}`);
+    console.log(`  ${target.explorerBase.replace(/\/$/, "")}/address/${repAddress}`);
+  } else {
+    console.log("  Set RHC_EXPLORER_URL or NEXT_PUBLIC_RHC_EXPLORER_URL to print explorer links.");
+  }
 }
 
 main().catch((err) => {
