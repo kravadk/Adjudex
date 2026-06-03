@@ -90,6 +90,19 @@ export default function RootLayout({
       lang="en"
       className={`h-full antialiased ${rubik.variable} ${geist.variable} ${geistMono.variable}`}
     >
+      <head>
+        {/* Wallet-extension noise filter. Multiple EVM wallets (e.g. Phantom +
+            MetaMask) race to define window.ethereum; the loser throws
+            "Cannot redefine property: ethereum" from inside its own injected
+            script. That is not an app error — swallow extension-originated
+            errors (capture phase, early) so they never reach the Next overlay,
+            our error boundary, or Sentry. App errors are untouched. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){if(typeof window==="undefined")return;var ext=function(s){return typeof s==="string"&&s.indexOf("chrome-extension://")!==-1;};var noise=function(m){return typeof m==="string"&&/Cannot redefine property: (ethereum|solana|web3|tron|aptos)/i.test(m);};window.addEventListener("error",function(e){if(ext(e.filename)||noise(e&&e.message)||(e&&e.error&&ext(e.error.stack))){e.stopImmediatePropagation();e.preventDefault();}},true);window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;var m=r&&(r.message||String(r));var s=r&&r.stack;if(noise(m)||ext(s)){e.stopImmediatePropagation();e.preventDefault();}},true);})();`,
+          }}
+        />
+      </head>
       <body
         className="min-h-full text-[color:var(--tx)] pb-14 md:pb-0"
         style={{
