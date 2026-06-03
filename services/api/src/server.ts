@@ -1341,6 +1341,81 @@ server.delete<{ Params: { marketId: string } }>("/api/watchlist/:marketId", asyn
   return { marketId: request.params.marketId };
 });
 
+// --- Market comments (discussion threads) ---
+const MAX_COMMENT_LEN = 2000;
+
+function commentAuthorShort(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
+server.get<{ Params: { id: string } }>("/api/markets/:id/comments", async (request) => {
+  const result = await query<{
+    id: string;
+    market_id: string;
+    author_address: string;
+    body: string;
+    created_at: Date;
+  }>(
+    `SELECT id, market_id, author_address, body, created_at
+       FROM market_comments
+      WHERE market_id = $1 AND hidden = false
+      ORDER BY created_at DESC
+      LIMIT 200`,
+    [request.params.id]
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    marketId: row.market_id,
+    author: row.author_address,
+    authorShort: commentAuthorShort(row.author_address),
+    body: row.body,
+    createdAtIso: toIso(row.created_at),
+  }));
+});
+
+server.post<{ Params: { id: string }; Body: { body?: string } }>(
+  "/api/markets/:id/comments",
+  async (request, reply) => {
+    const session = await requireSession(request.headers.cookie);
+    if (!session) return reply.code(401).send({ error: "auth_required" });
+    const body = (request.body.body ?? "").trim();
+    if (!body) return reply.code(400).send({ error: "comment_body_required" });
+    if (body.length > MAX_COMMENT_LEN) return reply.code(400).send({ error: "comment_too_long" });
+    const market = await query<{ id: string }>("SELECT id FROM markets WHERE id = $1", [request.params.id]);
+    if (!market.rowCount) return reply.code(404).send({ error: "market_not_found" });
+
+    const id = createToken(16);
+    await query(
+      `INSERT INTO market_comments (id, market_id, author_address, body) VALUES ($1, $2, $3, $4)`,
+      [id, request.params.id, session.address, body]
+    );
+    await recordUserActivityEvent({
+      address: session.address,
+      kind: "comment_posted",
+      marketId: request.params.id,
+    });
+    return reply.code(201).send({
+      id,
+      marketId: request.params.id,
+      author: session.address,
+      authorShort: commentAuthorShort(session.address),
+      body,
+      createdAtIso: new Date().toISOString(),
+    });
+  }
+);
+
+server.delete<{ Params: { id: string } }>("/api/comments/:id", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const result = await query(
+    `DELETE FROM market_comments WHERE id = $1 AND lower(author_address) = lower($2)`,
+    [request.params.id, session.address]
+  );
+  if (!result.rowCount) return reply.code(404).send({ error: "comment_not_found" });
+  return { id: request.params.id, deleted: true };
+});
+
 server.get("/api/notifications", async (request, reply) => {
   const session = await requireSession(request.headers.cookie);
   if (!session) return reply.code(401).send({ error: "auth_required" });

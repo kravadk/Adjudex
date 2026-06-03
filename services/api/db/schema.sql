@@ -664,3 +664,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS auto_markets_source_match_uidx
   ON auto_markets (source_kind, external_match_id);
 CREATE INDEX IF NOT EXISTS auto_markets_lifecycle_idx
   ON auto_markets (lifecycle, deadline_at);
+
+-- Market discussion threads. SIWE-gated writes; public reads. `hidden`
+-- is a soft-delete / moderation flag so a removed comment leaves an
+-- auditable row. Author may hard-delete their own; admins may hide any.
+CREATE TABLE IF NOT EXISTS market_comments (
+  id TEXT PRIMARY KEY,
+  market_id TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+  author_address TEXT NOT NULL,
+  body TEXT NOT NULL,
+  hidden BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS market_comments_market_idx
+  ON market_comments (market_id, created_at DESC) WHERE hidden = false;
+CREATE INDEX IF NOT EXISTS market_comments_author_idx
+  ON market_comments (lower(author_address), created_at DESC);

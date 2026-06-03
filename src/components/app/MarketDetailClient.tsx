@@ -16,6 +16,7 @@ import { PositionsFeed } from "@/components/dashboard/positions-feed";
 import { RepriceFeed } from "@/components/dashboard/reprice-feed";
 import { WatchStream } from "@/components/dashboard/watch-stream";
 import { LiveStatusBadge } from "@/components/dashboard/live-status-badge";
+import { MarketComments } from "@/components/dashboard/market-comments";
 import {
   ActivityFeedItem,
   CapsLabel,
@@ -697,6 +698,8 @@ export function MarketDetailClient({ id }: { id: string }) {
             )}
           </div>
         </div>
+
+        <MarketComments marketId={id} />
 
         {toast && (
           <div className="fixed bottom-20 md:bottom-6 right-6 z-50 rounded-[6px] border border-[#262626] bg-[#1f1f1f] px-4 py-2 text-sm text-white shadow-lg">
