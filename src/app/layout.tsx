@@ -1,16 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Rubik } from "next/font/google";
+import { AppShell } from "@/components/app/AppShell";
 import { PwaServiceWorker } from "@/components/app/PwaServiceWorker";
 import { WalletProviders } from "@/components/app/WalletProviders";
 import { UserSettingsEffects } from "@/components/app/UserSettingsEffects";
-import { BottomTabBar } from "@/components/dashboard/bottom-tab-bar";
-import { Footer } from "@/components/dashboard/footer";
-import { JurisdictionBanner } from "@/components/dashboard/jurisdiction-banner";
-import { LeftSidebar } from "@/components/dashboard/left-sidebar";
-import { NetworkBanner } from "@/components/dashboard/network-banner";
-import { RightRail } from "@/components/dashboard/right-rail";
 import { ToastViewport } from "@/components/dashboard/toast";
-import { TopUtility } from "@/components/dashboard/top-utility";
 import "@rainbow-me/rainbowkit/styles.css";
 import "./globals.css";
 
@@ -114,20 +108,7 @@ export default function RootLayout({
         <WalletProviders>
           <UserSettingsEffects />
           <PwaServiceWorker />
-          <LeftSidebar />
-          <div className="md:pl-[240px] min-h-screen">
-            <div className="mx-auto max-w-[1480px] px-5 md:px-7">
-              <TopUtility />
-              <NetworkBanner />
-              <div className="flex gap-8">
-                <main className="flex-1 min-w-0">{children}</main>
-                <RightRail />
-              </div>
-              <Footer />
-            </div>
-          </div>
-          <BottomTabBar />
-          <JurisdictionBanner />
+          <AppShell>{children}</AppShell>
           <ToastViewport />
         </WalletProviders>
       </body>

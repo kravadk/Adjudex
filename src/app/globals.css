@@ -455,3 +455,43 @@ html[data-compact="on"] .tbl td { padding-top: 8px; padding-bottom: 8px; }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* ============================================================
+   Landing page (/landing) helpers.
+   ============================================================ */
+
+/* Scroll-into-view reveal (toggled by the Reveal component's observer). */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: opacity, transform;
+}
+.lp-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Infinite logo marquee — duplicate the track and translate -50%. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes lp-marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .lp-marquee {
+    animation: lp-marquee var(--lp-marquee-dur, 34s) linear infinite;
+  }
+  .lp-marquee-wrap:hover .lp-marquee {
+    animation-play-state: paused;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
