@@ -696,3 +696,42 @@ CREATE INDEX IF NOT EXISTS user_followers_followee_idx
   ON user_followers (lower(followee_address), followed_at DESC);
 CREATE INDEX IF NOT EXISTS user_followers_follower_idx
   ON user_followers (lower(follower_address), followed_at DESC);
+
+-- Outbound webhooks. A subscription is a URL + HMAC secret owned by a
+-- SIWE address. On a subscribed event (e.g. market.resolved) a delivery
+-- row is enqueued per active subscription; the webhook worker POSTs it
+-- with an X-Adjudex-Signature header and retries with backoff.
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+  id TEXT PRIMARY KEY,
+  owner_address TEXT NOT NULL,
+  url TEXT NOT NULL,
+  secret TEXT NOT NULL,
+  event_types TEXT[] NOT NULL DEFAULT ARRAY['market.resolved']::TEXT[],
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS webhook_subscriptions_owner_idx
+  ON webhook_subscriptions (lower(owner_address), created_at DESC);
+CREATE INDEX IF NOT EXISTS webhook_subscriptions_active_idx
+  ON webhook_subscriptions (active) WHERE active = true;
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id TEXT PRIMARY KEY,
+  subscription_id TEXT NOT NULL REFERENCES webhook_subscriptions(id) ON DELETE CASCADE,
+  event TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  delivered_at TIMESTAMPTZ
+);
+
+ALTER TABLE IF EXISTS webhook_deliveries
+  ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+DROP INDEX IF EXISTS webhook_deliveries_pending_idx;
+CREATE INDEX IF NOT EXISTS webhook_deliveries_pending_idx
+  ON webhook_deliveries (status, next_attempt_at, created_at) WHERE status = 'pending';

@@ -24,6 +24,7 @@ import {
 } from "./feeds/chain";
 import { captureException } from "./sentry";
 import { incCounter, setGauge } from "./metrics";
+import { enqueueMarketResolved } from "./webhooks";
 import type { MatchSourceKind } from "./feeds";
 
 const DEFAULT_INTERVAL_MS = 600_000; // 10 min
@@ -232,6 +233,7 @@ async function markFinalized(row: AutoRow, txHash?: string): Promise<void> {
       WHERE id = $1`,
     [row.market_id, resolvedOutcome, txHash ?? null],
   );
+  await enqueueMarketResolved(row.market_id, resolvedOutcome, txHash ?? null);
 }
 
 export async function resolveOnce(): Promise<{

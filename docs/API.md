@@ -96,6 +96,36 @@ the transaction receipt contains the trusted pool event.
 
 ---
 
+## Webhooks
+
+Register an HTTPS endpoint to receive events (currently `market.resolved`,
+`market.created`). SIWE session required to manage subscriptions.
+
+```
+POST   /api/webhooks      { url, eventTypes? }  -> { id, url, eventTypes, secret }
+GET    /api/webhooks                            -> [{ id, url, eventTypes, active, createdAtIso }]
+DELETE /api/webhooks/:id                         -> { id, deleted: true }
+```
+
+The `secret` is returned **once** at creation — store it. Each delivery is
+a `POST` to your URL with headers:
+
+- `X-Adjudex-Event`: event name
+- `X-Adjudex-Delivery`: unique delivery id
+- `X-Adjudex-Signature`: `sha256=<hmac>` — HMAC-SHA256 of the raw body
+  using your secret. Verify it before trusting the payload.
+
+Body example:
+```json
+{ "event": "market.resolved", "marketId": "42", "outcome": "YES",
+  "transactionHash": "0x…", "enqueuedAt": "2026-06-03T12:00:00.000Z" }
+```
+
+Deliveries retry with backoff up to 6 attempts; a non-2xx response or
+timeout is retried, then marked `failed`.
+
+---
+
 ## Errors
 
 Standard HTTP codes. Body is `{ "error": "snake_case_code" }`, e.g.

@@ -29,6 +29,9 @@ import { startNotificationWorker } from "./notification-worker";
 import { startOnchainMonitor } from "./onchain-monitor";
 import { startMatchIngestWorker } from "./match-ingest-worker";
 import { startMatchResolveWorker } from "./match-resolve-worker";
+import { startWebhookWorker } from "./webhook-worker";
+import { registerWebhookRoutes } from "./webhook-routes";
+import { enqueueMarketResolved } from "./webhooks";
 import { applyGeoBlock } from "./geo-block";
 import {
   createStripeCheckoutSession,
@@ -57,6 +60,11 @@ export const server = Fastify({ logger: loggerOptions() });
 // Notification delivery worker. Polls `notification_events` and dispatches
 // pending rows. Channel selected by NOTIFICATION_CHANNEL env (default "log").
 startNotificationWorker();
+// Webhook delivery worker. Polls webhook_deliveries and POSTs to subscriber
+// URLs with HMAC signatures. No-op until a subscription + delivery exist.
+if (process.env.NODE_ENV !== "test") {
+  startWebhookWorker();
+}
 // S5.C continuous monitoring. Disabled in tests; gated on
 // ONCHAIN_MONITOR_ENABLED so we can opt-in per environment.
 if (process.env.NODE_ENV !== "test" && process.env.ONCHAIN_MONITOR_ENABLED === "1") {
@@ -1506,6 +1514,9 @@ server.get("/api/quests", async (request) => {
   const state = await questStateFor(session.address);
   return { authenticated: true, ...state };
 });
+
+// --- Webhooks (developer integrations) ---
+registerWebhookRoutes(server, { requireSession });
 
 server.get("/api/notifications", async (request, reply) => {
   const session = await requireSession(request.headers.cookie);
@@ -3221,6 +3232,7 @@ async function reconcileReceipt(input: {
       [market.id, outcome]
     );
     await createResolutionNotifications(market.id, outcome, input.transactionHash, execute);
+    await enqueueMarketResolved(market.id, outcome, input.transactionHash, execute);
     await insertTimelinePointFromPool({
       execute,
       client: input.client,
