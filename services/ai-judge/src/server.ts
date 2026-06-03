@@ -36,6 +36,7 @@ type MarketProofConfig = {
   poolAddress?: string | null;
   chainId?: number | null;
   resolutionCriteria?: string | null;
+  importSourceId?: string | null;
 };
 
 async function askClaude(
@@ -121,6 +122,64 @@ async function getCanonicalMarket(marketId: string | number): Promise<MarketProo
   return (await response.json()) as MarketProofConfig;
 }
 
+// For GMX-sourced markets, pull a live GMX snapshot from the backend so the
+// verdict is actually grounded in (and the evidence hash binds) the on-the-day
+// liquidity / open-interest / funding the market resolves on. Best-effort:
+// returns null if the market isn't GMX-sourced or the snapshot is unavailable.
+async function fetchGmxEvidence(
+  market: MarketProofConfig,
+): Promise<{ summary: string; snapshot: Record<string, unknown> } | null> {
+  if (market.importSourceId !== "gmx") return null;
+  const baseUrl = backendUrl();
+  if (!baseUrl) return null;
+
+  const addrMatch = market.resolutionCriteria?.match(/marketTokenAddress:\s*(0x[0-9a-fA-F]{40})/);
+  const symbol = (market.title ?? "")
+    .replace(/^GMX\s+/i, "")
+    .replace(/\s+(liquidity market|open-interest imbalance|funding direction)$/i, "")
+    .trim();
+  const qs = addrMatch ? `marketTokenAddress=${addrMatch[1]}` : `symbol=${encodeURIComponent(symbol)}`;
+  if (!addrMatch && !symbol) return null;
+
+  try {
+    const res = await fetch(`${baseUrl}/api/integrations/gmx/signal?${qs}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const sig = (await res.json()) as {
+      found?: boolean;
+      market?: string;
+      liquidityUsd?: number;
+      openInterestLongUsd?: number;
+      openInterestShortUsd?: number;
+      fundingLongAprEstimate?: number;
+      priceChangePercent24h?: number;
+    };
+    if (!sig.found) return null;
+    const snapshot: Record<string, unknown> = {
+      source: "GMX SDK v2",
+      market: sig.market ?? null,
+      liquidityUsd: sig.liquidityUsd ?? null,
+      openInterestLongUsd: sig.openInterestLongUsd ?? null,
+      openInterestShortUsd: sig.openInterestShortUsd ?? null,
+      fundingLongAprEstimate: sig.fundingLongAprEstimate ?? null,
+      priceChangePercent24h: sig.priceChangePercent24h ?? null,
+      fetchedAtIso: new Date().toISOString(),
+    };
+    const summary =
+      `Live GMX snapshot for ${sig.market ?? symbol}: ` +
+      `pool liquidity $${Math.round(sig.liquidityUsd ?? 0).toLocaleString("en-US")}, ` +
+      `long OI $${Math.round(sig.openInterestLongUsd ?? 0).toLocaleString("en-US")}, ` +
+      `short OI $${Math.round(sig.openInterestShortUsd ?? 0).toLocaleString("en-US")}, ` +
+      `long funding ${sig.fundingLongAprEstimate ?? "n/a"}% est APR, ` +
+      `24h price ${sig.priceChangePercent24h ?? "n/a"}%.`;
+    return { summary, snapshot };
+  } catch {
+    return null;
+  }
+}
+
 function canonicalResolutionQuestion(market: MarketProofConfig): string | null {
   const title = market.title?.trim();
   if (!title) return null;
@@ -204,7 +263,10 @@ async function start() {
     if (!canonicalQuestion) {
       return reply.code(400).send({ error: "market_question_required" });
     }
-    const context = `Verified zkTLS proof hash: ${sourceProofHash}`;
+    const gmxEvidence = await fetchGmxEvidence(market);
+    const context = gmxEvidence
+      ? `Verified zkTLS proof hash: ${sourceProofHash}\n\n${gmxEvidence.summary}`
+      : `Verified zkTLS proof hash: ${sourceProofHash}`;
 
     let claudeResult: Awaited<ReturnType<typeof askClaude>>;
     try {
@@ -222,7 +284,14 @@ async function start() {
     const outcome: 0 | 1 = claudeResult.outcome;
     const reasoning = claudeResult.reasoning;
     const reasoningHash = keccak256(stringToBytes(reasoning));
-    const evidenceHash = keccak256(concat([reasoningHash, sourceProofHash]));
+    // Fold the GMX snapshot into the evidence hash when present so the signed
+    // verdict is cryptographically bound to the live GMX data it cited.
+    const gmxSnapshotHash = gmxEvidence
+      ? keccak256(stringToBytes(JSON.stringify(gmxEvidence.snapshot)))
+      : null;
+    const evidenceHash = gmxSnapshotHash
+      ? keccak256(concat([reasoningHash, sourceProofHash, gmxSnapshotHash]))
+      : keccak256(concat([reasoningHash, sourceProofHash]));
     const inner = digest(chainId, pool, contractMarketId, outcome, evidenceHash);
     const signature = await handle.signDigest(inner);
     const attestation = handle.attest ? await handle.attest(inner) : null;
@@ -242,6 +311,7 @@ async function start() {
       digest: toHex(inner),
       mode: handle.mode,
       attestation,
+      gmxEvidence: gmxEvidence?.snapshot ?? null,
     };
   });
 
