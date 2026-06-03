@@ -27,7 +27,8 @@ type Item = {
 const NAV: Item[] = [
   { href: "/", match: "/", label: "News Feed", Icon: Compass },
   { href: "/leaderboard", match: "/leaderboard", label: "Campaign", Icon: Crown },
-  { href: "/feed", match: "/feed", label: "Rewards", Icon: Gift },
+  { href: "/feed", match: "/feed", label: "For You", Icon: Compass },
+  { href: "/referrals", match: "/referrals", label: "Referrals", Icon: Gift },
   { href: "/portfolio", match: "/portfolio", label: "Profile", Icon: User },
   { href: "/settings", match: "/settings", label: "Settings", Icon: Settings },
 ];
