@@ -33,7 +33,7 @@ import { startWebhookWorker } from "./webhook-worker";
 import { registerWebhookRoutes } from "./webhook-routes";
 import { enqueueMarketResolved } from "./webhooks";
 import { registerSponsorIntegrationRoutes } from "./sponsor-routes";
-import { buildGmxImportCandidates, configuredArbitrumSepoliaRpcUrl, configuredRhcRpcUrl, executeDuneSummary } from "./sponsor-integrations";
+import { buildGmxImportCandidates, buildRwaImportCandidates, configuredArbitrumSepoliaRpcUrl, configuredRhcRpcUrl, executeDuneSummary } from "./sponsor-integrations";
 import { applyGeoBlock } from "./geo-block";
 import {
   createStripeCheckoutSession,
@@ -1805,6 +1805,26 @@ server.post<{ Querystring: { limit?: string } }>("/api/import/gmx/scan", async (
 
   const limit = clampInteger(Number(request.query.limit ?? 8), 1, 20);
   const drafts = await buildGmxImportCandidates(limit);
+  const candidates: ImportCandidateRow[] = [];
+  for (const draft of drafts) {
+    const candidateId = await upsertImportCandidate(draft);
+    const row = await getImportCandidate(candidateId);
+    if (row) candidates.push(row);
+  }
+
+  return {
+    scannedSources: 1,
+    candidates: candidates.map(toImportCandidate),
+    sourceErrors: [],
+  };
+});
+
+server.post<{ Querystring: { limit?: string } }>("/api/import/rwa/scan", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+
+  const limit = clampInteger(Number(request.query.limit ?? 8), 1, 20);
+  const drafts = buildRwaImportCandidates(limit);
   const candidates: ImportCandidateRow[] = [];
   for (const draft of drafts) {
     const candidateId = await upsertImportCandidate(draft);

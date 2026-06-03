@@ -268,6 +268,25 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
     }
   }
 
+  async function scanRwaMarkets() {
+    setImportBusy("rwa");
+    setImportError(null);
+    try {
+      const result = await postJson<{
+        candidates: ImportCandidate[];
+        sourceErrors: Array<{ sourceId: string; error: string }>;
+      }>("/api/import/rwa/scan?limit=8", {});
+      setCandidates((rows) => mergeCandidates(result.candidates, rows));
+      if (result.sourceErrors.length > 0) {
+        setImportError(result.sourceErrors.map((e) => `${e.sourceId}: ${e.error}`).join("; "));
+      }
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Could not generate RWA markets.");
+    } finally {
+      setImportBusy(null);
+    }
+  }
+
   async function validateCandidate(id: string) {
     setImportBusy(`validate:${id}`);
     setImportError(null);
@@ -596,6 +615,15 @@ export function CreateMarketClient({ preferredChain }: { preferredChain?: "rhc" 
               >
                 <LineChart className="w-3.5 h-3.5" />
                 {importBusy === "gmx" ? "Loading GMX..." : "GMX markets"}
+              </button>
+              <button
+                onClick={scanRwaMarkets}
+                disabled={importBusy === "rwa"}
+                className="btn ghost"
+                style={{ opacity: importBusy === "rwa" ? 0.55 : 1 }}
+              >
+                <LineChart className="w-3.5 h-3.5" />
+                {importBusy === "rwa" ? "Loading RWA..." : "RWA stocks"}
               </button>
               <button
                 onClick={scanSources}

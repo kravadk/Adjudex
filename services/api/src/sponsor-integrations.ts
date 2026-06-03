@@ -703,6 +703,87 @@ export async function buildGmxImportCandidates(limit = 8): Promise<ImportCandida
   return drafts;
 }
 
+// Curated tokenized-equity universe for Robinhood Chain RWA markets. Strikes
+// are ROUND TEMPLATE levels, not live quotes — there is no stock price feed in
+// this codebase, so every candidate is flagged `strike_template` and left as
+// needs_review for an admin to confirm against the real quote before deploy.
+const RWA_EQUITIES: Array<{ symbol: string; name: string; venue: string; strike: number }> = [
+  { symbol: "AAPL", name: "Apple", venue: "NASDAQ", strike: 250 },
+  { symbol: "TSLA", name: "Tesla", venue: "NASDAQ", strike: 350 },
+  { symbol: "NVDA", name: "NVIDIA", venue: "NASDAQ", strike: 170 },
+  { symbol: "MSFT", name: "Microsoft", venue: "NASDAQ", strike: 480 },
+  { symbol: "GOOGL", name: "Alphabet", venue: "NASDAQ", strike: 200 },
+  { symbol: "AMZN", name: "Amazon", venue: "NASDAQ", strike: 230 },
+];
+
+// Generate RWA / tokenized-stock prediction-market candidates for Robinhood
+// Chain. Equity markets ask whether a tokenized stock closes above a template
+// strike; one venue-level market asks about tokenized-RWA settlement volume.
+// All are needs_review drafts (admin confirms strike + deadline before deploy).
+export function buildRwaImportCandidates(limit = 8): ImportCandidateDraft[] {
+  const eventDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const volumeDeadline = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const now = new Date().toISOString();
+  const drafts: ImportCandidateDraft[] = [];
+
+  const equityCount = Math.max(1, Math.min(limit - 1, RWA_EQUITIES.length));
+  for (const equity of RWA_EQUITIES.slice(0, equityCount)) {
+    const quoteUrl = `https://www.google.com/finance/quote/${equity.symbol}:${equity.venue}`;
+    drafts.push({
+      id: stableSponsorId(`rwa:equity:${equity.symbol}`),
+      sourceId: "rwa",
+      title: `Tokenized ${equity.name} (${equity.symbol}) close`,
+      sourceUrl: quoteUrl,
+      sourcePublishedAtIso: now,
+      eventDateIso: eventDate,
+      category: "stocks",
+      question: `Will tokenized ${equity.name} (${equity.symbol}) close above $${equity.strike} on the event date?`,
+      description:
+        `Robinhood Chain RWA market on tokenized ${equity.name}. ` +
+        `The $${equity.strike} strike is a ROUND TEMPLATE level, not a live quote — ` +
+        `confirm the current price and adjust the strike before deploying.`,
+      oracleType: "zktls-ai-oracle",
+      asset: "USDC",
+      deadlineIso: eventDate,
+      resolutionCriteria: [
+        `Resolve YES if the official ${equity.venue} closing price for ${equity.symbol} on the event date is strictly above $${equity.strike}.`,
+        `Cite the closing quote from a public source (e.g. ${quoteUrl}).`,
+        "Resolve NO if the close is at or below the strike. If markets are closed on the event date, use the next trading day's close.",
+      ].join("\n"),
+      confidence: 0.6,
+      status: "needs_review",
+      riskFlags: ["strike_template"],
+    });
+  }
+
+  drafts.push({
+    id: stableSponsorId("rwa:volume:rhc"),
+    sourceId: "rwa",
+    title: "Robinhood Chain RWA volume",
+    sourceUrl: "https://robinhood.com/",
+    sourcePublishedAtIso: now,
+    eventDateIso: volumeDeadline,
+    category: "soft",
+    question: "Will Robinhood Chain tokenized-RWA settlement volume exceed $10M over the next 30 days?",
+    description:
+      "Venue-level traction market on Robinhood Chain RWA settlement volume. " +
+      "Resolve from on-chain settlement data (Adjudex indexer / Dune) for the RHC chain id.",
+    oracleType: "zktls-ai-oracle",
+    asset: "USDC",
+    deadlineIso: volumeDeadline,
+    resolutionCriteria: [
+      "Resolve YES if total tokenized-RWA settlement volume on Robinhood Chain over the 30-day window exceeds $10,000,000 USD.",
+      "Use the Adjudex indexer totals for the RHC chain id (or an equivalent public Dune query) as the volume source.",
+      "Resolve NO if volume is at or below $10M at the deadline.",
+    ].join("\n"),
+    confidence: 0.55,
+    status: "needs_review",
+    riskFlags: ["threshold_template"],
+  });
+
+  return drafts;
+}
+
 function configuredGmxChainId(): ContractsChainId {
   const chainId = Number(process.env.GMX_CHAIN_ID ?? "42161");
   if (GMX_SUPPORTED_CHAIN_IDS.has(chainId as ContractsChainId)) return chainId as ContractsChainId;
