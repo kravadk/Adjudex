@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+
 interface IParimutuelPool {
     function resolve(uint8 side) external;
     function resolver() external view returns (address);
@@ -20,9 +23,8 @@ interface IParimutuelPool {
 //
 // V1 compatibility: verifyAndResolve(...) is retained but gated to a
 // `fastTrackUntil` timestamp. Set to 0 (default) to force the V2 flow.
-contract AIJudgeVerifier {
+contract AIJudgeVerifier is Ownable2Step {
     address public immutable judge;
-    address public owner;
 
     // Markets resolved before this timestamp may use the legacy
     // instant-resolve path. Set to 0 (or past) to force the V2 flow.
@@ -77,24 +79,14 @@ contract AIJudgeVerifier {
         bytes32 evidenceHash
     );
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
-    }
-
-    constructor(address _judge) {
+    constructor(address _judge) Ownable(msg.sender) {
         require(_judge != address(0), "judge=0");
         judge = _judge;
-        owner = msg.sender;
         fastTrackUntil = 0;
     }
 
     // ─── Configuration ────────────────────────────────────────────────
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "owner=0");
-        owner = newOwner;
-    }
+    // Ownership transfer/accept is inherited from Ownable2Step.
 
     function setFastTrackUntil(uint256 ts) external onlyOwner {
         fastTrackUntil = ts;

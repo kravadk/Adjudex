@@ -119,6 +119,11 @@ describe("contracts", () => {
         "getAgent",
         "agentCount",
         "agentIds",
+        // OZ production hardening: 2-step ownership handshake.
+        "owner",
+        "pendingOwner",
+        "transferOwnership",
+        "acceptOwnership",
       ]),
     );
   });
@@ -169,6 +174,11 @@ describe("contracts", () => {
         "CHALLENGE_WINDOW",
         "fastTrackUntil",
         "setFastTrackUntil",
+        // OZ production hardening: 2-step ownership handshake.
+        "owner",
+        "pendingOwner",
+        "transferOwnership",
+        "acceptOwnership",
       ]),
     );
   });
@@ -178,7 +188,19 @@ describe("contracts", () => {
     const v = output.contracts["PriceOracle.sol"].PriceOracle;
     const names = v.abi.map((item) => item.name).filter(Boolean);
     expect(names).toEqual(
-      expect.arrayContaining(["setPrice", "setFeed", "getPrice", "keyFor", "PriceSet", "FeedSet"]),
+      expect.arrayContaining([
+        "setPrice",
+        "setFeed",
+        "getPrice",
+        "keyFor",
+        "PriceSet",
+        "FeedSet",
+        // OZ production hardening: 2-step ownership handshake.
+        "owner",
+        "pendingOwner",
+        "transferOwnership",
+        "acceptOwnership",
+      ]),
     );
   });
 

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+
 interface AggregatorV3Interface {
     function latestRoundData()
         external
@@ -20,9 +23,7 @@ interface AggregatorV3Interface {
 //   2) `setFeed(key, aggregator)` - Chainlink AggregatorV3 (when available)
 // `getPrice(key)` prefers Chainlink if a feed is registered; else manual.
 // All prices normalised to 8 decimals.
-contract PriceOracle {
-    address public immutable owner;
-
+contract PriceOracle is Ownable2Step {
     struct ManualPrice {
         uint256 price;
         uint256 updatedAt;
@@ -42,12 +43,7 @@ contract PriceOracle {
     event FeedSet(bytes32 indexed key, address feed);
     event MaxStaleSecSet(uint256 oldValue, uint256 newValue);
 
-    constructor() { owner = msg.sender; }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
-    }
+    constructor() Ownable(msg.sender) {}
 
     function setPrice(bytes32 key, uint256 price, uint256 updatedAt) external onlyOwner {
         manual[key] = ManualPrice({ price: price, updatedAt: updatedAt, exists: true });

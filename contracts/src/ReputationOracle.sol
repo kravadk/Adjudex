@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+
 // ERC-8004-shaped agent registry + reputation oracle.
 // agentId = keccak256(handle). Permissionless registration.
 //
@@ -13,8 +16,7 @@ pragma solidity ^0.8.26;
 //
 // `judge` is rotatable by `owner` so a compromised key can be cycled without
 // a contract redeploy.
-contract ReputationOracle {
-    address public immutable owner;
+contract ReputationOracle is Ownable2Step {
     address public judge;
 
     struct Agent {
@@ -41,16 +43,10 @@ contract ReputationOracle {
     );
     event JudgeRotated(address indexed previousJudge, address indexed newJudge);
 
-    constructor(address _judge) {
-        owner = msg.sender;
+    constructor(address _judge) Ownable(msg.sender) {
         // Allow zero at deploy time; judge can be set later. Self-attest
         // path stays usable so testnet bring-up isn't blocked.
         judge = _judge;
-    }
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "not owner");
-        _;
     }
 
     function rotateJudge(address newJudge) external onlyOwner {

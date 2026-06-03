@@ -12,20 +12,19 @@
 // Without DRY_RUN it sends real transactions.
 //
 // Coverage:
-//   AIJudgeVerifier  — has transferOwnership(address) ✅
+//   AIJudgeVerifier  — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
 //   MarketFactory    — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
 //   ProofAnchor      — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
-//   BetQuoteVerifier — immutable _quoteSigner        — SKIP, document gap
-//   ReputationOracle — no owner pattern              — SKIP, document gap
-//   PriceOracle      — owner without transferOwnership — SKIP (contract change needed)
+//   ReputationOracle — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
+//   PriceOracle      — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
 //   TokenizedStockAdapter — OpenZeppelin Ownable2Step ✅ (2-step: see note below)
+//   BetQuoteVerifier — immutable _quoteSigner        — SKIP, document gap
 //
-// TWO-STEP OWNERSHIP: MarketFactory, ProofAnchor, and TokenizedStockAdapter
-// use OpenZeppelin Ownable2Step. transferOwnership() here only sets the
-// pendingOwner — the transfer is NOT complete until the new owner (the Safe)
-// calls acceptOwnership() itself. AIJudgeVerifier still uses single-step
-// Ownable and completes immediately. This script initiates the handshake;
-// finish it from the Safe.
+// TWO-STEP OWNERSHIP: every transferable target now uses OpenZeppelin
+// Ownable2Step. transferOwnership() here only sets the pendingOwner — the
+// transfer is NOT complete until the new owner (the Safe) calls
+// acceptOwnership() itself. This script initiates the handshake; finish it
+// from the Safe.
 //
 // See docs/GOVERNANCE.md for the contract-change list required to make
 // all contracts multisig-owned before mainnet.
@@ -51,6 +50,7 @@ type Deployments = Record<string, string | number | undefined> & {
   betQuoteVerifier?: string;
   reputationOracle?: string;
   tokenizedStockAdapter?: string;
+  priceOracle?: string;
 };
 
 const TRANSFER_OWNERSHIP_ABI = [
@@ -86,6 +86,7 @@ const TARGETS: Target[] = [
     name: "AIJudgeVerifier",
     key: "aiJudgeVerifier",
     supportsTransfer: true,
+    twoStep: true,
   },
   {
     name: "MarketFactory",
@@ -108,8 +109,14 @@ const TARGETS: Target[] = [
   {
     name: "ReputationOracle",
     key: "reputationOracle",
-    supportsTransfer: false,
-    note: "Permissionless self-attest. No owner.",
+    supportsTransfer: true,
+    twoStep: true,
+  },
+  {
+    name: "PriceOracle",
+    key: "priceOracle",
+    supportsTransfer: true,
+    twoStep: true,
   },
   {
     name: "TokenizedStockAdapter",

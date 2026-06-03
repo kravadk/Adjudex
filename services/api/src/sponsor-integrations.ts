@@ -150,7 +150,7 @@ export function sponsorStatuses(): SponsorStatus[] {
       evidence: [
         "Contracts import @openzeppelin/contracts ERC20, IERC20, SafeERC20, ReentrancyGuard, Ownable2Step, and Pausable.",
         "ParimutuelPool: ReentrancyGuard on every value path, SafeERC20 transfers, resolver-gated emergency pause (claims/refunds stay open).",
-        "MarketFactory: Ownable2Step + Pausable creation. ProofAnchor and TokenizedStockAdapter use Ownable2Step two-step ownership handoff.",
+        "MarketFactory: Ownable2Step + Pausable creation. AIJudgeVerifier, ReputationOracle, PriceOracle, ProofAnchor, and TokenizedStockAdapter all use Ownable2Step two-step ownership handoff.",
       ],
     },
     {
