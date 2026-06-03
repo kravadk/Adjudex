@@ -11,6 +11,7 @@
       "startsInMinutes": 120,
       "bestOfMaps": 3,
       "streamUrl": "https://www.twitch.tv/esl_csgo",
+      "impliedYesProbability": 0.62,
       "result": null
     },
     {
@@ -46,6 +47,7 @@
       "tournament": "Premier League",
       "league": "Premier League",
       "startsInMinutes": 240,
+      "impliedYesProbability": 0.55,
       "result": null
     },
     {

@@ -12,6 +12,7 @@ import {
   marketFactoryWriteAbi,
 } from "./feeds/chain";
 import { matchQuestion } from "./feeds/match-question";
+import { seedOpeningOdds } from "./feeds/opening-odds";
 
 export type DeployOutcome =
   | { status: "skipped"; reason: string }
@@ -180,6 +181,10 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
       new Date(deadlineMs).toISOString(),
     ],
   );
+
+  // Optional opening-odds seed (SEED_OPENING_ODDS=1). Best-effort: a failed
+  // seed never fails the deploy — the market is already live at 50/50.
+  await seedOpeningOdds(poolAddress, match.impliedYesProbability);
 
   return { status: "deployed", marketId, poolAddress, txHash };
 }

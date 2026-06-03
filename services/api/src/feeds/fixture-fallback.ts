@@ -31,6 +31,7 @@ type FixtureRow = {
   deadlineInMinutes?: number;
   bestOfMaps?: number;
   streamUrl?: string;
+  impliedYesProbability?: number;
   result?: {
     status?: MatchStatus;
     winner?: "teamA" | "teamB" | "draw" | null;
@@ -75,6 +76,10 @@ function toIngestMatch(row: FixtureRow): IngestMatch {
     closeAtIsoOverride:
       typeof row.deadlineInMinutes === "number"
         ? minutesFromNowIso(row.deadlineInMinutes)
+        : undefined,
+    impliedYesProbability:
+      typeof row.impliedYesProbability === "number"
+        ? row.impliedYesProbability
         : undefined,
   };
 }

@@ -36,6 +36,11 @@ export type IngestMatch = {
   // deadline from kickoff + duration. Lets the fixture demo close a market
   // a few minutes out so the resolve worker can be shown end-to-end.
   closeAtIsoOverride?: string;
+  // Optional implied probability that teamA (YES) wins, in [0,1]. When
+  // present and SEED_OPENING_ODDS=1, the deployer seeds opening liquidity
+  // skewed to this ratio so the pool doesn't sit at a cold 50/50. Pure
+  // bootstrap — the parimutuel pool ratio remains the source of truth.
+  impliedYesProbability?: number;
 };
 
 export type MatchStatus = "scheduled" | "running" | "finished" | "canceled";
