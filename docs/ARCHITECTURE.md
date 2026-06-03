@@ -489,6 +489,43 @@ Failure rules:
 All five importer endpoints require `requireImportAdmin()` (SIWE +
 allowlist).
 
+### 9.1 Auto-ingestion pipeline (esports + football)
+
+A fully automated variant of the importer runs as two interval workers in
+the API service, gated by `MATCH_INGEST_ENABLED=1`:
+
+- **Feed adapters** (`services/api/src/feeds/`) normalise three providers
+  to one `IngestMatch` shape: PandaScore (CS2/Dota2 schedules + results),
+  football-data.org (football fixtures + results), and an offline fixture
+  feed used when no provider token is set. Selection is automatic
+  (`getActiveMatchSources()`): real tokens win; otherwise the fixture feed
+  keeps the pipeline non-empty for local/hackathon demos.
+- **match-ingest-worker** pulls upcoming matches, filters to CS2/Dota2/
+  football, derives a binary market (`"Will {teamA} beat {teamB}?"`, YES =
+  teamA wins) with a deadline of kickoff + expected duration +
+  `RESULT_BUFFER_SEC`, and auto-deploys a soft market via the
+  **market-deployer** (`createSoftMarket` from `MARKET_CREATOR_PRIVATE_KEY`,
+  a gas-only hot wallet). Dedupe is enforced by `auto_markets`'
+  `UNIQUE(source_kind, external_match_id)`.
+- **match-resolve-worker** runs the optimistic settlement. After a
+  market's deadline it fetches the final result; the deterministic winner
+  is the verdict, the result payload is hashed into `evidenceHash`, and the
+  judge key signs the exact digest `AIJudgeVerifier` verifies. It calls
+  `propose()`, then `finalize()` once the on-chain 2h challenge window has
+  elapsed and the proposal is still Pending (disputed proposals are left
+  for owner `overrideAndFinalize`).
+
+Odds are pure parimutuel — new markets open 50/50 and the YES/NO pool
+ratio is the implied probability. External feeds are used for scheduling
+and settlement only, never as an odds oracle.
+
+Tracking lives in `auto_markets` (lifecycle: open → proposed → finalized |
+skipped); the markets themselves appear in `/api/markets` immediately
+because the deployer seeds a `market_stats` row alongside the `markets`
+insert. PandaScore's free tier forbids betting use, so real-money mainnet
+requires a paid plan or a different provider — testnet/TestUSDC demo is
+treated as educational.
+
 ## 10. Resolution lifecycle in detail
 
 | Step | Caller | Contract method | Receipt event | UI surface |

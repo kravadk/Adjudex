@@ -27,6 +27,8 @@ import { captureException } from "./sentry";
 import { incCounter, observeDuration, renderMetrics } from "./metrics";
 import { startNotificationWorker } from "./notification-worker";
 import { startOnchainMonitor } from "./onchain-monitor";
+import { startMatchIngestWorker } from "./match-ingest-worker";
+import { startMatchResolveWorker } from "./match-resolve-worker";
 import { applyGeoBlock } from "./geo-block";
 import {
   createStripeCheckoutSession,
@@ -58,6 +60,13 @@ startNotificationWorker();
 // ONCHAIN_MONITOR_ENABLED so we can opt-in per environment.
 if (process.env.NODE_ENV !== "test" && process.env.ONCHAIN_MONITOR_ENABLED === "1") {
   startOnchainMonitor();
+}
+// Auto-ingest pipeline (CS2 / Dota2 / football). Off by default; opt-in per
+// environment via MATCH_INGEST_ENABLED=1. Ingest scans feeds and auto-deploys
+// markets; resolve proposes + finalizes settled matches through the AI judge.
+if (process.env.NODE_ENV !== "test" && process.env.MATCH_INGEST_ENABLED === "1") {
+  startMatchIngestWorker();
+  startMatchResolveWorker();
 }
 await server.register(cors, { origin: true });
 
@@ -3548,7 +3557,7 @@ type MarketRow = {
   emoji: string;
   title: string;
   description: string;
-  category: "stocks" | "crypto" | "sports" | "soft";
+  category: "stocks" | "crypto" | "sports" | "esports" | "soft";
   oracle_type: "chainlink-price" | "zktls-ai-oracle" | "manual";
   status: "draft" | "open" | "locked" | "resolving" | "resolved" | "claimable" | "archived";
   asset: "USDC" | "tokenized-TSLA" | "tokenized-AAPL";
@@ -3574,6 +3583,17 @@ type MarketRow = {
   source_published_at: Date | null;
   provenance_note: string | null;
   recent_traders: string[] | null;
+  game: string | null;
+  tournament: string | null;
+  team_a: string | null;
+  team_b: string | null;
+  match_starts_at: Date | null;
+  best_of_maps: number | null;
+  stream_url: string | null;
+  sport: string | null;
+  league: string | null;
+  parent_market_id: string | null;
+  kind: string | null;
 };
 
 function toMarket(row: MarketRow) {
@@ -3613,6 +3633,17 @@ function toMarket(row: MarketRow) {
     sourcePublishedAtIso: row.source_published_at ? toIso(row.source_published_at) : undefined,
     provenanceNote: row.provenance_note ?? undefined,
     recentTraders: row.recent_traders ?? undefined,
+    game: row.game ?? undefined,
+    tournament: row.tournament ?? undefined,
+    teamA: row.team_a ?? undefined,
+    teamB: row.team_b ?? undefined,
+    matchStartsAtIso: row.match_starts_at ? toIso(row.match_starts_at) : undefined,
+    bestOfMaps: row.best_of_maps ?? undefined,
+    streamUrl: row.stream_url ?? undefined,
+    sport: row.sport ?? undefined,
+    league: row.league ?? undefined,
+    parentMarketId: row.parent_market_id ?? undefined,
+    kind: row.kind ?? undefined,
   };
 }
 

@@ -223,6 +223,29 @@ const RULES: Rule[] = [
     description: "Claude key for AI judge",
   },
 
+  // Auto-ingest pipeline (CS2 / Dota2 / football). All optional — the
+  // pipeline is opt-in via MATCH_INGEST_ENABLED and degrades to the
+  // offline fixture feed when no provider token is set.
+  {
+    key: "MARKET_CREATOR_PRIVATE_KEY",
+    category: "AGENTS",
+    required: [],
+    format: /^0x[0-9a-fA-F]{64}$/,
+    description: "hot wallet for auto market creation + propose/finalize (gas only)",
+  },
+  {
+    key: "PANDASCORE_TOKEN",
+    category: "AGENTS",
+    required: [],
+    description: "PandaScore API token (CS2/Dota2 schedules + results)",
+  },
+  {
+    key: "FOOTBALL_DATA_TOKEN",
+    category: "AGENTS",
+    required: [],
+    description: "football-data.org API token (fixtures + results)",
+  },
+
   // IPFS
   {
     key: "IPFS_PROVIDER",

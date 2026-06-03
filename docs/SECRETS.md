@@ -18,6 +18,9 @@ Each role is a **separate wallet**. Never reuse one key for two roles.
 | **Quote signer** | `QUOTE_SIGNER_PRIVATE_KEY` | EIP-712 bet quotes | Backend secret manager |
 | **Proof anchor signer** | `PROOF_ANCHOR_PRIVATE_KEY` | `anchor(cid, sessionId)` calls | Backend secret manager |
 | **MM agent** | `MM_AGENT_PRIVATE_KEY` | Counter-balance trades | Separate machine, hot wallet with small balance |
+| **Market creator** | `MARKET_CREATOR_PRIVATE_KEY` | Auto-ingest `createSoftMarket` + `propose`/`finalize` txs | Backend secret manager; separate hot wallet, gas-only balance, rotatable |
+| **PandaScore** | `PANDASCORE_TOKEN` | — (read-only feed) | Backend secret manager; CS2/Dota2 schedules + results |
+| **football-data** | `FOOTBALL_DATA_TOKEN` | — (read-only feed) | Backend secret manager; football fixtures + results |
 | **Reclaim shared secret** | `RECLAIM_PROOF_WRITE_SECRET` | Auth Next→backend | Backend secret manager |
 | **Pinata** | `PINATA_JWT` | Pin requests | Backend secret manager |
 | **Anthropic** | `ANTHROPIC_API_KEY` | Claude inference | AI judge only |

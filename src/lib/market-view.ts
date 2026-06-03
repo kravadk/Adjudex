@@ -1,7 +1,7 @@
 ﻿// Adapter: maps domain Market to the view shape consumed by the Adjudex UI.
 // Keeps the service layer and zustand stores untouched.
 
-import type { EsportsGame, Market, MarketKind } from "@/lib/types/domain";
+import type { EsportsGame, Market, MarketKind, SportKind } from "@/lib/types/domain";
 import { resolveMarketLifecycle, type MarketLifecycle } from "@/lib/market-lifecycle";
 
 export type AssetClass = "stock" | "crypto" | "sports" | "esports" | "politics" | "tech";
@@ -38,6 +38,9 @@ export type MarketView = {
   matchStartsAtIso?: string;
   bestOfMaps?: number;
   streamUrl?: string;
+  // Traditional-sports opt-in (mirrors Market sport/league fields).
+  sport?: SportKind;
+  league?: string;
   parentMarketId?: string;
   kind?: MarketKind;
   // S6.A — passthrough for <TraderStack> on market cards.
@@ -119,6 +122,8 @@ export function toMarketView(market: Market, opts: { featured?: boolean } = {}):
     matchStartsAtIso: market.matchStartsAtIso,
     bestOfMaps: market.bestOfMaps,
     streamUrl: market.streamUrl,
+    sport: market.sport,
+    league: market.league,
     parentMarketId: market.parentMarketId,
     kind: market.kind,
     recentTraders: market.recentTraders,

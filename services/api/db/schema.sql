@@ -68,8 +68,12 @@ ALTER TABLE markets ADD COLUMN IF NOT EXISTS stream_url TEXT;
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS parent_market_id TEXT;
 -- Market kind: "moneyline" (default) / "handicap" / "totals" / "prop".
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS kind TEXT;
+-- Traditional-sports vertical (category = 'sports'). Mirror of game/tournament.
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS sport TEXT;
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS league TEXT;
 
 CREATE INDEX IF NOT EXISTS markets_game_idx ON markets (game) WHERE game IS NOT NULL;
+CREATE INDEX IF NOT EXISTS markets_sport_idx ON markets (sport) WHERE sport IS NOT NULL;
 CREATE INDEX IF NOT EXISTS markets_parent_market_id_idx ON markets (parent_market_id) WHERE parent_market_id IS NOT NULL;
 
 DO $$
@@ -629,3 +633,34 @@ CREATE INDEX IF NOT EXISTS agent_followers_agent_idx
   ON agent_followers (agent_id, followed_at DESC);
 CREATE INDEX IF NOT EXISTS agent_followers_follower_idx
   ON agent_followers (lower(follower_address), followed_at DESC);
+
+-- Auto-ingest pipeline bookkeeping. One row per market the match-ingest
+-- worker created from a feed. Decouples pipeline lifecycle from the main
+-- `markets` table: the deployer writes both, the resolve worker drives the
+-- lifecycle column here. UNIQUE(source_kind, external_match_id) is the
+-- dedupe guard so the same match never spawns two markets.
+CREATE TABLE IF NOT EXISTS auto_markets (
+  market_id TEXT PRIMARY KEY,
+  pool_address TEXT NOT NULL,
+  chain_id INTEGER NOT NULL,
+  source_kind TEXT NOT NULL,
+  external_match_id TEXT NOT NULL,
+  category TEXT NOT NULL,
+  team_a TEXT NOT NULL,
+  team_b TEXT NOT NULL,
+  deadline_at TIMESTAMPTZ NOT NULL,
+  -- open -> proposed -> finalized | refunded | skipped
+  lifecycle TEXT NOT NULL DEFAULT 'open',
+  proposed_outcome INTEGER,
+  proposed_at TIMESTAMPTZ,
+  challenge_deadline TIMESTAMPTZ,
+  resolve_attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS auto_markets_source_match_uidx
+  ON auto_markets (source_kind, external_match_id);
+CREATE INDEX IF NOT EXISTS auto_markets_lifecycle_idx
+  ON auto_markets (lifecycle, deadline_at);

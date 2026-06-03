@@ -1,0 +1,75 @@
+{
+  "_comment": "Synthetic demo match feed used when no PANDASCORE_TOKEN / FOOTBALL_DATA_TOKEN is set. startsInMinutes is relative to now so the feed always looks live. deadlineInMinutes (optional) forces an explicit market close for the fast resolve demo. result is returned by fetchResult regardless of clock; set winner to teamA|teamB|draw|null.",
+  "matches": [
+    {
+      "externalMatchId": "fx-cs2-001",
+      "category": "esports",
+      "game": "cs2",
+      "teamA": "Natus Vincere",
+      "teamB": "FaZe Clan",
+      "tournament": "ESL Pro League · Season 21",
+      "startsInMinutes": 120,
+      "bestOfMaps": 3,
+      "streamUrl": "https://www.twitch.tv/esl_csgo",
+      "result": null
+    },
+    {
+      "externalMatchId": "fx-cs2-002",
+      "category": "esports",
+      "game": "cs2",
+      "teamA": "Team Vitality",
+      "teamB": "Team Spirit",
+      "tournament": "BLAST Premier · Spring Final",
+      "startsInMinutes": 300,
+      "bestOfMaps": 3,
+      "streamUrl": "https://www.twitch.tv/blastpremier",
+      "result": null
+    },
+    {
+      "externalMatchId": "fx-dota2-001",
+      "category": "esports",
+      "game": "dota2",
+      "teamA": "Team Falcons",
+      "teamB": "Gaimin Gladiators",
+      "tournament": "ESL One · Birmingham",
+      "startsInMinutes": 180,
+      "bestOfMaps": 3,
+      "streamUrl": "https://www.twitch.tv/esl_dota2",
+      "result": null
+    },
+    {
+      "externalMatchId": "fx-foot-001",
+      "category": "sports",
+      "sport": "football",
+      "teamA": "Arsenal",
+      "teamB": "Manchester City",
+      "tournament": "Premier League",
+      "league": "Premier League",
+      "startsInMinutes": 240,
+      "result": null
+    },
+    {
+      "externalMatchId": "fx-foot-002",
+      "category": "sports",
+      "sport": "football",
+      "teamA": "Real Madrid",
+      "teamB": "FC Barcelona",
+      "tournament": "LaLiga",
+      "league": "LaLiga",
+      "startsInMinutes": 420,
+      "result": null
+    },
+    {
+      "externalMatchId": "fx-demo-soon",
+      "category": "esports",
+      "game": "cs2",
+      "teamA": "G2 Esports",
+      "teamB": "MOUZ",
+      "tournament": "IEM · Demo Stage",
+      "startsInMinutes": -5,
+      "deadlineInMinutes": 3,
+      "bestOfMaps": 1,
+      "result": { "status": "finished", "winner": "teamA", "scoreText": "1-0" }
+    }
+  ]
+}

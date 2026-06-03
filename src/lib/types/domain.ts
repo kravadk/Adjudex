@@ -14,6 +14,10 @@ export type EsportsGame =
   | "starcraft2"
   | "call-of-duty"
   | "other";
+// Traditional-sports discriminator for category === "sports" markets,
+// mirroring how `game` discriminates esports. Lets /sports/[sport] filter
+// and the auto-ingest pipeline tag football fixtures.
+export type SportKind = "football" | "basketball" | "tennis" | "other";
 
 export type Market = {
   id: string;
@@ -60,6 +64,10 @@ export type Market = {
   matchStartsAtIso?: string;
   bestOfMaps?: number;
   streamUrl?: string;
+  // Traditional-sports opt-in fields (category === "sports"). `sport`
+  // mirrors `game`; `league` mirrors `tournament` for football etc.
+  sport?: SportKind;
+  league?: string;
   // Sub-market grouping. `parentMarketId` links a prop market to the
   // moneyline market for the same event; `kind` distinguishes the type.
   parentMarketId?: string;
