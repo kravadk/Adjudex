@@ -24,7 +24,7 @@ import { validateMarketDraft } from "./market-validation";
 import { validateSettingsPatch } from "./user-preferences";
 import { loggerOptions } from "./logger";
 import { captureException } from "./sentry";
-import { incCounter, observeDuration, renderMetrics } from "./metrics";
+import { emitCloudWatchMetric, incCounter, observeDuration, renderMetrics } from "./metrics";
 import { startNotificationWorker } from "./notification-worker";
 import { startOnchainMonitor } from "./onchain-monitor";
 import { startMatchIngestWorker } from "./match-ingest-worker";
@@ -2465,6 +2465,9 @@ function toIndexerStatus(row: IndexerRow | undefined, latestBlock?: number) {
   const lagThresholdBlocks = statusNumberEnv("STATUS_INDEXER_LAG_BLOCKS", 25);
   const lagBlocks =
     latestBlock !== undefined && Number.isFinite(lastBlock) ? Math.max(0, latestBlock - lastBlock) : null;
+  // Feed the CloudWatch RpcLagBlocks alarm (Maximum over 5m). No dimensions —
+  // CloudWatch takes the max across chains/checks, which is what we alarm on.
+  if (lagBlocks !== null) emitCloudWatchMetric("RpcLagBlocks", lagBlocks, "None");
   const stale = ageMs === null || ageMs > staleThresholdMs;
   const lagging = lagBlocks !== null && lagBlocks > lagThresholdBlocks;
   const lastBlockInvalid = !Number.isFinite(lastBlock);

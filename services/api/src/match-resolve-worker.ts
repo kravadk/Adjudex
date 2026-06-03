@@ -23,7 +23,7 @@ import {
   signJudgeVerdict,
 } from "./feeds/chain";
 import { captureException } from "./sentry";
-import { incCounter, setGauge } from "./metrics";
+import { emitCloudWatchMetric, incCounter, setGauge } from "./metrics";
 import { enqueueMarketResolved } from "./webhooks";
 import type { MatchSourceKind } from "./feeds";
 
@@ -152,6 +152,7 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
     } catch (err) {
       errors += 1;
       await bumpAttempt(row.market_id, "propose_exception").catch(() => {});
+      emitCloudWatchMetric("ResolutionFailures", 1);
       void captureException(err, { component: "match-resolve", stage: "propose", market: row.market_id });
     }
   }
@@ -214,6 +215,7 @@ async function finalizePass(): Promise<{ finalized: number; errors: number }> {
     } catch (err) {
       errors += 1;
       await bumpAttempt(row.market_id, "finalize_exception").catch(() => {});
+      emitCloudWatchMetric("ResolutionFailures", 1);
       void captureException(err, { component: "match-resolve", stage: "finalize", market: row.market_id });
     }
   }

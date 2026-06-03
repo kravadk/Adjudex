@@ -33,5 +33,5 @@ This project can run on AWS with two App Runner services, RDS Postgres, and a Re
 3. Confirm `/integrations` shows configured Dune, GMX, RHC, ZeroDev, and AWS evidence.
 4. Keep `MATCH_INGEST_ENABLED=0` until market factory, judge, and creator wallets are verified.
 5. Enable App Runner auto deployments only after the first manual deployment passes smoke tests.
-6. Publish app metrics into the `Adjudex` CloudWatch namespace for `WebhookFailures`, `ResolutionFailures`, and `RpcLagBlocks`.
+6. Publish app metrics into the `Adjudex` CloudWatch namespace for `WebhookFailures`, `ResolutionFailures`, and `RpcLagBlocks`. The API emits these as CloudWatch EMF log lines when `CLOUDWATCH_EMF=1` (App Runner -> CloudWatch Logs auto-extracts them) — set it so the `ops-alarms.yaml` alarms receive data.
 7. Export pinned resolution evidence and audit-log snapshots to `RESOLUTION_EVIDENCE_BUCKET`.

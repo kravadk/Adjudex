@@ -6,7 +6,7 @@
 import { createHmac } from "node:crypto";
 import { query } from "./db";
 import { captureException } from "./sentry";
-import { setGauge } from "./metrics";
+import { emitCloudWatchMetric, setGauge } from "./metrics";
 
 const DEFAULT_INTERVAL_MS = 20_000;
 const MAX_ATTEMPTS = Number(process.env.WEBHOOK_MAX_ATTEMPTS ?? "6");
@@ -92,6 +92,9 @@ async function failDelivery(row: DeliveryRow, error: string): Promise<void> {
       WHERE id = $1`,
     [row.id, attempts, error, status, nextAttemptSeconds],
   );
+  // Terminal failure (attempt cap reached) — feeds the CloudWatch
+  // WebhookFailures alarm (Sum >= threshold over 5m).
+  if (status === "failed") emitCloudWatchMetric("WebhookFailures", 1);
 }
 
 export function startWebhookWorker(opts?: { intervalMs?: number }): void {

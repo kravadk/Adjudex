@@ -89,6 +89,34 @@ export function renderMetrics(): string {
   return lines.join("\n") + "\n";
 }
 
+// CloudWatch Embedded Metric Format. App Runner ships stdout to CloudWatch
+// Logs, which auto-extracts EMF lines into metrics under the given namespace —
+// no AWS SDK or credentials needed. Gated on CLOUDWATCH_EMF so local/dev runs
+// stay quiet. Emitted with NO dimensions (`Dimensions: [[]]`) so the metric
+// lands at the namespace level that infra/aws/ops-alarms.yaml alarms watch
+// (Adjudex / WebhookFailures, ResolutionFailures, RpcLagBlocks).
+const EMF_NAMESPACE = process.env.CLOUDWATCH_NAMESPACE ?? "Adjudex";
+const EMF_ENABLED = process.env.CLOUDWATCH_EMF === "1";
+
+export function emitCloudWatchMetric(
+  name: string,
+  value: number,
+  unit: "Count" | "None" | "Milliseconds" = "Count",
+): void {
+  if (!EMF_ENABLED) return;
+  const line = JSON.stringify({
+    _aws: {
+      Timestamp: Date.now(),
+      CloudWatchMetrics: [
+        { Namespace: EMF_NAMESPACE, Dimensions: [[]], Metrics: [{ Name: name, Unit: unit }] },
+      ],
+    },
+    service: SERVICE,
+    [name]: value,
+  });
+  process.stdout.write(`${line}\n`);
+}
+
 // Reset (test-only). NOT exposed via HTTP.
 export function _resetMetricsForTests(): void {
   counters.clear();
