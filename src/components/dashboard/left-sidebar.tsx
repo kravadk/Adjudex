@@ -9,6 +9,7 @@ import {
   Gift,
   Send,
   Settings,
+  Target,
   User,
   X as XIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const NAV: Item[] = [
   { href: "/leaderboard", match: "/leaderboard", label: "Campaign", Icon: Crown },
   { href: "/feed", match: "/feed", label: "For You", Icon: Compass },
   { href: "/referrals", match: "/referrals", label: "Referrals", Icon: Gift },
+  { href: "/quests", match: "/quests", label: "Quests", Icon: Target },
   { href: "/portfolio", match: "/portfolio", label: "Profile", Icon: User },
   { href: "/settings", match: "/settings", label: "Settings", Icon: Settings },
 ];

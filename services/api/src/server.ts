@@ -49,6 +49,7 @@ import {
   referrerStats,
 } from "./referrals";
 import { rankFeedFor } from "./feed-ranking";
+import { questStateFor, questCatalog } from "./quests";
 import { redisGetJson, redisSetJson } from "./redis";
 
 export const server = Fastify({ logger: loggerOptions() });
@@ -1494,6 +1495,16 @@ server.delete<{ Params: { address: string } }>("/api/users/:address/follow", asy
     [session.address, followee]
   );
   return { followee, following: false };
+});
+
+// --- Quests / points ---
+server.get("/api/quests", async (request) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) {
+    return { authenticated: false, pointsEarned: 0, pointsTotal: 0, quests: questCatalog() };
+  }
+  const state = await questStateFor(session.address);
+  return { authenticated: true, ...state };
 });
 
 server.get("/api/notifications", async (request, reply) => {
