@@ -26,6 +26,7 @@ function compileContracts(): CompileOutput {
       "ParimutuelPool.sol": { content: readFileSync(join(root, "ParimutuelPool.sol"), "utf8") },
       "MarketFactory.sol": { content: readFileSync(join(root, "MarketFactory.sol"), "utf8") },
       "OutcomeSharePool.sol": { content: readFileSync(join(root, "OutcomeSharePool.sol"), "utf8") },
+      "OutcomeShareToken.sol": { content: readFileSync(join(root, "OutcomeShareToken.sol"), "utf8") },
       "LiquidityVault.sol": { content: readFileSync(join(root, "LiquidityVault.sol"), "utf8") },
       "AdjudexOrderMatcher.sol": { content: readFileSync(join(root, "AdjudexOrderMatcher.sol"), "utf8") },
       "ExclusiveOutcomeRegistry.sol": { content: readFileSync(join(root, "ExclusiveOutcomeRegistry.sol"), "utf8") },
@@ -145,11 +146,33 @@ describe("contracts", () => {
         "noShares",
         "yesBalanceOf",
         "noBalanceOf",
+        "yesToken",
+        "noToken",
         "SharesBought",
         "SharesSold",
         "LiquidityAdded",
         "LiquidityRemoved",
         "VaultSeeded",
+      ]),
+    );
+  });
+
+  it("OutcomeShareToken is an ERC-20 with minter-gated mint/burn", () => {
+    const output = compileContracts();
+    const token = output.contracts["OutcomeShareToken.sol"].OutcomeShareToken;
+    const names = token.abi.map((item) => item.name).filter(Boolean);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "transfer",
+        "transferFrom",
+        "approve",
+        "allowance",
+        "balanceOf",
+        "totalSupply",
+        "decimals",
+        "mint",
+        "burn",
+        "minter",
       ]),
     );
   });

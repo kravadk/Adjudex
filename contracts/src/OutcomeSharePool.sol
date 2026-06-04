@@ -6,6 +6,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {OutcomeShareToken} from "./OutcomeShareToken.sol";
 
 interface ILiquidityVault {
     function repay(uint256 amount) external;
@@ -36,14 +37,15 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
 
     uint256 public yesReserve;
     uint256 public noReserve;
-    uint256 public yesShares; // outstanding user-held YES shares
-    uint256 public noShares;  // outstanding user-held NO shares
     uint256 public totalLpShares;
     bool public resolved;
     Side public resolvedSide;
 
-    mapping(address => uint256) public yesBalanceOf;
-    mapping(address => uint256) public noBalanceOf;
+    // Outcome shares are transferable ERC-20s minted/burned by this pool, so an
+    // order matcher (or any contract) can settle trades by moving them.
+    OutcomeShareToken public immutable yesToken;
+    OutcomeShareToken public immutable noToken;
+
     mapping(address => uint256) public lpBalanceOf;
 
     event SharesBought(address indexed trader, uint8 side, uint256 amount, uint256 shares);
@@ -75,11 +77,31 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
         feeBps = _feeBps;
         feeRecipient = _feeRecipient;
         liquidityVault = _liquidityVault;
+        yesToken = new OutcomeShareToken(address(this), "Adjudex YES Share", "aYES", 6);
+        noToken = new OutcomeShareToken(address(this), "Adjudex NO Share", "aNO", 6);
     }
 
     // Constant-product invariant. Zero until the pool is seeded with liquidity.
     function invariant() external view returns (uint256) {
         return yesReserve * noReserve;
+    }
+
+    // Back-compat views (same selectors as the former public mappings / counters)
+    // now backed by the ERC-20 share tokens.
+    function yesShares() external view returns (uint256) {
+        return yesToken.totalSupply();
+    }
+
+    function noShares() external view returns (uint256) {
+        return noToken.totalSupply();
+    }
+
+    function yesBalanceOf(address account) external view returns (uint256) {
+        return yesToken.balanceOf(account);
+    }
+
+    function noBalanceOf(address account) external view returns (uint256) {
+        return noToken.balanceOf(account);
     }
 
     function _netOfFee(uint256 amount) internal view returns (uint256) {
@@ -155,13 +177,11 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
             noReserve += amount;
             if (sendYes > 0) {
                 yesReserve -= sendYes;
-                yesShares += sendYes;
-                yesBalanceOf[msg.sender] += sendYes;
+                yesToken.mint(msg.sender, sendYes);
             }
             if (sendNo > 0) {
                 noReserve -= sendNo;
-                noShares += sendNo;
-                noBalanceOf[msg.sender] += sendNo;
+                noToken.mint(msg.sender, sendNo);
             }
         }
         require(minted > 0, "no lp minted");
@@ -187,14 +207,8 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
         collateralOut = Math.min(sendYes, sendNo);
         uint256 surplusYes = sendYes - collateralOut;
         uint256 surplusNo = sendNo - collateralOut;
-        if (surplusYes > 0) {
-            yesShares += surplusYes;
-            yesBalanceOf[msg.sender] += surplusYes;
-        }
-        if (surplusNo > 0) {
-            noShares += surplusNo;
-            noBalanceOf[msg.sender] += surplusNo;
-        }
+        if (surplusYes > 0) yesToken.mint(msg.sender, surplusYes);
+        if (surplusNo > 0) noToken.mint(msg.sender, surplusNo);
         if (collateralOut > 0) stake.safeTransfer(msg.sender, collateralOut);
         emit LiquidityRemoved(msg.sender, collateralOut);
     }
@@ -210,13 +224,11 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
         if (side == uint8(Side.YES)) {
             yesReserve = yesReserve + net - sharesOut;
             noReserve += net;
-            yesShares += sharesOut;
-            yesBalanceOf[msg.sender] += sharesOut;
+            yesToken.mint(msg.sender, sharesOut);
         } else {
             noReserve = noReserve + net - sharesOut;
             yesReserve += net;
-            noShares += sharesOut;
-            noBalanceOf[msg.sender] += sharesOut;
+            noToken.mint(msg.sender, sharesOut);
         }
 
         stake.safeTransferFrom(msg.sender, address(this), amount);
@@ -241,15 +253,11 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
         require(amountOut > 0, "zero amount");
 
         if (side == uint8(Side.YES)) {
-            require(yesBalanceOf[msg.sender] >= shares, "insufficient");
-            yesBalanceOf[msg.sender] -= shares;
-            yesShares -= shares;
+            yesToken.burn(msg.sender, shares); // reverts if balance < shares
             yesReserve = yesReserve + shares - r;
             noReserve -= r;
         } else {
-            require(noBalanceOf[msg.sender] >= shares, "insufficient");
-            noBalanceOf[msg.sender] -= shares;
-            noShares -= shares;
+            noToken.burn(msg.sender, shares);
             noReserve = noReserve + shares - r;
             yesReserve -= r;
         }
@@ -277,13 +285,9 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
         require(shares > 0, "zero shares");
 
         if (side == uint8(Side.YES)) {
-            require(yesBalanceOf[msg.sender] >= shares, "insufficient");
-            yesBalanceOf[msg.sender] -= shares;
-            yesShares -= shares;
+            yesToken.burn(msg.sender, shares);
         } else {
-            require(noBalanceOf[msg.sender] >= shares, "insufficient");
-            noBalanceOf[msg.sender] -= shares;
-            noShares -= shares;
+            noToken.burn(msg.sender, shares);
         }
         payout = shares;
         stake.safeTransfer(msg.sender, payout);

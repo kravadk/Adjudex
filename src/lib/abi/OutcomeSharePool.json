@@ -416,7 +416,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "account",
         "type": "address"
       }
     ],
@@ -452,6 +452,19 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "noToken",
+    "outputs": [
+      {
+        "internalType": "contract OutcomeShareToken",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -687,7 +700,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "account",
         "type": "address"
       }
     ],
@@ -723,6 +736,19 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "yesToken",
+    "outputs": [
+      {
+        "internalType": "contract OutcomeShareToken",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",

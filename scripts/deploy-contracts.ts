@@ -92,6 +92,7 @@ function compile(root: string): SolcOutput {
       "ParimutuelPool.sol": { content: readFileSync(join(src, "ParimutuelPool.sol"), "utf8") },
       "MarketFactory.sol": { content: readFileSync(join(src, "MarketFactory.sol"), "utf8") },
       "OutcomeSharePool.sol": { content: readFileSync(join(src, "OutcomeSharePool.sol"), "utf8") },
+      "OutcomeShareToken.sol": { content: readFileSync(join(src, "OutcomeShareToken.sol"), "utf8") },
       "LiquidityVault.sol": { content: readFileSync(join(src, "LiquidityVault.sol"), "utf8") },
       "AdjudexOrderMatcher.sol": { content: readFileSync(join(src, "AdjudexOrderMatcher.sol"), "utf8") },
       "ExclusiveOutcomeRegistry.sol": { content: readFileSync(join(src, "ExclusiveOutcomeRegistry.sol"), "utf8") },
