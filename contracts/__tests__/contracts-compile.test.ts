@@ -38,6 +38,7 @@ function compileContracts(): CompileOutput {
       "TestAggregatorV3.sol": { content: readFileSync(join(root, "TestAggregatorV3.sol"), "utf8") },
       "ProofAnchor.sol": { content: readFileSync(join(root, "ProofAnchor.sol"), "utf8") },
       "BetQuoteVerifier.sol": { content: readFileSync(join(root, "BetQuoteVerifier.sol"), "utf8") },
+      "OptimisticOracleResolver.sol": { content: readFileSync(join(root, "OptimisticOracleResolver.sol"), "utf8") },
     },
     settings: {
       optimizer: { enabled: true, runs: 200 },
@@ -291,6 +292,40 @@ describe("contracts", () => {
         "setChallengeBond",
         "fastTrackUntil",
         "setFastTrackUntil",
+        // OZ production hardening: 2-step ownership handshake.
+        "owner",
+        "pendingOwner",
+        "transferOwnership",
+        "acceptOwnership",
+      ]),
+    );
+  });
+
+  it("OptimisticOracleResolver exposes permissionless assert/dispute/settle", () => {
+    const output = compileContracts();
+    const v = output.contracts["OptimisticOracleResolver.sol"].OptimisticOracleResolver;
+    const names = v.abi.map((item) => item.name).filter(Boolean);
+    expect(v.evm.bytecode.object.length).toBeGreaterThan(0);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "assertOutcome",
+        "dispute",
+        "settle",
+        "resolveDispute",
+        "canSettle",
+        "disputeDeadline",
+        "assertions",
+        "bondToken",
+        "defaultBond",
+        "defaultLiveness",
+        "setDefaultBond",
+        "setDefaultLiveness",
+        "MAX_LIVENESS",
+        "MIN_LIVENESS",
+        "OutcomeAsserted",
+        "OutcomeDisputed",
+        "OutcomeSettled",
+        "DisputeArbitrated",
         // OZ production hardening: 2-step ownership handshake.
         "owner",
         "pendingOwner",
@@ -589,5 +624,57 @@ describe("OutcomeSharePool constant-product invariants", () => {
   it("empty AMM bootstraps one share per unit", () => {
     expect(quoteBuy(25n, 0n, 0n)).toBe(25n);
     expect(quoteSell(25n, 1000n, 0n)).toBe(0n);
+  });
+});
+
+// Pure-JS mirror of OptimisticOracleResolver's bond/winner economics. Guards
+// the rules the Solidity contract enforces around dispute arbitration.
+type OracleStatus = "none" | "asserted" | "disputed" | "settled";
+
+// Returns who collects the pot after arbitration, and the pot size.
+function arbitrate(
+  assertedOutcome: 0 | 1,
+  finalOutcome: 0 | 1,
+  bond: bigint,
+  asserter: string,
+  disputer: string,
+): { winner: string; pot: bigint } {
+  return {
+    winner: finalOutcome === assertedOutcome ? asserter : disputer,
+    pot: bond * 2n,
+  };
+}
+
+// Returns the bond refund on an undisputed settle (asserter gets it back).
+function settleRefund(status: OracleStatus, livenessPassed: boolean, bond: bigint): bigint {
+  if (status !== "asserted") throw new Error("not settleable");
+  if (!livenessPassed) throw new Error("liveness open");
+  return bond;
+}
+
+describe("OptimisticOracleResolver economics", () => {
+  it("correct assertion: asserter takes both bonds", () => {
+    const { winner, pot } = arbitrate(1, 1, 10n, "asserter", "disputer");
+    expect(winner).toBe("asserter");
+    expect(pot).toBe(20n);
+  });
+
+  it("wrong assertion: disputer takes both bonds", () => {
+    const { winner, pot } = arbitrate(1, 0, 10n, "asserter", "disputer");
+    expect(winner).toBe("disputer");
+    expect(pot).toBe(20n);
+  });
+
+  it("undisputed settle refunds the asserter's bond after liveness", () => {
+    expect(settleRefund("asserted", true, 10n)).toBe(10n);
+    expect(settleRefund("asserted", true, 0n)).toBe(0n);
+  });
+
+  it("settle reverts before liveness elapses", () => {
+    expect(() => settleRefund("asserted", false, 10n)).toThrow("liveness open");
+  });
+
+  it("settle reverts on a non-asserted (e.g. disputed) market", () => {
+    expect(() => settleRefund("disputed", true, 10n)).toThrow("not settleable");
   });
 });

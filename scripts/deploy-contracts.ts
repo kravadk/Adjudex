@@ -100,6 +100,7 @@ function compile(root: string): SolcOutput {
       "TestUSDC.sol": { content: readFileSync(join(src, "TestUSDC.sol"), "utf8") },
       "AIJudgeVerifier.sol": { content: readFileSync(join(src, "AIJudgeVerifier.sol"), "utf8") },
       "PriceOracle.sol": { content: readFileSync(join(src, "PriceOracle.sol"), "utf8") },
+      "OptimisticOracleResolver.sol": { content: readFileSync(join(src, "OptimisticOracleResolver.sol"), "utf8") },
       "TokenizedStockAdapter.sol": { content: readFileSync(join(src, "TokenizedStockAdapter.sol"), "utf8") },
       "TestAggregatorV3.sol": { content: readFileSync(join(src, "TestAggregatorV3.sol"), "utf8") },
       "ProofAnchor.sol": { content: readFileSync(join(src, "ProofAnchor.sol"), "utf8") },
