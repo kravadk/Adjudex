@@ -121,7 +121,7 @@ const ENTRIES: Entry[] = [
     stage: "S1.F",
     title: "IPFS production guard",
     body:
-      "IPFS_PROVIDER=stub is rejected in NODE_ENV=production. Real production uses Pinata or web3.storage.",
+      "Proof anchoring now requires a real IPFS provider: Pinata, web3.storage, or Kubo.",
   },
   {
     date: "2026-06-01",

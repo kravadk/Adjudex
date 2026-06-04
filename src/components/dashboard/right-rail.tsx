@@ -2,14 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
 import type { Market } from "@/lib/types/domain";
-
-// Right rail for the home page (foresee.lol style). Hosts:
-//   - Promo banner (placeholder, swap for a real campaign card when one
-//     is configured)
-//   - "Trending" — markets with isHot=true sorted by volume
-//   - "New" — most-recently-created markets
 
 type Row = Pick<Market, "id" | "title" | "volumeUsd">;
 
@@ -57,49 +50,11 @@ export function RightRail() {
   return (
     <aside
       className="hidden xl:flex flex-col gap-5 w-[300px] flex-shrink-0 sticky top-[76px] self-start max-h-[calc(100vh-92px)] overflow-y-auto no-scrollbar"
-      aria-label="Trending and promotions"
+      aria-label="Trending and latest markets"
     >
-      <PromoBanner />
       <RailList title="Trending" rows={trending} loading={loading} emptyHint="No hot markets yet." />
       <RailList title="New" rows={latest} loading={loading} emptyHint="Markets you create land here first." />
     </aside>
-  );
-}
-
-function PromoBanner() {
-  return (
-    <Link
-      href="/how-it-works"
-      className="relative rounded-[14px] overflow-hidden p-5 block transition-transform hover:scale-[1.01]"
-      style={{
-        background:
-          "linear-gradient(135deg, #c4ff3d 0%, #9be600 50%, #6dc400 100%)",
-        color: "#0a0a0a",
-        boxShadow: "0 8px 24px -8px rgba(155, 230, 0, 0.35)",
-      }}
-    >
-      <span
-        className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider mb-3 px-2.5 py-1 rounded-full bg-black/20"
-      >
-        <Sparkles className="w-3 h-3" />
-        Season 1
-      </span>
-      <div
-        className="text-[34px] leading-[0.95] mb-2"
-        style={{ fontWeight: 900, letterSpacing: "-0.02em" }}
-      >
-        500,000
-        <br />
-        $PARI
-        <br />
-        REWARD
-      </div>
-      <span
-        className="inline-block px-4 py-2 rounded-full text-[13px] font-extrabold bg-white text-black"
-      >
-        Join now
-      </span>
-    </Link>
   );
 }
 
@@ -129,7 +84,7 @@ function RailList({
       <div className="space-y-1">
         {loading ? (
           <p className="text-[11px] px-1" style={{ color: "var(--t4, #525252)" }}>
-            Loading…
+            Loading...
           </p>
         ) : rows.length === 0 ? (
           <p className="text-[11px] px-1" style={{ color: "var(--t4, #525252)" }}>

@@ -27,6 +27,9 @@ the official frontend — there is no private surface.
 | GET | `/api/markets/:id/activity` | Bet/claim/resolution events for a market |
 | GET | `/api/markets/:id/timeline` | Probability-over-time points |
 | GET | `/api/markets/:id/comments` | Discussion thread |
+| GET | `/api/markets/:id/liquidity` | Indexed AMM/vault liquidity state |
+| GET | `/api/markets/:id/resolution` | Indexed dispute/proposal timeline |
+| GET | `/api/markets/:id/opportunities` | Read-only opportunity signals for a market |
 | GET | `/api/feed` | Personalized feed (hot fallback when signed out) |
 | GET | `/api/activity` | Global recent activity |
 | GET | `/api/oracle/:marketId` | Resolution status for a market |
@@ -37,7 +40,19 @@ A `Market` includes: `id`, `poolAddress`, `chainId`, `title`,
 `deadlineIso`, `resolvedOutcome`, plus esports/sports fields (`game`,
 `sport`, `tournament`, `league`, `teamA`, `teamB`, `matchStartsAtIso`,
 `bestOfMaps`, `streamUrl`) and provenance (`sourceUrl`, `resolutionCriteria`,
-`resolutionEvidenceHash`).
+`resolutionEvidenceHash`). AMM/order/multi-outcome markets also include
+`liquidityMode`, `groupId`, `creatorHandle`, `bestBidBps`, and `bestAskBps`.
+
+### Orderbook, groups, parlays, opportunities
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/orders?marketId=` | Open signed order intents |
+| POST | `/api/orders/match-preview` | Preview fillability for signed intents |
+| GET | `/api/market-groups/:id` | Exclusive outcome group metadata |
+| GET | `/api/market-groups/:id/arbitrage` | Group probability coherence / overround |
+| GET | `/api/opportunities` | Read-only cross-market/intelligence signals |
+| POST | `/api/opportunities/rebuild` | Internal-secret rebuild of opportunity rows from indexed market-group gaps |
+| POST | `/api/parlays/preview` | Backend-only correlated-risk preview |
 
 ### Traders & agents
 | Method | Path | Purpose |
@@ -83,6 +98,14 @@ automatically; server-side clients set the `Cookie` header).
 | POST | `/api/bets/quote` | `{ pool, marketId, side, stake, ... }` → EIP-712 signed quote |
 | POST | `/api/bets` | `{ transactionHash, chainId }` (confirm from receipt) |
 | POST | `/api/claim` | `{ positionId, transactionHash, chainId }` |
+| POST | `/api/markets/:id/share-quote` | `{ side, action, amountUsd|shares }` |
+| POST | `/api/sync/share-transaction` | `{ transactionHash, chainId }`; confirms AMM buy/sell only from trusted receipt logs |
+| POST | `/api/orders` | Signed EIP-712 order intent |
+| DELETE | `/api/orders/:hash` | Cancel a stored signed intent |
+| POST | `/api/market-groups/:id/convert` | Record a negative-risk conversion proof |
+| POST | `/api/creators` | `{ handle, channelUrl, preferredGames }` |
+| POST | `/api/creators/:handle/markets` | Link a real market to a verified creator |
+| POST | `/api/parlays` | Store a non-executable parlay draft unless prototype flag is enabled |
 | POST | `/api/markets/:id/comments` | `{ body }` |
 | DELETE | `/api/comments/:id` | — (author only) |
 | POST/DELETE | `/api/users/:address/follow` | — |
@@ -133,9 +156,10 @@ GET /api/integrations/sponsors      -> usage/configuration evidence
 GET /api/integrations/dune/summary  -> Dune query result rows
 POST /api/integrations/dune/summary/refresh -> execute configured Dune query
 GET /api/integrations/dune/templates -> Dune SQL templates for traction dashboards
-GET /api/integrations/gmx/markets   -> GMX SDK market snapshot
-GET /api/integrations/gmx/signal    -> GMX ticker/rates/APY/OHLCV/trade evidence
+GET /api/integrations/gmx/markets   -> GMX market snapshot
+GET /api/integrations/gmx/signal    -> GMX liquidity/OI/funding/APY/OHLCV/trade evidence
 POST /api/import/gmx/scan           -> upsert GMX market candidates into importer
+POST /api/import/rwa/scan           -> upsert RHC/RWA tokenized-stock candidates
 GET /api/integrations/zerodev/session-policy -> bounded gasless/session-key policy
 GET /api/integrations/fhenix/prototype -> sealed-market prototype readiness
 GET /api/analytics/chains           -> RHC vs Arbitrum market/volume dashboard
@@ -143,7 +167,8 @@ GET /api/analytics/webhooks         -> webhook delivery analytics (admin)
 ```
 
 `DUNE_API_KEY` + `DUNE_ADJUDEX_SUMMARY_QUERY_ID` enable live Dune data.
-`GMX_CHAIN_ID` defaults to Arbitrum One (`42161`) and uses the GMX SDK API.
+`GMX_CHAIN_ID` defaults to Arbitrum One (`42161`) and uses GMX API snapshots
+with SDK-backed enrichment where available.
 `ZERODEV_PROJECT_ID` plus paymaster/bundler env enables the session policy.
 `FHENIX_RPC_URL` + `FHENIX_CHAIN_ID` mark the sealed-market prototype ready.
 Alchemy RPC fallback is supported via `ALCHEMY_ARBITRUM_SEPOLIA_API_KEY`

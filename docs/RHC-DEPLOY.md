@@ -16,7 +16,7 @@ Everything here is testnet-only.
 Verify the deploy path and that contracts compile for the RHC target:
 
 ```bash
-DEPLOY_CHAIN=rhc DRY_RUN=1 pnpm contracts:deploy
+DRY_RUN=1 pnpm contracts:deploy:rhc
 ```
 
 This prints the target chain, deploy order, and bytecode sizes, then exits.
@@ -26,12 +26,11 @@ No RPC or private key is required.
 
 ```bash
 ADJUDEX_TESTNET_ONLY=1 \
-DEPLOY_CHAIN=rhc \
 RHC_RPC_URL=https://robinhood-testnet.g.alchemy.com/v2/<key> \
 DEPLOYER_PRIVATE_KEY=0x<funded-deployer-key> \
 JUDGE_PUBLIC_ADDRESS=0x<judge-address> \
 QUOTE_SIGNER_PUBLIC_ADDRESS=0x<quote-signer-address> \
-pnpm contracts:deploy
+pnpm contracts:deploy:rhc
 ```
 
 Deploys TestUSDC, AIJudgeVerifier, BetQuoteVerifier, MarketFactory,
@@ -44,7 +43,8 @@ Copy the deployed addresses into your environment:
 
 - `NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS` / `RHC_MARKET_FACTORY_ADDRESS`
 - `NEXT_PUBLIC_RHC_AI_JUDGE_VERIFIER_ADDRESS`
-- `NEXT_PUBLIC_STAKE_TOKEN_ADDRESS` (the RHC TestUSDC) as needed
+- `NEXT_PUBLIC_RHC_STAKE_TOKEN_ADDRESS` / `RHC_STAKE_TOKEN_ADDRESS` for the
+  RHC TestUSDC
 - `NEXT_PUBLIC_RHC_RPC_URL` / `RHC_RPC_URL`, `NEXT_PUBLIC_RHC_CHAIN_ID=46630`
 
 The `/rhc` tab and `/rhc/create` flow read these to target the RHC factory.

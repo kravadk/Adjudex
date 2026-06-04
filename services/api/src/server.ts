@@ -1,5 +1,7 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
+import fastifyRawBody from "fastify-raw-body";
 import {
   createPublicClient,
   encodeAbiParameters,
@@ -80,6 +82,13 @@ if (process.env.NODE_ENV !== "test" && process.env.MATCH_INGEST_ENABLED === "1")
   startMatchResolveWorker();
 }
 await server.register(cors, { origin: true });
+await server.register(fastifyRawBody, {
+  field: "rawBody",
+  global: false,
+  encoding: false,
+  runFirst: true,
+  jsonContentTypes: ["application/json"],
+});
 
 // Rate-limit policy (per IP; Redis-backed when RATE_LIMIT_BACKEND=redis):
 //   write/auth-sensitive routes -> 30 req / minute
@@ -1129,6 +1138,449 @@ server.post<{
   return { programId, address: address.toLowerCase(), amountUsd, transactionHash, chainId };
 });
 
+server.get<{ Params: { id: string } }>("/api/markets/:id/liquidity", async (request) => {
+  const liquidity = await query<{
+    market_id: string;
+    mode: string;
+    yes_reserve: unknown;
+    no_reserve: unknown;
+    yes_shares: unknown;
+    no_shares: unknown;
+    vault_debt: unknown;
+    vault_surplus: unknown;
+    updated_at: Date | string;
+  }>(
+    `SELECT * FROM market_liquidity WHERE market_id = $1`,
+    [request.params.id],
+  );
+  const row = liquidity.rows[0];
+  if (!row) {
+    return {
+      marketId: request.params.id,
+      mode: "parimutuel",
+      yesReserveUsd: 0,
+      noReserveUsd: 0,
+      yesShares: 0,
+      noShares: 0,
+      vaultDebtUsd: 0,
+      vaultSurplusUsd: 0,
+      updatedAtIso: null,
+    };
+  }
+  return {
+    marketId: row.market_id,
+    mode: row.mode,
+    yesReserveUsd: asNumber(row.yes_reserve),
+    noReserveUsd: asNumber(row.no_reserve),
+    yesShares: asNumber(row.yes_shares),
+    noShares: asNumber(row.no_shares),
+    vaultDebtUsd: asNumber(row.vault_debt),
+    vaultSurplusUsd: asNumber(row.vault_surplus),
+    updatedAtIso: toIso(row.updated_at),
+  };
+});
+
+server.post<{
+  Params: { id: string };
+  Body: { side?: string; action?: string; amountUsd?: number; shares?: number };
+}>("/api/markets/:id/share-quote", async (request, reply) => {
+  const side = normalizeSide(request.body.side);
+  const action = request.body.action === "sell" ? "sell" : request.body.action === "buy" ? "buy" : null;
+  if (!side || !action) return reply.code(400).send({ error: "share_quote_invalid" });
+  const liquidity = await query<{ mode: string; yes_reserve: unknown; no_reserve: unknown; yes_shares: unknown; no_shares: unknown }>(
+    `SELECT mode, yes_reserve, no_reserve, yes_shares, no_shares FROM market_liquidity WHERE market_id = $1`,
+    [request.params.id],
+  );
+  const row = liquidity.rows[0];
+  if (!row || row.mode !== "amm") return reply.code(409).send({ error: "amm_liquidity_unavailable" });
+  const reserve = side === "YES" ? asNumber(row.yes_reserve) : asNumber(row.no_reserve);
+  const oppositeReserve = side === "YES" ? asNumber(row.no_reserve) : asNumber(row.yes_reserve);
+  if (action === "buy") {
+    const amountUsd = Number(request.body.amountUsd);
+    if (!Number.isFinite(amountUsd) || amountUsd <= 0) return reply.code(400).send({ error: "amount_invalid" });
+    const shares = reserve <= 0 || oppositeReserve <= 0 ? amountUsd : (amountUsd * oppositeReserve) / (reserve + amountUsd);
+    return { marketId: request.params.id, side, action, amountUsd, shares, priceBps: shares > 0 ? Math.round((amountUsd / shares) * 10_000) : 0 };
+  }
+  const shares = Number(request.body.shares);
+  if (!Number.isFinite(shares) || shares <= 0) return reply.code(400).send({ error: "shares_invalid" });
+  const amountUsd = oppositeReserve <= 0 ? 0 : (shares * reserve) / (oppositeReserve + shares);
+  return { marketId: request.params.id, side, action, amountUsd, shares, priceBps: shares > 0 ? Math.round((amountUsd / shares) * 10_000) : 0 };
+});
+
+server.post<{
+  Body: {
+    marketId?: string;
+    address?: string;
+    side?: string;
+    action?: string;
+    amountUsd?: number;
+    shares?: number;
+    transactionHash?: Hex;
+    chainId?: number;
+    blockHash?: Hex;
+    blockNumber?: number;
+    logIndex?: number;
+  };
+}>("/api/sync/share-transaction", async (request, reply) => {
+  const { transactionHash } = request.body;
+  const chainId = parseRequiredChainId(request.body.chainId);
+  if (!transactionHash || !chainId) {
+    return reply.code(400).send({ error: "share_transaction_invalid" });
+  }
+  const synced = await syncConfirmedTransaction(transactionHash, chainId, { requireTrustedEvent: true });
+  if (!synced.ok) return reply.code(synced.statusCode).send({ error: synced.error });
+  const shareEvents = synced.reconciled.filter((item) => item.type === "share_buy" || item.type === "share_sell");
+  if (shareEvents.length === 0) return reply.code(400).send({ error: "share_event_not_found" });
+  return { status: "confirmed", transactionHash, chainId, reconciled: shareEvents };
+});
+
+server.get<{ Querystring: { marketId?: string } }>("/api/orders", async (request) => {
+  const values: unknown[] = [];
+  let where = "WHERE status = 'open' AND expires_at > now()";
+  if (request.query.marketId) {
+    values.push(request.query.marketId);
+    where += ` AND market_id = $${values.length}`;
+  }
+  const rows = await query<OrderIntentRow>(
+    `SELECT * FROM order_intents ${where} ORDER BY created_at DESC LIMIT 100`,
+    values,
+  );
+  return rows.rows.map(toOrderIntent);
+});
+
+server.post<{ Body: Partial<OrderIntentInput> }>("/api/orders", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const parsed = parseOrderIntent(request.body, session.address);
+  if (!parsed.ok) return reply.code(400).send({ error: "order_invalid", details: parsed.errors });
+  await query(
+    `INSERT INTO order_intents
+       (hash, market_id, pool_address, side, order_type, amount_usd, limit_price_bps, expires_at, nonce, maker_address, builder_address, metadata_hash, signature)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     ON CONFLICT (hash) DO UPDATE SET
+       status = 'open',
+       updated_at = now()`,
+    [
+      parsed.value.hash,
+      parsed.value.marketId,
+      parsed.value.pool,
+      parsed.value.side,
+      parsed.value.orderType,
+      parsed.value.amountUsd,
+      parsed.value.limitPriceBps,
+      new Date(parsed.value.expiresAtIso),
+      parsed.value.nonce,
+      parsed.value.maker,
+      parsed.value.builder ?? null,
+      parsed.value.metadataHash,
+      parsed.value.signature,
+    ],
+  );
+  return { order: parsed.value };
+});
+
+server.delete<{ Params: { hash: string } }>("/api/orders/:hash", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const existing = await query<{ maker_address: string }>("SELECT maker_address FROM order_intents WHERE hash = $1", [request.params.hash]);
+  const row = existing.rows[0];
+  if (!row) return reply.code(404).send({ error: "order_not_found" });
+  if (row.maker_address.toLowerCase() !== session.address.toLowerCase()) return reply.code(403).send({ error: "not_order_maker" });
+  await query("UPDATE order_intents SET status = 'cancelled', updated_at = now() WHERE hash = $1", [request.params.hash]);
+  await query(
+    `INSERT INTO order_cancellations (order_hash, maker_address) VALUES ($1, $2)
+     ON CONFLICT (order_hash) DO NOTHING`,
+    [request.params.hash, session.address.toLowerCase()],
+  );
+  return { cancelled: true, hash: request.params.hash };
+});
+
+server.post<{ Body: { takerHash?: string; makerHashes?: string[] } }>("/api/orders/match-preview", async (request, reply) => {
+  const makerHashes = Array.isArray(request.body.makerHashes) ? request.body.makerHashes : [];
+  if (!request.body.takerHash || makerHashes.length === 0) return reply.code(400).send({ error: "match_preview_invalid" });
+  const hashes = [request.body.takerHash, ...makerHashes];
+  const rows = await query<OrderIntentRow>(
+    `SELECT * FROM order_intents WHERE hash = ANY($1::text[]) AND status = 'open' AND expires_at > now()`,
+    [hashes],
+  );
+  const orders = rows.rows.map(toOrderIntent);
+  const taker = orders.find((order) => order.hash === request.body.takerHash);
+  const makers = orders.filter((order) => makerHashes.includes(order.hash));
+  if (!taker || makers.length !== makerHashes.length) return reply.code(409).send({ error: "orders_unavailable" });
+  const fillableAmountUsd = makers.reduce((sum, order) => sum + Math.min(order.amountUsd, taker.amountUsd), 0);
+  const avgPriceBps = makers.length === 0 ? 0 : Math.round(makers.reduce((sum, order) => sum + order.limitPriceBps, 0) / makers.length);
+  return { taker, makers, fillableAmountUsd, avgPriceBps, settlementRequired: true };
+});
+
+server.post<{ Body: { id?: string; title?: string; outcomes?: Array<{ marketId?: string; label?: string; probabilityBps?: number }> } }>("/api/market-groups", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+  const id = request.body.id?.trim() || `group-${createToken(8)}`;
+  const title = request.body.title?.trim();
+  const outcomes = request.body.outcomes ?? [];
+  if (!title || outcomes.length < 2) return reply.code(400).send({ error: "market_group_invalid" });
+  await transaction(async (execute) => {
+    await execute(
+      `INSERT INTO market_groups (id, title, created_by) VALUES ($1, $2, $3)
+       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, updated_at = now()`,
+      [id, title, admin.address],
+    );
+    for (const outcome of outcomes) {
+      if (!outcome.marketId || !outcome.label) continue;
+      await execute(
+        `INSERT INTO market_group_outcomes (id, group_id, market_id, label, probability_bps)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (group_id, market_id) DO UPDATE SET label = EXCLUDED.label, probability_bps = EXCLUDED.probability_bps`,
+        [`${id}:${outcome.marketId}`, id, outcome.marketId, outcome.label, clampInteger(Number(outcome.probabilityBps ?? 5000), 0, 10_000)],
+      );
+      await execute("UPDATE markets SET group_id = $1 WHERE id = $2", [id, outcome.marketId]);
+    }
+  });
+  return getMarketGroup(id);
+});
+
+server.get<{ Params: { id: string } }>("/api/market-groups/:id", async (request, reply) => {
+  const group = await getMarketGroup(request.params.id);
+  if (!group) return reply.code(404).send({ error: "market_group_not_found" });
+  return group;
+});
+
+server.post<{ Params: { id: string }; Body: { address?: string; sourceMarketId?: string; targetMarketId?: string; amountUsd?: number; transactionHash?: Hex; chainId?: number } }>("/api/market-groups/:id/convert", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const amountUsd = Number(request.body.amountUsd);
+  if (!request.body.sourceMarketId || !request.body.targetMarketId || !Number.isFinite(amountUsd) || amountUsd <= 0) {
+    return reply.code(400).send({ error: "conversion_invalid" });
+  }
+  await query(
+    `INSERT INTO neg_risk_conversions
+       (id, group_id, address, source_market_id, target_market_id, amount_usd, transaction_hash, chain_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      `conv-${createToken(12)}`,
+      request.params.id,
+      session.address.toLowerCase(),
+      request.body.sourceMarketId,
+      request.body.targetMarketId,
+      amountUsd,
+      request.body.transactionHash ?? null,
+      request.body.chainId ?? null,
+    ],
+  );
+  return { converted: true, groupId: request.params.id };
+});
+
+server.get<{ Params: { id: string } }>("/api/market-groups/:id/arbitrage", async (request) => {
+  const group = await getMarketGroup(request.params.id);
+  if (!group) return { groupId: request.params.id, totalProbabilityBps: 0, overroundBps: 0, coherent: false, outcomes: [] };
+  const totalProbabilityBps = group.outcomes.reduce((sum: number, row: { probabilityBps: number }) => sum + row.probabilityBps, 0);
+  return {
+    groupId: request.params.id,
+    totalProbabilityBps,
+    overroundBps: totalProbabilityBps - 10_000,
+    coherent: totalProbabilityBps > 0 && Math.abs(totalProbabilityBps - 10_000) <= 500,
+    outcomes: group.outcomes,
+  };
+});
+
+server.get<{ Params: { id: string } }>("/api/markets/:id/resolution", async (request) => {
+  const disputes = await query<ResolutionDisputeRow>(
+    `SELECT * FROM resolution_disputes WHERE market_id = $1 ORDER BY created_at ASC`,
+    [request.params.id],
+  );
+  return { marketId: request.params.id, disputes: disputes.rows.map(toResolutionDispute) };
+});
+
+server.post<{ Body: { handle?: string; channelUrl?: string; preferredGames?: string[] } }>("/api/creators", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const handle = request.body.handle?.trim().toLowerCase();
+  const channelUrl = request.body.channelUrl?.trim();
+  if (!handle || !/^[a-z0-9_-]{3,40}$/.test(handle) || !channelUrl || !/^https:\/\//.test(channelUrl)) {
+    return reply.code(400).send({ error: "creator_invalid" });
+  }
+  const preferredGames = Array.isArray(request.body.preferredGames) ? request.body.preferredGames.filter((game) => typeof game === "string").slice(0, 10) : [];
+  await query(
+    `INSERT INTO creators (handle, wallet_address, channel_url, preferred_games)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (handle) DO UPDATE SET
+       wallet_address = EXCLUDED.wallet_address,
+       channel_url = EXCLUDED.channel_url,
+       preferred_games = EXCLUDED.preferred_games,
+       updated_at = now()`,
+    [handle, session.address.toLowerCase(), channelUrl, preferredGames],
+  );
+  return getCreator(handle);
+});
+
+server.get<{ Params: { handle: string } }>("/api/creators/:handle", async (request, reply) => {
+  const creator = await getCreator(request.params.handle.toLowerCase());
+  if (!creator) return reply.code(404).send({ error: "creator_not_found" });
+  return creator;
+});
+
+server.post<{ Params: { handle: string }; Body: { marketId?: string; streamUrl?: string } }>("/api/creators/:handle/markets", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const creator = await getCreator(request.params.handle.toLowerCase());
+  if (!creator) return reply.code(404).send({ error: "creator_not_found" });
+  if (creator.walletAddress.toLowerCase() !== session.address.toLowerCase()) return reply.code(403).send({ error: "creator_wallet_required" });
+  if (!request.body.marketId) return reply.code(400).send({ error: "market_id_required" });
+  await query(
+    `UPDATE markets SET creator_handle = $1, stream_url = COALESCE($2, stream_url), updated_at = now() WHERE id = $3`,
+    [creator.handle, request.body.streamUrl ?? null, request.body.marketId],
+  );
+  return { linked: true, handle: creator.handle, marketId: request.body.marketId };
+});
+
+server.post<{ Body: { legs?: Array<{ marketId?: string; side?: string }>; address?: string } }>("/api/parlays/preview", async (request, reply) => {
+  const legs = normalizeParlayLegs(request.body.legs);
+  if (legs.length < 2) return reply.code(400).send({ error: "parlay_requires_two_legs" });
+  const marketIds = legs.map((leg) => leg.marketId);
+  if (new Set(marketIds).size !== marketIds.length) return reply.code(400).send({ error: "duplicate_parlay_market" });
+  const stats = await query<{ id: string; yes_probability: unknown }>(
+    `SELECT m.id, s.yes_probability
+     FROM markets m
+     JOIN market_stats s ON s.market_id = m.id
+     WHERE m.id = ANY($1::text[])`,
+    [marketIds],
+  );
+  if (stats.rows.length !== marketIds.length) return reply.code(404).send({ error: "parlay_market_not_found" });
+  const probability = legs.reduce((acc, leg) => {
+    const stat = stats.rows.find((row) => row.id === leg.marketId)!;
+    const yes = asNumber(stat.yes_probability) / 100;
+    return acc * (leg.side === "YES" ? yes : 1 - yes);
+  }, 1);
+  return {
+    legs,
+    naiveProbabilityBps: Math.round(probability * 10_000),
+    correlationWarning: "Independent-pricing preview only. Correlated-risk settlement is prototype-only.",
+    executable: process.env.PARLAY_PROTOTYPE_ENABLED === "1",
+  };
+});
+
+server.post<{ Body: { legs?: Array<{ marketId?: string; side?: string }> } }>("/api/parlays", async (request, reply) => {
+  const session = await requireSession(request.headers.cookie);
+  if (!session) return reply.code(401).send({ error: "auth_required" });
+  const previewResponse = await server.inject({
+    method: "POST",
+    url: "/api/parlays/preview",
+    payload: request.body,
+  });
+  if (previewResponse.statusCode !== 200) return reply.code(previewResponse.statusCode).send(previewResponse.json());
+  const preview = previewResponse.json() as { legs: unknown[]; naiveProbabilityBps: number; correlationWarning: string; executable: boolean };
+  const id = `parlay-${createToken(12)}`;
+  await query(
+    `INSERT INTO parlay_drafts (id, address, legs, naive_probability_bps, correlation_warning, executable)
+     VALUES ($1,$2,$3::jsonb,$4,$5,$6)`,
+    [id, session.address.toLowerCase(), JSON.stringify(preview.legs), preview.naiveProbabilityBps, preview.correlationWarning, preview.executable],
+  );
+  return { id, ...preview };
+});
+
+server.get<{ Params: { id: string } }>("/api/parlays/:id", async (request, reply) => {
+  const result = await query<{ id: string; address: string; legs: unknown; naive_probability_bps: number; correlation_warning: string | null; executable: boolean; created_at: Date | string }>(
+    `SELECT * FROM parlay_drafts WHERE id = $1`,
+    [request.params.id],
+  );
+  const row = result.rows[0];
+  if (!row) return reply.code(404).send({ error: "parlay_not_found" });
+  return {
+    id: row.id,
+    address: row.address,
+    legs: row.legs,
+    naiveProbabilityBps: row.naive_probability_bps,
+    correlationWarning: row.correlation_warning ?? undefined,
+    executable: row.executable,
+    createdAtIso: toIso(row.created_at),
+  };
+});
+
+server.get<{ Querystring: { marketId?: string } }>("/api/opportunities", async (request) => {
+  const values: unknown[] = [];
+  let where = "WHERE status = 'open'";
+  if (request.query.marketId) {
+    values.push(request.query.marketId);
+    where += ` AND market_id = $${values.length}`;
+  }
+  const rows = await query<OpportunityRow>(
+    `SELECT * FROM market_opportunities ${where} ORDER BY confidence DESC, created_at DESC LIMIT 100`,
+    values,
+  );
+  return rows.rows.map(toOpportunity);
+});
+
+server.get<{ Params: { id: string } }>("/api/markets/:id/opportunities", async (request) => {
+  const rows = await query<OpportunityRow>(
+    `SELECT * FROM market_opportunities WHERE market_id = $1 AND status = 'open' ORDER BY confidence DESC, created_at DESC LIMIT 20`,
+    [request.params.id],
+  );
+  return rows.rows.map(toOpportunity);
+});
+
+server.post("/api/opportunities/rebuild", async (request, reply) => {
+  if (!isAuthorizedInternalWrite(request.headers["x-adjudex-internal-secret"])) {
+    return reply.code(401).send({ error: "opportunities_rebuild_unauthorized" });
+  }
+  if (process.env.OPPORTUNITIES_ENABLED === "0") {
+    return { rebuilt: 0, skipped: "opportunities_disabled" };
+  }
+  const rows = await query<{
+    group_id: string;
+    group_title: string;
+    market_id: string;
+    total_probability_bps: number;
+    liquidity_depth_usd: unknown;
+  }>(
+    `SELECT
+       g.id AS group_id,
+       g.title AS group_title,
+       MIN(o.market_id) AS market_id,
+       COALESCE(SUM(o.probability_bps), 0)::int AS total_probability_bps,
+       COALESCE(SUM(l.yes_reserve + l.no_reserve), 0) AS liquidity_depth_usd
+     FROM market_groups g
+     JOIN market_group_outcomes o ON o.group_id = g.id
+     LEFT JOIN market_liquidity l ON l.market_id = o.market_id
+     WHERE g.status = 'open'
+     GROUP BY g.id, g.title
+     HAVING ABS(COALESCE(SUM(o.probability_bps), 0) - 10000) >= 250`,
+    [],
+  );
+  await transaction(async (execute) => {
+    await execute(
+      `UPDATE market_opportunities
+       SET status = 'closed'
+       WHERE kind = 'exclusive_group_mismatch' AND status = 'open'`,
+      [],
+    );
+    for (const row of rows.rows) {
+      const gap = Math.abs(Number(row.total_probability_bps) - 10_000);
+      await execute(
+        `INSERT INTO market_opportunities
+           (id, market_id, kind, title, probability_gap_bps, liquidity_depth_usd, confidence, source_url, status, created_at)
+         VALUES ($1,$2,'exclusive_group_mismatch',$3,$4,$5,$6,NULL,'open',now())
+         ON CONFLICT (id) DO UPDATE SET
+           market_id = EXCLUDED.market_id,
+           title = EXCLUDED.title,
+           probability_gap_bps = EXCLUDED.probability_gap_bps,
+           liquidity_depth_usd = EXCLUDED.liquidity_depth_usd,
+           confidence = EXCLUDED.confidence,
+           status = 'open',
+           created_at = now()`,
+        [
+          `exclusive-group:${row.group_id}`,
+          row.market_id,
+          `Exclusive outcome probability mismatch: ${row.group_title}`,
+          gap,
+          asNumber(row.liquidity_depth_usd),
+          Math.min(1, Math.max(0.1, gap / 10_000)),
+        ],
+      );
+    }
+  });
+  return { rebuilt: rows.rows.length };
+});
+
 server.get<{ Params: { marketId: string } }>("/api/oracle/:marketId", async (request) => {
   const result = await query<{ status: string; resolved_outcome: "YES" | "NO" | null; updated_at: Date }>(
     "SELECT status, resolved_outcome, updated_at FROM markets WHERE id = $1",
@@ -2145,40 +2597,87 @@ server.post<{
   };
 });
 
-// Stripe webhook. The signature header MUST be verified in production —
-// we accept the event unconditionally here (env-gated by isBillingEnabled)
-// but production deploy must wire @fastify/raw-body + crypto.timingSafeEqual
-// against STRIPE_WEBHOOK_SECRET. Until that's wired the endpoint is
-// rejected when not in dev.
-server.post<{ Body: unknown }>("/api/billing/webhook/stripe", async (request, reply) => {
-  if (!isBillingEnabled()) return reply.code(503).send({ error: "billing_unavailable" });
-  if (process.env.NODE_ENV === "production" && !process.env.STRIPE_WEBHOOK_SECRET) {
-    return reply.code(503).send({ error: "webhook_signature_unconfigured" });
+const STRIPE_SIGNATURE_TOLERANCE_SEC = 300;
+
+function firstHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function verifyStripeWebhookSignature(input: {
+  rawBody: Buffer | string | undefined;
+  signatureHeader: string | undefined;
+  webhookSecret: string;
+}): boolean {
+  const { rawBody, signatureHeader, webhookSecret } = input;
+  if (!rawBody || !signatureHeader || !webhookSecret) return false;
+  const body = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(rawBody, "utf8");
+  const parts = signatureHeader.split(",").map((part) => part.trim());
+  const timestamp = parts.find((part) => part.startsWith("t="))?.slice(2);
+  const signatures = parts
+    .filter((part) => part.startsWith("v1="))
+    .map((part) => part.slice(3))
+    .filter((sig) => /^[0-9a-f]{64}$/i.test(sig));
+  const timestampNumber = timestamp ? Number(timestamp) : NaN;
+  if (!Number.isFinite(timestampNumber) || signatures.length === 0) return false;
+  if (Math.abs(Math.floor(Date.now() / 1000) - timestampNumber) > STRIPE_SIGNATURE_TOLERANCE_SEC) {
+    return false;
   }
-  const body = request.body as
-    | { id?: string; type?: string; data?: { object?: Record<string, unknown> } }
-    | undefined;
-  if (!body?.id || !body?.type || !body?.data?.object) {
-    return reply.code(400).send({ error: "invalid_event_shape" });
-  }
-  try {
-    await handleStripeWebhookEvent({
-      id: body.id,
-      type: body.type,
-      data: { object: body.data.object },
+  const signedPayload = Buffer.concat([
+    Buffer.from(`${timestamp}.`, "utf8"),
+    body,
+  ]);
+  const expected = createHmac("sha256", webhookSecret).update(signedPayload).digest();
+  return signatures.some((signature) => {
+    const actual = Buffer.from(signature, "hex");
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  });
+}
+
+server.post<{ Body: unknown }>(
+  "/api/billing/webhook/stripe",
+  { config: { rawBody: true } },
+  async (request, reply) => {
+    if (!isBillingEnabled()) return reply.code(503).send({ error: "billing_unavailable" });
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+    if (!webhookSecret) {
+      return reply.code(503).send({ error: "webhook_signature_unconfigured" });
+    }
+    if (!request.rawBody) {
+      return reply.code(500).send({ error: "webhook_raw_body_unavailable" });
+    }
+    const validSignature = verifyStripeWebhookSignature({
+      rawBody: request.rawBody,
+      signatureHeader: firstHeader(request.headers["stripe-signature"]),
+      webhookSecret,
     });
-    return { received: true };
-  } catch (err) {
-    // Persist the raw event for later replay even if reconciliation failed.
-    await recordSubscriptionEvent({
-      externalId: body.id,
-      kind: `failed:${body.type}`,
-      payload: body,
-    });
-    request.log.error({ err }, "stripe webhook handling failed");
-    return reply.code(500).send({ error: "webhook_handling_failed" });
-  }
-});
+    if (!validSignature) {
+      return reply.code(400).send({ error: "webhook_signature_invalid" });
+    }
+    const body = request.body as
+      | { id?: string; type?: string; data?: { object?: Record<string, unknown> } }
+      | undefined;
+    if (!body?.id || !body?.type || !body?.data?.object) {
+      return reply.code(400).send({ error: "invalid_event_shape" });
+    }
+    try {
+      await handleStripeWebhookEvent({
+        id: body.id,
+        type: body.type,
+        data: { object: body.data.object },
+      });
+      return { received: true };
+    } catch (err) {
+      // Persist the raw event for later replay even if reconciliation failed.
+      await recordSubscriptionEvent({
+        externalId: body.id,
+        kind: `failed:${body.type}`,
+        payload: body,
+      });
+      request.log.error({ err }, "stripe webhook handling failed");
+      return reply.code(500).send({ error: "webhook_handling_failed" });
+    }
+  },
+);
 
 // Convenience header: surface the caller's tier on every billing-aware
 // read so the UI can show a "Pro" badge without an extra request.
@@ -3166,8 +3665,11 @@ function transactionSyncMinConfirmations() {
 function hasTrustedReconciliation(reconciled: Array<{ type: string }>) {
   return reconciled.some((item) =>
     item.type === "market_created" ||
+    item.type === "amm_market_created" ||
     item.type === "resolution_proposed" ||
     item.type === "bet" ||
+    item.type === "share_buy" ||
+    item.type === "share_sell" ||
     item.type === "resolution" ||
     item.type === "resolution_finalized" ||
     item.type === "claim" ||
@@ -3282,8 +3784,26 @@ async function reconcileReceipt(input: {
          resolution_proposed_at = to_timestamp($4),
          resolution_proof_tx_hash = $5,
          updated_at = now()
-       WHERE id = $1`,
+      WHERE id = $1`,
       [market.id, args.evidenceHash, input.receipt.from ?? null, Number(args.proposedAt), input.transactionHash]
+    );
+    await execute(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, outcome, evidence_hash, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'proposed',$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(input.chainId, input.transactionHash, "resolution-proposed", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        Number(args.outcome) === 0 ? "YES" : "NO",
+        args.evidenceHash,
+        input.transactionHash,
+        input.chainId,
+        logBlockHash(event) ?? input.receipt.blockHash,
+        Number(event.blockNumber ?? input.receipt.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
     );
     reconciled.push({ type: "resolution_proposed", marketId: market.id });
   }
@@ -3425,8 +3945,26 @@ async function reconcileReceipt(input: {
          resolution_evidence_hash = $4,
          resolution_proof_tx_hash = COALESCE(resolution_proof_tx_hash, $3),
          updated_at = now()
-       WHERE id = $1`,
+      WHERE id = $1`,
       [market.id, outcome, input.transactionHash, args.evidenceHash]
+    );
+    await execute(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, outcome, evidence_hash, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'finalized',$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(input.chainId, input.transactionHash, "resolution-finalized", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        outcome,
+        args.evidenceHash,
+        input.transactionHash,
+        input.chainId,
+        logBlockHash(event) ?? input.receipt.blockHash,
+        Number(event.blockNumber ?? input.receipt.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
     );
     reconciled.push({ type: "resolution_finalized", marketId: market.id });
   }
@@ -3523,6 +4061,149 @@ async function reconcileReceipt(input: {
     reconciled.push({ type: "refund", id: refundId, marketId: market.id });
   }
 
+  const ammMarketCreatedParsed = parseEventLogs({
+    abi: marketFactoryEventAbi,
+    eventName: "AmmMarketCreated",
+    logs: input.receipt.logs,
+  });
+  const ammMarketCreated = Array.isArray(ammMarketCreatedParsed) ? ammMarketCreatedParsed : [];
+  for (const event of ammMarketCreated) {
+    const args = event.args as { marketId?: bigint; pool?: string; seedAmount?: bigint };
+    if (typeof args.marketId !== "bigint" || typeof args.pool !== "string" || typeof args.seedAmount !== "bigint") continue;
+    const configuredFactory = configuredFactoryAddress(input.chainId);
+    if (!configuredFactory) {
+      reconciled.push({ type: "amm_market_created_factory_not_configured" });
+      continue;
+    }
+    if (event.address.toLowerCase() !== configuredFactory.toLowerCase()) {
+      reconciled.push({ type: "amm_market_created_untrusted_factory" });
+      continue;
+    }
+    const dbMarketId = canonicalMarketId(input.chainId, args.marketId.toString());
+    const seedUsd = Number(args.seedAmount) / 1_000_000;
+    const yesSeedRaw = args.seedAmount / 2n;
+    const yesSeedUsd = Number(yesSeedRaw) / 1_000_000;
+    const noSeedUsd = Number(args.seedAmount - yesSeedRaw) / 1_000_000;
+    await execute(
+      `UPDATE markets SET liquidity_mode = 'amm', updated_at = now()
+       WHERE id = $1 AND lower(pool_address) = lower($2)`,
+      [dbMarketId, args.pool],
+    );
+    await execute(
+      `INSERT INTO market_liquidity
+         (market_id, mode, yes_reserve, no_reserve, yes_shares, no_shares, vault_debt, updated_at)
+       VALUES ($1, 'amm', $2, $3, $2, $3, $4, now())
+       ON CONFLICT (market_id) DO UPDATE SET
+         mode = 'amm',
+         yes_reserve = GREATEST(market_liquidity.yes_reserve, EXCLUDED.yes_reserve),
+         no_reserve = GREATEST(market_liquidity.no_reserve, EXCLUDED.no_reserve),
+         yes_shares = GREATEST(market_liquidity.yes_shares, EXCLUDED.yes_shares),
+         no_shares = GREATEST(market_liquidity.no_shares, EXCLUDED.no_shares),
+         vault_debt = GREATEST(market_liquidity.vault_debt, EXCLUDED.vault_debt),
+         updated_at = now()`,
+      [dbMarketId, yesSeedUsd, noSeedUsd, seedUsd],
+    );
+    reconciled.push({ type: "amm_market_created", marketId: dbMarketId });
+  }
+
+  const shareBoughtParsed = parseEventLogs({
+    abi: outcomeSharePoolEventAbi,
+    eventName: "SharesBought",
+    logs: input.receipt.logs,
+  });
+  const shareBoughtEvents = Array.isArray(shareBoughtParsed) ? shareBoughtParsed : [];
+  for (const event of shareBoughtEvents) {
+    const args = event.args as { trader?: string; side?: number; amount?: bigint; shares?: bigint };
+    if (typeof args.trader !== "string" || typeof args.amount !== "bigint" || typeof args.shares !== "bigint") continue;
+    const market = await marketByPool(event.address, input.chainId);
+    if (!market) {
+      reconciled.push({ type: "share_buy_unmatched_pool" });
+      continue;
+    }
+    const logIndex = logIndexNumber(event.logIndex);
+    const blockNumber = Number(event.blockNumber ?? input.receipt.blockNumber);
+    const blockHash = logBlockHash(event) ?? input.receipt.blockHash;
+    const id = eventScopedId(input.chainId, input.transactionHash, "share-buy", String(logIndex));
+    await execute(
+      `INSERT INTO share_trades
+         (id, market_id, address, side, action, amount_usd, shares, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,$4,'buy',$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT DO NOTHING`,
+      [
+        id,
+        market.id,
+        args.trader.toLowerCase(),
+        Number(args.side) === 0 ? "YES" : "NO",
+        Number(args.amount) / 1_000_000,
+        Number(args.shares) / 1_000_000,
+        input.transactionHash,
+        input.chainId,
+        blockHash,
+        blockNumber,
+        logIndex,
+      ],
+    );
+    await refreshAmmLiquiditySnapshot({ execute, client: input.client, marketId: market.id, poolAddress: event.address });
+    reconciled.push({ type: "share_buy", id, marketId: market.id });
+  }
+
+  const shareSoldParsed = parseEventLogs({
+    abi: outcomeSharePoolEventAbi,
+    eventName: "SharesSold",
+    logs: input.receipt.logs,
+  });
+  const shareSoldEvents = Array.isArray(shareSoldParsed) ? shareSoldParsed : [];
+  for (const event of shareSoldEvents) {
+    const args = event.args as { trader?: string; side?: number; shares?: bigint; amount?: bigint };
+    if (typeof args.trader !== "string" || typeof args.amount !== "bigint" || typeof args.shares !== "bigint") continue;
+    const market = await marketByPool(event.address, input.chainId);
+    if (!market) {
+      reconciled.push({ type: "share_sell_unmatched_pool" });
+      continue;
+    }
+    const logIndex = logIndexNumber(event.logIndex);
+    const blockNumber = Number(event.blockNumber ?? input.receipt.blockNumber);
+    const blockHash = logBlockHash(event) ?? input.receipt.blockHash;
+    const id = eventScopedId(input.chainId, input.transactionHash, "share-sell", String(logIndex));
+    await execute(
+      `INSERT INTO share_trades
+         (id, market_id, address, side, action, amount_usd, shares, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,$4,'sell',$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT DO NOTHING`,
+      [
+        id,
+        market.id,
+        args.trader.toLowerCase(),
+        Number(args.side) === 0 ? "YES" : "NO",
+        Number(args.amount) / 1_000_000,
+        Number(args.shares) / 1_000_000,
+        input.transactionHash,
+        input.chainId,
+        blockHash,
+        blockNumber,
+        logIndex,
+      ],
+    );
+    await refreshAmmLiquiditySnapshot({ execute, client: input.client, marketId: market.id, poolAddress: event.address });
+    reconciled.push({ type: "share_sell", id, marketId: market.id });
+  }
+
+  const liquidityAddedParsed = parseEventLogs({ abi: outcomeSharePoolEventAbi, eventName: "LiquidityAdded", logs: input.receipt.logs });
+  const vaultSeededParsed = parseEventLogs({ abi: outcomeSharePoolEventAbi, eventName: "VaultSeeded", logs: input.receipt.logs });
+  const liquidityEvents = [
+    ...(Array.isArray(liquidityAddedParsed) ? liquidityAddedParsed : []),
+    ...(Array.isArray(vaultSeededParsed) ? vaultSeededParsed : []),
+  ];
+  for (const event of liquidityEvents) {
+    const market = await marketByPool(event.address, input.chainId);
+    if (!market) {
+      reconciled.push({ type: "amm_liquidity_unmatched_pool" });
+      continue;
+    }
+    await refreshAmmLiquiditySnapshot({ execute, client: input.client, marketId: market.id, poolAddress: event.address });
+    reconciled.push({ type: "amm_liquidity_snapshot", marketId: market.id });
+  }
+
   const agentRegisteredParsed = parseEventLogs({
     abi: reputationOracleEventAbi,
     eventName: "AgentRegistered",
@@ -3568,6 +4249,127 @@ async function reconcileReceipt(input: {
       [eventScopedId(input.chainId, input.transactionHash, "agent-registered", String(logIndexNumber(event.logIndex))), args.agentId, input.transactionHash, input.chainId, registeredAt]
     );
     reconciled.push({ type: "agent_registered", id: args.agentId });
+  }
+
+  const challengedParsed = parseEventLogs({
+    abi: aiJudgeVerifierEventAbi,
+    eventName: "Challenged",
+    logs: input.receipt.logs,
+  });
+  const challengedEvents = Array.isArray(challengedParsed) ? challengedParsed : [];
+  for (const event of challengedEvents) {
+    const args = event.args as { pool: string; marketId: bigint; challenger: string };
+    const market = await marketByPool(args.pool, input.chainId);
+    if (!market || !market.resolverAddress || !isTrustedResolverLog(event.address, market.resolverAddress)) continue;
+    await execute(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, challenger_address, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'challenged',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(input.chainId, input.transactionHash, "resolution-challenged", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.challenger,
+        input.transactionHash,
+        input.chainId,
+        logBlockHash(event) ?? input.receipt.blockHash,
+        Number(event.blockNumber ?? input.receipt.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+    reconciled.push({ type: "resolution_challenged", marketId: market.id });
+  }
+
+  const resetParsed = parseEventLogs({
+    abi: aiJudgeVerifierEventAbi,
+    eventName: "ProposalReset",
+    logs: input.receipt.logs,
+  });
+  const resetEvents = Array.isArray(resetParsed) ? resetParsed : [];
+  for (const event of resetEvents) {
+    const args = event.args as { pool: string; marketId: bigint; evidenceHash: string };
+    const market = await marketByPool(args.pool, input.chainId);
+    if (!market || !market.resolverAddress || !isTrustedResolverLog(event.address, market.resolverAddress)) continue;
+    await execute("UPDATE markets SET status = 'resolving', updated_at = now() WHERE id = $1 AND status <> 'resolved'", [market.id]);
+    await execute(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, evidence_hash, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'reset',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(input.chainId, input.transactionHash, "resolution-reset", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.evidenceHash,
+        input.transactionHash,
+        input.chainId,
+        logBlockHash(event) ?? input.receipt.blockHash,
+        Number(event.blockNumber ?? input.receipt.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+    reconciled.push({ type: "resolution_reset", marketId: market.id });
+  }
+
+  const escalatedParsed = parseEventLogs({
+    abi: aiJudgeVerifierEventAbi,
+    eventName: "ProposalEscalated",
+    logs: input.receipt.logs,
+  });
+  const escalatedEvents = Array.isArray(escalatedParsed) ? escalatedParsed : [];
+  for (const event of escalatedEvents) {
+    const args = event.args as { pool: string; marketId: bigint; challenger: string };
+    const market = await marketByPool(args.pool, input.chainId);
+    if (!market || !market.resolverAddress || !isTrustedResolverLog(event.address, market.resolverAddress)) continue;
+    await execute("UPDATE markets SET status = 'resolving', updated_at = now() WHERE id = $1 AND status <> 'resolved'", [market.id]);
+    await execute(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, challenger_address, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'escalated',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(input.chainId, input.transactionHash, "resolution-escalated", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.challenger,
+        input.transactionHash,
+        input.chainId,
+        logBlockHash(event) ?? input.receipt.blockHash,
+        Number(event.blockNumber ?? input.receipt.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+    reconciled.push({ type: "resolution_escalated", marketId: market.id });
+  }
+
+  const bondParsed = parseEventLogs({
+    abi: aiJudgeVerifierEventAbi,
+    eventName: "ChallengeBondPosted",
+    logs: input.receipt.logs,
+  });
+  const bondEvents = Array.isArray(bondParsed) ? bondParsed : [];
+  for (const event of bondEvents) {
+    const args = event.args as { marketId: bigint; challenger: string; amount: bigint };
+    const dbMarketId = canonicalMarketId(input.chainId, args.marketId.toString());
+    await execute(
+      `INSERT INTO resolution_disputes
+         (id, market_id, status, challenger_address, bond_amount, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,'bond_posted',$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(input.chainId, input.transactionHash, "resolution-bond", String(logIndexNumber(event.logIndex))),
+        dbMarketId,
+        args.challenger,
+        args.amount.toString(),
+        input.transactionHash,
+        input.chainId,
+        logBlockHash(event) ?? input.receipt.blockHash,
+        Number(event.blockNumber ?? input.receipt.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+    reconciled.push({ type: "resolution_bond_posted", marketId: dbMarketId });
   }
 
   return reconciled;
@@ -3647,6 +4449,87 @@ async function insertTimelinePointFromPool(input: {
     return false;
   }
   return true;
+}
+
+async function refreshAmmLiquiditySnapshot(input: {
+  execute: QueryExecutor;
+  client: ReturnType<typeof createRpcClient>;
+  marketId: string;
+  poolAddress: string;
+}) {
+  try {
+    const poolAddress = input.poolAddress as Hex;
+    const [yesReserve, noReserve, yesShares, noShares, vaultAddress] = await Promise.all([
+      input.client.readContract({ address: poolAddress, abi: outcomeSharePoolReadAbi, functionName: "yesReserve" }),
+      input.client.readContract({ address: poolAddress, abi: outcomeSharePoolReadAbi, functionName: "noReserve" }),
+      input.client.readContract({ address: poolAddress, abi: outcomeSharePoolReadAbi, functionName: "yesShares" }),
+      input.client.readContract({ address: poolAddress, abi: outcomeSharePoolReadAbi, functionName: "noShares" }),
+      input.client.readContract({ address: poolAddress, abi: outcomeSharePoolReadAbi, functionName: "liquidityVault" }),
+    ]);
+    let vaultDebt = 0n;
+    let vaultSurplus = 0n;
+    let totalOutstandingDebt = 0n;
+    if (typeof vaultAddress === "string" && /^0x[0-9a-fA-F]{40}$/.test(vaultAddress)) {
+      try {
+        [vaultDebt, vaultSurplus, totalOutstandingDebt] = await Promise.all([
+          input.client.readContract({ address: vaultAddress as Hex, abi: liquidityVaultReadAbi, functionName: "marketDebt", args: [poolAddress] }),
+          input.client.readContract({ address: vaultAddress as Hex, abi: liquidityVaultReadAbi, functionName: "marketSurplus", args: [poolAddress] }),
+          input.client.readContract({ address: vaultAddress as Hex, abi: liquidityVaultReadAbi, functionName: "totalOutstandingDebt" }),
+        ]);
+      } catch {
+        vaultDebt = 0n;
+        vaultSurplus = 0n;
+        totalOutstandingDebt = 0n;
+      }
+    }
+    await input.execute(
+      `INSERT INTO market_liquidity
+         (market_id, mode, yes_reserve, no_reserve, yes_shares, no_shares, vault_debt, vault_surplus, updated_at)
+       VALUES ($1, 'amm', $2, $3, $4, $5, $6, $7, now())
+       ON CONFLICT (market_id) DO UPDATE SET
+         mode = 'amm',
+         yes_reserve = EXCLUDED.yes_reserve,
+         no_reserve = EXCLUDED.no_reserve,
+         yes_shares = EXCLUDED.yes_shares,
+         no_shares = EXCLUDED.no_shares,
+         vault_debt = EXCLUDED.vault_debt,
+         vault_surplus = EXCLUDED.vault_surplus,
+         updated_at = now()`,
+      [
+        input.marketId,
+        Number(yesReserve) / 1_000_000,
+        Number(noReserve) / 1_000_000,
+        Number(yesShares) / 1_000_000,
+        Number(noShares) / 1_000_000,
+        Number(vaultDebt) / 1_000_000,
+        Number(vaultSurplus) / 1_000_000,
+      ],
+    );
+    if (typeof vaultAddress === "string" && /^0x[0-9a-fA-F]{40}$/.test(vaultAddress)) {
+      await input.execute(
+        `INSERT INTO vault_exposure
+           (market_id, vault_address, debt_usd, surplus_usd, total_outstanding_debt_usd, updated_at)
+         VALUES ($1,$2,$3,$4,$5,now())
+         ON CONFLICT (market_id) DO UPDATE SET
+           vault_address = EXCLUDED.vault_address,
+           debt_usd = EXCLUDED.debt_usd,
+           surplus_usd = EXCLUDED.surplus_usd,
+           total_outstanding_debt_usd = EXCLUDED.total_outstanding_debt_usd,
+           updated_at = now()`,
+        [
+          input.marketId,
+          vaultAddress.toLowerCase(),
+          Number(vaultDebt) / 1_000_000,
+          Number(vaultSurplus) / 1_000_000,
+          Number(totalOutstandingDebt) / 1_000_000,
+        ],
+      );
+    }
+    await input.execute("UPDATE markets SET liquidity_mode = 'amm', updated_at = now() WHERE id = $1", [input.marketId]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function marketByPool(poolAddress: string, chainId: number): Promise<{ id: string; yesProbability: number; resolverAddress: string | null } | null> {
@@ -3734,6 +4617,15 @@ const marketFactoryEventAbi = [
       { indexed: false, name: "specUri", type: "string" },
     ],
   },
+  {
+    type: "event",
+    name: "AmmMarketCreated",
+    inputs: [
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: false, name: "seedAmount", type: "uint256" },
+    ],
+  },
 ] as const;
 
 const parimutuelPoolReadAbi = [
@@ -3781,6 +4673,60 @@ const parimutuelPoolEventAbi = [
   },
 ] as const;
 
+const outcomeSharePoolReadAbi = [
+  { type: "function", name: "yesReserve", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "noReserve", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "yesShares", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "noShares", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "liquidityVault", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+] as const;
+
+const liquidityVaultReadAbi = [
+  { type: "function", name: "marketDebt", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "marketSurplus", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "totalOutstandingDebt", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+] as const;
+
+const outcomeSharePoolEventAbi = [
+  {
+    type: "event",
+    name: "SharesBought",
+    inputs: [
+      { indexed: true, name: "trader", type: "address" },
+      { indexed: false, name: "side", type: "uint8" },
+      { indexed: false, name: "amount", type: "uint256" },
+      { indexed: false, name: "shares", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "SharesSold",
+    inputs: [
+      { indexed: true, name: "trader", type: "address" },
+      { indexed: false, name: "side", type: "uint8" },
+      { indexed: false, name: "shares", type: "uint256" },
+      { indexed: false, name: "amount", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "LiquidityAdded",
+    inputs: [
+      { indexed: true, name: "provider", type: "address" },
+      { indexed: false, name: "yesAmount", type: "uint256" },
+      { indexed: false, name: "noAmount", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "VaultSeeded",
+    inputs: [
+      { indexed: false, name: "yesAmount", type: "uint256" },
+      { indexed: false, name: "noAmount", type: "uint256" },
+    ],
+  },
+] as const;
+
 const aiJudgeVerifierEventAbi = [
   {
     type: "event",
@@ -3791,6 +4737,42 @@ const aiJudgeVerifierEventAbi = [
       { indexed: false, name: "outcome", type: "uint8" },
       { indexed: false, name: "evidenceHash", type: "bytes32" },
       { indexed: false, name: "proposedAt", type: "uint64" },
+    ],
+  },
+  {
+    type: "event",
+    name: "Challenged",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "challenger", type: "address" },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProposalReset",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: false, name: "evidenceHash", type: "bytes32" },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProposalEscalated",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "challenger", type: "address" },
+    ],
+  },
+  {
+    type: "event",
+    name: "ChallengeBondPosted",
+    inputs: [
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "challenger", type: "address" },
+      { indexed: false, name: "amount", type: "uint256" },
     ],
   },
   {
@@ -3873,6 +4855,262 @@ type ImportDeployBody = {
   factoryAddress?: string;
 };
 
+type OrderIntentInput = {
+  marketId: string;
+  pool: string;
+  side: string;
+  orderType: string;
+  amountUsd: number;
+  limitPriceBps: number;
+  expiresAtIso: string;
+  nonce: string;
+  maker: string;
+  builder?: string;
+  metadataHash: string;
+  signature: string;
+};
+
+type OrderIntentRow = {
+  hash: string;
+  market_id: string;
+  pool_address: string;
+  side: "YES" | "NO";
+  order_type: "buy" | "sell";
+  amount_usd: unknown;
+  limit_price_bps: number;
+  expires_at: Date | string;
+  nonce: string;
+  maker_address: string;
+  builder_address: string | null;
+  metadata_hash: string;
+  signature: string;
+  status: string;
+  created_at: Date | string;
+};
+
+function normalizeSide(value: unknown): "YES" | "NO" | null {
+  if (value === "YES" || value === "NO") return value;
+  if (typeof value === "string") {
+    const upper = value.toUpperCase();
+    if (upper === "YES" || upper === "NO") return upper;
+  }
+  return null;
+}
+
+function parseOrderIntent(input: Partial<OrderIntentInput>, sessionAddress: string):
+  | { ok: true; value: ReturnType<typeof toOrderInputValue> }
+  | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const side = normalizeSide(input.side);
+  const orderType = input.orderType === "buy" || input.orderType === "sell" ? input.orderType : null;
+  const amountUsd = Number(input.amountUsd);
+  const limitPriceBps = Number(input.limitPriceBps);
+  const expiresAt = input.expiresAtIso ? new Date(input.expiresAtIso) : null;
+  const maker = input.maker?.trim().toLowerCase();
+  if (!input.marketId) errors.push("market_id_required");
+  if (!input.pool || !/^0x[0-9a-fA-F]{40}$/.test(input.pool)) errors.push("pool_invalid");
+  if (!side) errors.push("side_invalid");
+  if (!orderType) errors.push("order_type_invalid");
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) errors.push("amount_invalid");
+  if (!Number.isInteger(limitPriceBps) || limitPriceBps <= 0 || limitPriceBps > 10_000) errors.push("limit_price_invalid");
+  if (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) errors.push("expires_at_invalid");
+  if (!input.nonce || input.nonce.length > 80) errors.push("nonce_invalid");
+  if (!maker || !/^0x[0-9a-fA-F]{40}$/.test(maker)) errors.push("maker_invalid");
+  if (maker && maker !== sessionAddress.toLowerCase()) errors.push("maker_session_mismatch");
+  if (!input.metadataHash || !/^0x[0-9a-fA-F]{64}$/.test(input.metadataHash)) errors.push("metadata_hash_invalid");
+  if (!input.signature || !/^0x[0-9a-fA-F]+$/.test(input.signature)) errors.push("signature_invalid");
+  if (errors.length > 0 || !side || !orderType || !expiresAt || !maker || !input.marketId || !input.pool || !input.nonce || !input.metadataHash || !input.signature) {
+    return { ok: false, errors };
+  }
+  return {
+    ok: true,
+    value: toOrderInputValue({
+      marketId: input.marketId,
+      pool: input.pool,
+      side,
+      orderType,
+      amountUsd,
+      limitPriceBps,
+      expiresAtIso: expiresAt.toISOString(),
+      nonce: input.nonce,
+      maker,
+      builder: input.builder,
+      metadataHash: input.metadataHash,
+      signature: input.signature,
+    }),
+  };
+}
+
+function toOrderInputValue(input: {
+  marketId: string;
+  pool: string;
+  side: "YES" | "NO";
+  orderType: "buy" | "sell";
+  amountUsd: number;
+  limitPriceBps: number;
+  expiresAtIso: string;
+  nonce: string;
+  maker: string;
+  builder?: string;
+  metadataHash: string;
+  signature: string;
+}) {
+  const canonical = JSON.stringify({
+    marketId: input.marketId,
+    pool: input.pool.toLowerCase(),
+    side: input.side,
+    orderType: input.orderType,
+    amountUsd: input.amountUsd,
+    limitPriceBps: input.limitPriceBps,
+    expiresAtIso: input.expiresAtIso,
+    nonce: input.nonce,
+    maker: input.maker.toLowerCase(),
+    builder: input.builder?.toLowerCase() ?? null,
+    metadataHash: input.metadataHash.toLowerCase(),
+  });
+  return { ...input, hash: keccak256(stringToBytes(canonical)) };
+}
+
+function toOrderIntent(row: OrderIntentRow) {
+  return {
+    hash: row.hash,
+    marketId: row.market_id,
+    pool: row.pool_address,
+    side: row.side,
+    orderType: row.order_type,
+    amountUsd: asNumber(row.amount_usd),
+    limitPriceBps: row.limit_price_bps,
+    expiresAtIso: toIso(row.expires_at),
+    nonce: row.nonce,
+    maker: row.maker_address,
+    builder: row.builder_address ?? undefined,
+    metadataHash: row.metadata_hash,
+    signature: row.signature,
+    status: row.status,
+    createdAtIso: toIso(row.created_at),
+  };
+}
+
+async function getMarketGroup(id: string) {
+  const group = await query<{ id: string; title: string; status: string; winning_market_id: string | null; created_by: string | null; created_at: Date | string }>(
+    "SELECT * FROM market_groups WHERE id = $1",
+    [id],
+  );
+  const row = group.rows[0];
+  if (!row) return null;
+  const outcomes = await query<{ id: string; market_id: string; label: string; probability_bps: number }>(
+    `SELECT id, market_id, label, probability_bps
+     FROM market_group_outcomes
+     WHERE group_id = $1
+     ORDER BY created_at ASC`,
+    [id],
+  );
+  return {
+    id: row.id,
+    title: row.title,
+    status: row.status,
+    winningMarketId: row.winning_market_id ?? undefined,
+    createdBy: row.created_by ?? undefined,
+    createdAtIso: toIso(row.created_at),
+    outcomes: outcomes.rows.map((outcome) => ({
+      id: outcome.id,
+      groupId: id,
+      marketId: outcome.market_id,
+      label: outcome.label,
+      probabilityBps: outcome.probability_bps,
+    })),
+  };
+}
+
+type ResolutionDisputeRow = {
+  id: string;
+  market_id: string;
+  pool_address: string | null;
+  status: string;
+  outcome: string | null;
+  evidence_hash: string | null;
+  challenger_address: string | null;
+  bond_amount: unknown;
+  transaction_hash: string | null;
+  chain_id: number | null;
+  created_at: Date | string;
+};
+
+function toResolutionDispute(row: ResolutionDisputeRow) {
+  return {
+    id: row.id,
+    marketId: row.market_id,
+    poolAddress: row.pool_address ?? undefined,
+    status: row.status,
+    outcome: row.outcome ?? undefined,
+    evidenceHash: row.evidence_hash ?? undefined,
+    challengerAddress: row.challenger_address ?? undefined,
+    bondAmount: asNumber(row.bond_amount),
+    transactionHash: row.transaction_hash ?? undefined,
+    chainId: row.chain_id ?? undefined,
+    createdAtIso: toIso(row.created_at),
+  };
+}
+
+async function getCreator(handle: string) {
+  const result = await query<{ handle: string; wallet_address: string; channel_url: string; preferred_games: string[] | null; verified_at: Date | string; created_at: Date | string }>(
+    "SELECT * FROM creators WHERE lower(handle) = lower($1)",
+    [handle],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    handle: row.handle,
+    walletAddress: row.wallet_address,
+    channelUrl: row.channel_url,
+    preferredGames: row.preferred_games ?? [],
+    verifiedAtIso: toIso(row.verified_at),
+    createdAtIso: toIso(row.created_at),
+  };
+}
+
+function normalizeParlayLegs(input: unknown): Array<{ marketId: string; side: "YES" | "NO" }> {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((leg) => {
+      if (!leg || typeof leg !== "object") return null;
+      const typed = leg as { marketId?: unknown; side?: unknown };
+      const side = normalizeSide(typed.side);
+      return typeof typed.marketId === "string" && typed.marketId.trim() && side
+        ? { marketId: typed.marketId.trim(), side }
+        : null;
+    })
+    .filter((leg): leg is { marketId: string; side: "YES" | "NO" } => Boolean(leg));
+}
+
+type OpportunityRow = {
+  id: string;
+  market_id: string | null;
+  kind: string;
+  title: string;
+  probability_gap_bps: number;
+  liquidity_depth_usd: unknown;
+  confidence: unknown;
+  source_url: string | null;
+  status: string;
+  created_at: Date | string;
+};
+
+function toOpportunity(row: OpportunityRow) {
+  return {
+    id: row.id,
+    marketId: row.market_id ?? undefined,
+    kind: row.kind,
+    title: row.title,
+    probabilityGapBps: row.probability_gap_bps,
+    liquidityDepthUsd: asNumber(row.liquidity_depth_usd),
+    confidence: asNumber(row.confidence),
+    sourceUrl: row.source_url ?? undefined,
+    status: row.status,
+    createdAtIso: toIso(row.created_at),
+  };
+}
+
 type MarketRow = {
   id: string;
   pool_address: `0x${string}`;
@@ -3920,6 +5158,11 @@ type MarketRow = {
   league: string | null;
   parent_market_id: string | null;
   kind: string | null;
+  liquidity_mode: "parimutuel" | "amm";
+  group_id: string | null;
+  creator_handle: string | null;
+  best_bid_bps: number | null;
+  best_ask_bps: number | null;
 };
 
 function toMarket(row: MarketRow) {
@@ -3970,6 +5213,11 @@ function toMarket(row: MarketRow) {
     league: row.league ?? undefined,
     parentMarketId: row.parent_market_id ?? undefined,
     kind: row.kind ?? undefined,
+    liquidityMode: row.liquidity_mode,
+    groupId: row.group_id ?? undefined,
+    creatorHandle: row.creator_handle ?? undefined,
+    bestBidBps: row.best_bid_bps ?? undefined,
+    bestAskBps: row.best_ask_bps ?? undefined,
   };
 }
 

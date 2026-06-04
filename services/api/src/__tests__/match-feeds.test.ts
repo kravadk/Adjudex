@@ -5,13 +5,12 @@ import {
   matchQuestion,
   resultBufferSec,
 } from "../feeds/match-question";
-import { createFixtureSource } from "../feeds/fixture-fallback";
 import type { IngestMatch } from "../feeds/types";
 
 function esportsMatch(overrides: Partial<IngestMatch> = {}): IngestMatch {
   return {
     externalMatchId: "t-1",
-    sourceKind: "fixture",
+    sourceKind: "pandascore",
     category: "esports",
     game: "cs2",
     teamA: "NAVI",
@@ -50,7 +49,7 @@ describe("matchQuestion", () => {
   it("handles football (sports) framing", () => {
     const spec = matchQuestion({
       externalMatchId: "f-1",
-      sourceKind: "fixture",
+      sourceKind: "football-data",
       category: "sports",
       sport: "football",
       teamA: "Arsenal",
@@ -102,41 +101,5 @@ describe("deadline inference", () => {
 
   it("returns null for an unparseable kickoff", () => {
     expect(deadlineForMatch(esportsMatch({ matchStartsAtIso: "not-a-date" }))).toBeNull();
-  });
-});
-
-describe("fixture source", () => {
-  it("maps demo rows to IngestMatch with live-relative start times", async () => {
-    const source = createFixtureSource();
-    const matches = await source.fetchUpcoming();
-    expect(matches.length).toBeGreaterThan(0);
-
-    const cs2 = matches.find((m) => m.externalMatchId === "fx-cs2-001");
-    expect(cs2?.category).toBe("esports");
-    expect(cs2?.game).toBe("cs2");
-    expect(cs2?.teamA).toBe("Natus Vincere");
-    // startsInMinutes 120 -> in the future relative to now.
-    expect(new Date(cs2!.matchStartsAtIso).getTime()).toBeGreaterThan(Date.now());
-
-    const football = matches.find((m) => m.externalMatchId === "fx-foot-001");
-    expect(football?.category).toBe("sports");
-    expect(football?.sport).toBe("football");
-
-    const soon = matches.find((m) => m.externalMatchId === "fx-demo-soon");
-    expect(soon?.closeAtIsoOverride).toBeTruthy();
-  });
-
-  it("returns embedded results, and scheduled for unknown ids", async () => {
-    const source = createFixtureSource();
-    const finished = await source.fetchResult("fx-demo-soon");
-    expect(finished?.status).toBe("finished");
-    expect(finished?.winner).toBe("teamA");
-
-    const unknown = await source.fetchResult("does-not-exist");
-    expect(unknown?.status).toBe("scheduled");
-    expect(unknown?.winner).toBeNull();
-
-    const pending = await source.fetchResult("fx-cs2-001");
-    expect(pending?.winner).toBeNull();
   });
 });

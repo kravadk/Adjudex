@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 import { BarChart3, ChevronLeft, Share2, Flame, Bot, Star, Copy, ExternalLink, LineChart } from "lucide-react";
+import { keccak256, parseUnits, stringToBytes, zeroAddress, type Address } from "viem";
+import { signTypedData, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { useAccount } from "wagmi";
 import { BetButton } from "@/components/dashboard/bet-button";
 import { BetForm } from "@/components/dashboard/bet-form";
 import { ProbabilityBar } from "@/components/dashboard/probability-bar";
@@ -27,8 +30,10 @@ import {
 import { getServices } from "@/lib/services/provider";
 import { useBet } from "@/lib/hooks/useBet";
 import { isZeroDevGaslessEnabled } from "@/lib/zerodev/gasless-bet";
-import type { ActivityEvent, Market, MarketTimelinePoint } from "@/lib/types/domain";
+import type { ActivityEvent, Market, MarketTimelinePoint, Opportunity, OrderIntent, ResolutionDispute } from "@/lib/types/domain";
 import { toMarketView, multiplierFromPct, formatUsd } from "@/lib/market-view";
+import { wagmiConfig } from "@/lib/wagmi";
+import outcomeSharePoolAbi from "@/lib/abi/OutcomeSharePool.json";
 
 export function MarketDetailClient({ id }: { id: string }) {
   const [market, setMarket] = useState<Market | null>(null);
@@ -37,10 +42,18 @@ export function MarketDetailClient({ id }: { id: string }) {
   const [toast, setToast] = useState<string | null>(null);
   const [marketEvents, setMarketEvents] = useState<ActivityEvent[]>([]);
   const [timeline, setTimeline] = useState<MarketTimelinePoint[]>([]);
+  const [liquidity, setLiquidity] = useState<LiquiditySnapshot | null>(null);
+  const [orders, setOrders] = useState<OrderIntent[]>([]);
+  const [resolutionDisputes, setResolutionDisputes] = useState<ResolutionDispute[]>([]);
+  const [marketGroup, setMarketGroup] = useState<MarketGroupSnapshot | null>(null);
+  const [groupArbitrage, setGroupArbitrage] = useState<GroupArbitrageSnapshot | null>(null);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [tradeMode, setTradeMode] = useState<"market" | "limit">("market");
   const [activityError, setActivityError] = useState<string | null>(null);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [watchlisted, setWatchlisted] = useState(false);
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
+  const { address } = useAccount();
   const { placeBet } = useBet();
 
   useEffect(() => {
@@ -69,6 +82,78 @@ export function MarketDetailClient({ id }: { id: string }) {
       unsubscribe();
     };
   }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadCompetitiveSurfaces(marketSnapshot: Market) {
+      const requests: Array<Promise<void>> = [
+        fetch(`/api/markets/${encodeURIComponent(id)}/liquidity`, { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            if (active) setLiquidity((await response.json()) as LiquiditySnapshot);
+          })
+          .catch(() => {
+            if (active) setLiquidity(null);
+          }),
+        fetch(`/api/orders?marketId=${encodeURIComponent(id)}`, { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            if (active) setOrders((await response.json()) as OrderIntent[]);
+          })
+          .catch(() => {
+            if (active) setOrders([]);
+          }),
+        fetch(`/api/markets/${encodeURIComponent(id)}/resolution`, { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            const body = (await response.json()) as { disputes?: ResolutionDispute[] };
+            if (active) setResolutionDisputes(body.disputes ?? []);
+          })
+          .catch(() => {
+            if (active) setResolutionDisputes([]);
+          }),
+        fetch(`/api/markets/${encodeURIComponent(id)}/opportunities`, { cache: "no-store" })
+          .then(async (response) => {
+            if (!response.ok) throw new Error(await response.text());
+            if (active) setOpportunities((await response.json()) as Opportunity[]);
+          })
+          .catch(() => {
+            if (active) setOpportunities([]);
+          }),
+      ];
+
+      if (marketSnapshot.groupId) {
+        const groupId = marketSnapshot.groupId;
+        requests.push(
+          fetch(`/api/market-groups/${encodeURIComponent(groupId)}`, { cache: "no-store" })
+            .then(async (response) => {
+              if (!response.ok) throw new Error(await response.text());
+              if (active) setMarketGroup((await response.json()) as MarketGroupSnapshot);
+            })
+            .catch(() => {
+              if (active) setMarketGroup(null);
+            }),
+          fetch(`/api/market-groups/${encodeURIComponent(groupId)}/arbitrage`, { cache: "no-store" })
+            .then(async (response) => {
+              if (!response.ok) throw new Error(await response.text());
+              if (active) setGroupArbitrage((await response.json()) as GroupArbitrageSnapshot);
+            })
+            .catch(() => {
+              if (active) setGroupArbitrage(null);
+            }),
+        );
+      } else {
+        setMarketGroup(null);
+        setGroupArbitrage(null);
+      }
+
+      await Promise.all(requests);
+    }
+    if (market) void loadCompetitiveSurfaces(market);
+    return () => {
+      active = false;
+    };
+  }, [id, market]);
 
   useEffect(() => {
     let active = true;
@@ -426,6 +511,16 @@ export function MarketDetailClient({ id }: { id: string }) {
         </div>
 
         <GmxSignalCards market={market} />
+
+        <TradeModePanel mode={tradeMode} onModeChange={setTradeMode} />
+        {tradeMode === "market" ? (
+          <AmmExitPanel market={market} liquidity={liquidity} address={address} />
+        ) : (
+          <LimitOrderPanel market={market} orders={orders} bestBidBps={market.bestBidBps} bestAskBps={market.bestAskBps} address={address} />
+        )}
+        <MarketGroupPanel group={marketGroup} arbitrage={groupArbitrage} />
+        <ResolutionTimelinePanel disputes={resolutionDisputes} explorerBase={explorerBase} />
+        <OpportunityPanel opportunities={opportunities} />
 
         {/* Trading surface — peer-pool primitives beside the trade form.
             Pool depth + reprice triggers replace CLOB liquidity + tape.
@@ -872,7 +967,7 @@ function GmxSignalCards({ market }: { market: Market }) {
             <span className="caps">OHLCV evidence</span>
           </div>
           <div className="mt-2 text-[12px] text-gray-400">
-            {signal.ohlcv?.length ? `${signal.ohlcv.length} hourly candles loaded from GMX SDK.` : "No OHLCV candles returned."}
+            {signal.ohlcv?.length ? `${signal.ohlcv.length} hourly candles loaded from GMX.` : "No OHLCV candles returned."}
           </div>
         </div>
         <div className="rounded-[8px] border border-[#34312e] bg-[#211f1e] p-3">
@@ -1117,6 +1212,487 @@ function txUrl(explorerBase: string, hash?: string | null): string | undefined {
 function addressUrl(explorerBase: string, address?: string | null): string | undefined {
   if (!explorerBase || !address) return undefined;
   return `${explorerBase.replace(/\/$/, "")}/address/${encodeURIComponent(address)}`;
+}
+
+type LiquiditySnapshot = {
+  marketId: string;
+  mode: "parimutuel" | "amm";
+  yesReserveUsd: number;
+  noReserveUsd: number;
+  yesShares: number;
+  noShares: number;
+  vaultDebtUsd: number;
+  vaultSurplusUsd: number;
+  updatedAtIso: string | null;
+};
+
+type MarketGroupSnapshot = {
+  id: string;
+  title: string;
+  outcomes: Array<{ id: string; marketId: string; label: string; probabilityBps: number; resolvedOutcome?: string }>;
+};
+
+type GroupArbitrageSnapshot = {
+  groupId: string;
+  totalProbabilityBps: number;
+  overroundBps: number;
+  coherent: boolean;
+};
+
+function TradeModePanel({
+  mode,
+  onModeChange,
+}: {
+  mode: "market" | "limit";
+  onModeChange: (mode: "market" | "limit") => void;
+}) {
+  return (
+    <div className="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-3">
+      <div className="inline-flex rounded-[6px] border border-[#262626] bg-[#0b0b0b] p-1">
+        {(["market", "limit"] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onModeChange(item)}
+            className={`rounded-[5px] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] ${
+              mode === item ? "bg-[#CCE9E7] text-black" : "text-gray-500 hover:text-white"
+            }`}
+          >
+            {item === "market" ? "Market" : "Limit"}
+          </button>
+        ))}
+      </div>
+      <span className="caps">{mode === "market" ? "pool execution" : "signed intents"}</span>
+    </div>
+  );
+}
+
+function AmmExitPanel({
+  market,
+  liquidity,
+  address,
+}: {
+  market: Market;
+  liquidity: LiquiditySnapshot | null;
+  address?: string;
+}) {
+  const [side, setSide] = useState<"YES" | "NO">("YES");
+  const [shares, setShares] = useState("10");
+  const [quote, setQuote] = useState<{ amountUsd: number; priceBps: number } | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (market.liquidityMode !== "amm") return null;
+
+  async function refreshQuote() {
+    setStatus(null);
+    const parsedShares = Number(shares);
+    if (!Number.isFinite(parsedShares) || parsedShares <= 0) {
+      setQuote(null);
+      setStatus("Invalid share amount.");
+      return;
+    }
+    const response = await fetch(`/api/markets/${encodeURIComponent(market.id)}/share-quote`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ side, action: "sell", shares: parsedShares }),
+    });
+    if (!response.ok) {
+      setQuote(null);
+      setStatus("AMM quote unavailable.");
+      return;
+    }
+    const body = (await response.json()) as { amountUsd: number; priceBps: number };
+    setQuote({ amountUsd: body.amountUsd, priceBps: body.priceBps });
+  }
+
+  async function sellShares() {
+    if (!address) {
+      setStatus("Connect wallet first.");
+      return;
+    }
+    if (!market.poolAddress || !market.chainId) {
+      setStatus("Pool address or chain id missing.");
+      return;
+    }
+    const parsedShares = Number(shares);
+    if (!Number.isFinite(parsedShares) || parsedShares <= 0) {
+      setStatus("Invalid share amount.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Waiting for wallet signature.");
+    try {
+      const hash = await writeContract(wagmiConfig, {
+        address: market.poolAddress as Address,
+        abi: outcomeSharePoolAbi,
+        functionName: "sell",
+        args: [side === "YES" ? 0 : 1, parseUnits(shares, 6)],
+        chainId: market.chainId,
+      });
+      setStatus("Confirming transaction.");
+      await waitForTransactionReceipt(wagmiConfig, { hash, chainId: market.chainId, timeout: 90_000 });
+      setStatus("Syncing indexed share trade.");
+      const response = await fetch("/api/sync/share-transaction", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ transactionHash: hash, chainId: market.chainId }),
+      });
+      if (!response.ok) throw new Error("share_sync_failed");
+      setStatus("Sell synced.");
+      await refreshQuote();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Sell failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">AMM exit liquidity</span>
+        <Pill tone={liquidity?.mode === "amm" ? "accent" : "neutral"}>
+          {liquidity?.mode === "amm" ? "indexed" : "awaiting index"}
+        </Pill>
+      </div>
+      {liquidity?.mode === "amm" ? (
+        <>
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+            <TrustItem label="YES reserve" value={formatUsd(liquidity.yesReserveUsd)} />
+            <TrustItem label="NO reserve" value={formatUsd(liquidity.noReserveUsd)} />
+            <TrustItem label="Vault debt" value={formatUsd(liquidity.vaultDebtUsd)} />
+            <TrustItem label="Vault surplus" value={formatUsd(liquidity.vaultSurplusUsd)} />
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[120px_1fr_140px_140px]">
+            <select
+              value={side}
+              onChange={(event) => setSide(event.target.value as "YES" | "NO")}
+              className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+            >
+              <option value="YES">YES</option>
+              <option value="NO">NO</option>
+            </select>
+            <input
+              value={shares}
+              onChange={(event) => setShares(event.target.value)}
+              inputMode="decimal"
+              className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+              placeholder="Shares"
+            />
+            <button
+              type="button"
+              onClick={() => void refreshQuote()}
+              className="rounded-[6px] border border-[#333] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-200 hover:border-[#CCE9E7]"
+            >
+              Quote
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void sellShares()}
+              className="rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50"
+            >
+              Sell
+            </button>
+          </div>
+          {(quote || status) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-gray-400">
+              {quote && <span>{formatUsd(quote.amountUsd)} at {(quote.priceBps / 100).toFixed(2)}%</span>}
+              {status && <span className="text-gray-500">{status}</span>}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-3 text-[11.5px] text-gray-500">
+          No AMM liquidity rows are indexed for this market yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LimitOrderPanel({
+  market,
+  orders,
+  bestBidBps,
+  bestAskBps,
+  address,
+}: {
+  market: Market;
+  orders: OrderIntent[];
+  bestBidBps?: number;
+  bestAskBps?: number;
+  address?: string;
+}) {
+  return (
+    <>
+      <LimitOrderComposer market={market} address={address} />
+      <OrderbookPanel orders={orders} bestBidBps={bestBidBps} bestAskBps={bestAskBps} />
+    </>
+  );
+}
+
+function LimitOrderComposer({ market, address }: { market: Market; address?: string }) {
+  const [side, setSide] = useState<"YES" | "NO">("YES");
+  const [orderType, setOrderType] = useState<"buy" | "sell">("buy");
+  const [amountUsd, setAmountUsd] = useState("25");
+  const [limitPrice, setLimitPrice] = useState("50");
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const matcherAddress = process.env.NEXT_PUBLIC_ORDER_MATCHER_ADDRESS as `0x${string}` | undefined;
+
+  async function submitOrder() {
+    if (!address) {
+      setStatus("Connect wallet first.");
+      return;
+    }
+    if (!market.poolAddress || !market.chainId) {
+      setStatus("Pool address or chain id missing.");
+      return;
+    }
+    if (!matcherAddress || !/^0x[0-9a-fA-F]{40}$/.test(matcherAddress)) {
+      setStatus("Order matcher address missing.");
+      return;
+    }
+    const amount = Number(amountUsd);
+    const price = Number(limitPrice);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(price) || price <= 0 || price > 100) {
+      setStatus("Invalid amount or price.");
+      return;
+    }
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const localMarketIdRaw = market.id.split(":").pop() ?? market.id;
+    if (!/^\d+$/.test(localMarketIdRaw)) {
+      setStatus("Numeric chain market id required.");
+      return;
+    }
+    const localMarketId = BigInt(localMarketIdRaw);
+    const nonce = String(Date.now());
+    const metadataHash = keccak256(stringToBytes(JSON.stringify({ marketId: market.id, source: "adjudex-ui" })));
+    setBusy(true);
+    setStatus("Waiting for wallet signature.");
+    try {
+      const signature = await signTypedData(wagmiConfig, {
+        account: address as Address,
+        domain: {
+          name: "AdjudexOrderMatcher",
+          version: "1",
+          chainId: market.chainId,
+          verifyingContract: matcherAddress,
+        },
+        types: {
+          OrderIntent: [
+            { name: "marketId", type: "uint256" },
+            { name: "pool", type: "address" },
+            { name: "side", type: "uint8" },
+            { name: "orderType", type: "uint8" },
+            { name: "amount", type: "uint256" },
+            { name: "limitPriceBps", type: "uint256" },
+            { name: "expiresAt", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "maker", type: "address" },
+            { name: "builder", type: "address" },
+            { name: "metadataHash", type: "bytes32" },
+          ],
+        },
+        primaryType: "OrderIntent",
+        message: {
+          marketId: localMarketId,
+          pool: market.poolAddress,
+          side: side === "YES" ? 0 : 1,
+          orderType: orderType === "buy" ? 0 : 1,
+          amount: parseUnits(amountUsd, 6),
+          limitPriceBps: BigInt(Math.round(price * 100)),
+          expiresAt: BigInt(Math.floor(expiresAt.getTime() / 1000)),
+          nonce: BigInt(nonce),
+          maker: address as Address,
+          builder: zeroAddress,
+          metadataHash,
+        },
+      });
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          marketId: market.id,
+          pool: market.poolAddress,
+          side,
+          orderType,
+          amountUsd: amount,
+          limitPriceBps: Math.round(price * 100),
+          expiresAtIso: expiresAt.toISOString(),
+          nonce,
+          maker: address,
+          builder: zeroAddress,
+          metadataHash,
+          signature,
+        }),
+      });
+      if (!response.ok) throw new Error(response.status === 401 ? "SIWE session required." : "Order rejected.");
+      setStatus("Signed order stored.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Order failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">Limit order</span>
+        <span className="caps">EIP-712</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[100px_100px_1fr_1fr_140px]">
+        <select value={side} onChange={(event) => setSide(event.target.value as "YES" | "NO")} className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none">
+          <option value="YES">YES</option>
+          <option value="NO">NO</option>
+        </select>
+        <select value={orderType} onChange={(event) => setOrderType(event.target.value as "buy" | "sell")} className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none">
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+        </select>
+        <input value={amountUsd} onChange={(event) => setAmountUsd(event.target.value)} inputMode="decimal" placeholder="USDC" className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none" />
+        <input value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} inputMode="decimal" placeholder="Price %" className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none" />
+        <button type="button" disabled={busy} onClick={() => void submitOrder()} className="rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50">
+          Sign
+        </button>
+      </div>
+      {status && <div className="mt-2 text-[11.5px] text-gray-500">{status}</div>}
+    </div>
+  );
+}
+
+function OrderbookPanel({ orders, bestBidBps, bestAskBps }: { orders: OrderIntent[]; bestBidBps?: number; bestAskBps?: number }) {
+  const bids = orders.filter((order) => order.side === "YES").sort((a, b) => b.limitPriceBps - a.limitPriceBps).slice(0, 5);
+  const asks = orders.filter((order) => order.side === "NO").sort((a, b) => a.limitPriceBps - b.limitPriceBps).slice(0, 5);
+  if (orders.length === 0 && bestBidBps === undefined && bestAskBps === undefined) return null;
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">Signed order intents</span>
+        <span className="caps">settlement tx required</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+        <TrustItem label="Best bid" value={bestBidBps === undefined ? undefined : `${(bestBidBps / 100).toFixed(2)}%`} optional />
+        <TrustItem label="Best ask" value={bestAskBps === undefined ? undefined : `${(bestAskBps / 100).toFixed(2)}%`} optional />
+        <TrustItem label="Open orders" value={orders.length.toString()} />
+        <TrustItem label="Depth" value={formatUsd(orders.reduce((sum, order) => sum + order.amountUsd, 0))} />
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-2">
+        <OrderbookSide title="Bids" orders={bids} />
+        <OrderbookSide title="Asks" orders={asks} />
+      </div>
+    </div>
+  );
+}
+
+function OrderbookSide({ title, orders }: { title: string; orders: OrderIntent[] }) {
+  return (
+    <div className="rounded-[6px] border border-[#262626] bg-[#111111] p-3">
+      <div className="mb-2 text-[10px] uppercase tracking-[0.12em] text-gray-500">{title}</div>
+      {orders.length === 0 ? (
+        <div className="text-[11px] text-gray-500">No indexed open orders.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {orders.map((order) => (
+            <div key={order.hash} className="grid grid-cols-3 gap-2 text-[11px]">
+              <span className="font-mono text-gray-300">{(order.limitPriceBps / 100).toFixed(2)}%</span>
+              <span className="text-gray-400">{formatUsd(order.amountUsd)}</span>
+              <span className="truncate text-right font-mono text-gray-500">{order.hash}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MarketGroupPanel({ group, arbitrage }: { group: MarketGroupSnapshot | null; arbitrage: GroupArbitrageSnapshot | null }) {
+  if (!group) return null;
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">Exclusive outcome group</span>
+        <Pill tone={arbitrage?.coherent ? "accent" : "neutral"}>
+          {arbitrage ? `${(arbitrage.totalProbabilityBps / 100).toFixed(2)}% total` : "probability pending"}
+        </Pill>
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 lg:grid-cols-4">
+        {group.outcomes.map((outcome) => (
+          <TrustItem
+            key={outcome.id}
+            label={outcome.label}
+            value={`${(outcome.probabilityBps / 100).toFixed(2)}%`}
+          />
+        ))}
+      </div>
+      {arbitrage && !arbitrage.coherent && (
+        <div className="mt-3 rounded-[6px] border border-[#5f4421] bg-[#21180f] px-3 py-2 text-[11.5px] text-[#fbbf24]">
+          Group probability is outside the coherence band by {(arbitrage.overroundBps / 100).toFixed(2)}%.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResolutionTimelinePanel({ disputes, explorerBase }: { disputes: ResolutionDispute[]; explorerBase: string }) {
+  if (disputes.length === 0) return null;
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">Resolution timeline</span>
+        <span className="caps">contract-indexed</span>
+      </div>
+      <div className="space-y-2">
+        {disputes.map((item) => (
+          <div key={item.id} className="flex flex-wrap items-center gap-2 rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[11.5px]">
+            <span className="caps">{item.status}</span>
+            {item.outcome && <span className="text-gray-300">{item.outcome}</span>}
+            {item.challengerAddress && <span className="font-mono text-gray-500">{item.challengerAddress}</span>}
+            {item.bondAmount > 0 && <span className="font-mono text-gray-400">bond {item.bondAmount}</span>}
+            <span className="ml-auto font-mono text-gray-500">{formatAgo(item.createdAtIso)}</span>
+            {item.transactionHash && (
+              <a href={txUrl(explorerBase, item.transactionHash)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#7ef4c8]">
+                tx <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OpportunityPanel({ opportunities }: { opportunities: Opportunity[] }) {
+  if (opportunities.length === 0) return null;
+  return (
+    <div className="panel p-4 mb-5">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-500">Opportunities</span>
+        <span className="caps">no auto execution</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+        {opportunities.map((item) => (
+          <div key={item.id} className="rounded-[6px] border border-[#262626] bg-[#111111] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-medium text-gray-200">{item.title}</span>
+              <span className="font-mono text-[11px] text-[#CCE9E7]">{(item.probabilityGapBps / 100).toFixed(2)}%</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-500">
+              <span>Depth {formatUsd(item.liquidityDepthUsd)}</span>
+              <span>Confidence {(item.confidence * 100).toFixed(1)}%</span>
+            </div>
+            {item.sourceUrl && (
+              <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[#7ef4c8]">
+                source <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function formatAgo(iso: string): string {

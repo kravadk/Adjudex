@@ -16,10 +16,9 @@ interface IParimutuelPool {
 //      Does NOT call pool.resolve() immediately.
 //   2. CHALLENGE_WINDOW (2h on testnet) elapses with no challenge:
 //      finalize(...) -> pool.resolve(outcome) -> claims unlock.
-//   3. Anyone may challenge(...) inside the window to flip the proposal
-//      into `disputed`. Disputed proposals must be settled by `owner`
-//      via overrideAndFinalize(outcome) which forwards the corrected
-//      outcome to the pool.
+//   3. First challenge resets the proposal, requiring a fresh signed
+//      evidence hash. A second challenge escalates to owner/multisig
+//      override.
 //
 // V1 compatibility: verifyAndResolve(...) is retained but gated to a
 // `fastTrackUntil` timestamp. Set to 0 (default) to force the V2 flow.
@@ -32,7 +31,7 @@ contract AIJudgeVerifier is Ownable2Step {
 
     uint256 public constant CHALLENGE_WINDOW = 2 hours;
 
-    enum ProposalStatus { None, Pending, Disputed, Finalized }
+    enum ProposalStatus { None, Pending, Challenged, Reset, Escalated, Finalized }
 
     struct Proposal {
         address pool;
@@ -41,10 +40,13 @@ contract AIJudgeVerifier is Ownable2Step {
         uint64 proposedAt;
         ProposalStatus status;
         address challenger;
+        uint32 challengeCount;
+        uint256 bondPosted;
     }
 
     // marketId -> proposal
     mapping(uint256 => Proposal) public proposals;
+    mapping(uint256 => uint256) public challengeBond;
 
     event Proposed(
         address indexed pool,
@@ -58,6 +60,9 @@ contract AIJudgeVerifier is Ownable2Step {
         uint256 indexed marketId,
         address indexed challenger
     );
+    event ProposalReset(address indexed pool, uint256 indexed marketId, bytes32 evidenceHash);
+    event ProposalEscalated(address indexed pool, uint256 indexed marketId, address indexed challenger);
+    event ChallengeBondPosted(uint256 indexed marketId, address indexed challenger, uint256 amount);
     event Finalized(
         address indexed pool,
         uint256 indexed marketId,
@@ -90,6 +95,10 @@ contract AIJudgeVerifier is Ownable2Step {
 
     function setFastTrackUntil(uint256 ts) external onlyOwner {
         fastTrackUntil = ts;
+    }
+
+    function setChallengeBond(uint256 marketId, uint256 amountWei) external onlyOwner {
+        challengeBond[marketId] = amountWei;
     }
 
     // ─── Digest / signature verification (unchanged ABI) ──────────────
@@ -145,27 +154,46 @@ contract AIJudgeVerifier is Ownable2Step {
             "bad sig"
         );
         Proposal storage p = proposals[marketId];
-        require(p.status == ProposalStatus.None, "exists");
+        require(
+            p.status == ProposalStatus.None || p.status == ProposalStatus.Reset,
+            "exists"
+        );
 
         p.pool = pool;
         p.outcome = outcome;
         p.evidenceHash = evidenceHash;
         p.proposedAt = uint64(block.timestamp);
         p.status = ProposalStatus.Pending;
+        p.challenger = address(0);
+        p.bondPosted = 0;
 
         emit Proposed(pool, marketId, outcome, evidenceHash, p.proposedAt);
     }
 
-    function challenge(uint256 marketId) external {
+    function challenge(uint256 marketId) external payable {
         Proposal storage p = proposals[marketId];
         require(p.status == ProposalStatus.Pending, "not pending");
         require(
             block.timestamp < uint256(p.proposedAt) + CHALLENGE_WINDOW,
             "window closed"
         );
-        p.status = ProposalStatus.Disputed;
+        uint256 requiredBond = challengeBond[marketId];
+        require(msg.value >= requiredBond, "bond too low");
         p.challenger = msg.sender;
+        p.bondPosted = msg.value;
         emit Challenged(p.pool, marketId, msg.sender);
+        if (msg.value > 0) {
+            emit ChallengeBondPosted(marketId, msg.sender, msg.value);
+        }
+        if (p.challengeCount == 0) {
+            p.challengeCount = 1;
+            p.status = ProposalStatus.Reset;
+            emit ProposalReset(p.pool, marketId, p.evidenceHash);
+        } else {
+            p.challengeCount += 1;
+            p.status = ProposalStatus.Escalated;
+            emit ProposalEscalated(p.pool, marketId, msg.sender);
+        }
     }
 
     function finalize(uint256 marketId) external {
@@ -184,7 +212,7 @@ contract AIJudgeVerifier is Ownable2Step {
     {
         require(outcome <= 1, "bad outcome");
         Proposal storage p = proposals[marketId];
-        require(p.status == ProposalStatus.Disputed, "not disputed");
+        require(p.status == ProposalStatus.Escalated, "not escalated");
         _resolvePool(p, marketId, outcome, /*viaOverride=*/ true);
         emit Overridden(p.pool, marketId, outcome, msg.sender);
     }

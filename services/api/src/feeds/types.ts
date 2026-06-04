@@ -1,14 +1,10 @@
-// Shared contract for match data sources (esports + traditional sports).
-//
-// An adapter turns an external API (PandaScore, football-data.org) or a
-// local fixture file into a normalized `IngestMatch`, and can look up the
-// final result of a match by its external id. Everything downstream — the
-// ingest worker, the market deployer, the resolve worker — speaks this
-// shape only, so swapping or adding a provider never touches that code.
+// Shared contract for real match data sources (esports + traditional sports).
+// Providers normalize external schedules/results into this shape so ingest,
+// deployment, and resolution do not depend on provider-specific payloads.
 
 import type { EsportsGame } from "../importer";
 
-export type MatchSourceKind = "pandascore" | "football-data" | "fixture";
+export type MatchSourceKind = "pandascore" | "football-data";
 
 export type SportKind = "football" | "basketball" | "tennis" | "other";
 
@@ -31,15 +27,13 @@ export type IngestMatch = {
   bestOfMaps?: number;
   streamUrl?: string;
   sourceUrl: string;
-  // Optional explicit market-close time. When a provider (or the fixture
-  // feed) supplies it, the deployer uses it verbatim instead of deriving a
-  // deadline from kickoff + duration. Lets the fixture demo close a market
-  // a few minutes out so the resolve worker can be shown end-to-end.
+  // Optional explicit market-close time. When a provider supplies it, the
+  // deployer uses it verbatim instead of deriving a deadline from kickoff +
+  // duration.
   closeAtIsoOverride?: string;
-  // Optional implied probability that teamA (YES) wins, in [0,1]. When
-  // present and SEED_OPENING_ODDS=1, the deployer seeds opening liquidity
-  // skewed to this ratio so the pool doesn't sit at a cold 50/50. Pure
-  // bootstrap — the parimutuel pool ratio remains the source of truth.
+  // Optional implied probability that teamA (YES) wins, in [0,1]. Providers
+  // may expose it for analytics/import ranking; deploy-time pool state still
+  // comes only from the contract and indexed user transactions.
   impliedYesProbability?: number;
 };
 

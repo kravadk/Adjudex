@@ -71,10 +71,17 @@ ALTER TABLE markets ADD COLUMN IF NOT EXISTS kind TEXT;
 -- Traditional-sports vertical (category = 'sports'). Mirror of game/tournament.
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS sport TEXT;
 ALTER TABLE markets ADD COLUMN IF NOT EXISTS league TEXT;
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS liquidity_mode TEXT NOT NULL DEFAULT 'parimutuel';
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS group_id TEXT;
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS creator_handle TEXT;
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS best_bid_bps INTEGER;
+ALTER TABLE markets ADD COLUMN IF NOT EXISTS best_ask_bps INTEGER;
 
 CREATE INDEX IF NOT EXISTS markets_game_idx ON markets (game) WHERE game IS NOT NULL;
 CREATE INDEX IF NOT EXISTS markets_sport_idx ON markets (sport) WHERE sport IS NOT NULL;
 CREATE INDEX IF NOT EXISTS markets_parent_market_id_idx ON markets (parent_market_id) WHERE parent_market_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS markets_group_id_idx ON markets (group_id) WHERE group_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS markets_creator_handle_idx ON markets (lower(creator_handle)) WHERE creator_handle IS NOT NULL;
 
 DO $$
 BEGIN
@@ -735,3 +742,187 @@ ALTER TABLE IF EXISTS webhook_deliveries
 DROP INDEX IF EXISTS webhook_deliveries_pending_idx;
 CREATE INDEX IF NOT EXISTS webhook_deliveries_pending_idx
   ON webhook_deliveries (status, next_attempt_at, created_at) WHERE status = 'pending';
+
+-- Competitive gap layer: AMM liquidity, signed order intents, exclusive
+-- outcome groups, creator markets, parlays, and market opportunities.
+CREATE TABLE IF NOT EXISTS market_liquidity (
+  market_id TEXT PRIMARY KEY REFERENCES markets(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL DEFAULT 'parimutuel',
+  yes_reserve NUMERIC NOT NULL DEFAULT 0,
+  no_reserve NUMERIC NOT NULL DEFAULT 0,
+  yes_shares NUMERIC NOT NULL DEFAULT 0,
+  no_shares NUMERIC NOT NULL DEFAULT 0,
+  vault_debt NUMERIC NOT NULL DEFAULT 0,
+  vault_surplus NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (mode IN ('parimutuel', 'amm'))
+);
+
+CREATE TABLE IF NOT EXISTS share_trades (
+  id TEXT PRIMARY KEY,
+  market_id TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+  address TEXT NOT NULL,
+  side TEXT NOT NULL,
+  action TEXT NOT NULL,
+  amount_usd NUMERIC NOT NULL,
+  shares NUMERIC NOT NULL,
+  transaction_hash TEXT NOT NULL,
+  chain_id INTEGER NOT NULL,
+  block_hash TEXT,
+  block_number BIGINT,
+  log_index INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (side IN ('YES', 'NO')),
+  CHECK (action IN ('buy', 'sell'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS share_trades_chain_tx_log_uidx
+  ON share_trades (chain_id, transaction_hash, log_index)
+  WHERE transaction_hash IS NOT NULL AND log_index IS NOT NULL;
+CREATE INDEX IF NOT EXISTS share_trades_market_idx ON share_trades (market_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS vault_exposure (
+  market_id TEXT PRIMARY KEY REFERENCES markets(id) ON DELETE CASCADE,
+  vault_address TEXT NOT NULL,
+  debt_usd NUMERIC NOT NULL DEFAULT 0,
+  surplus_usd NUMERIC NOT NULL DEFAULT 0,
+  total_outstanding_debt_usd NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS order_intents (
+  hash TEXT PRIMARY KEY,
+  market_id TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+  pool_address TEXT NOT NULL,
+  side TEXT NOT NULL,
+  order_type TEXT NOT NULL,
+  amount_usd NUMERIC NOT NULL,
+  limit_price_bps INTEGER NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  nonce TEXT NOT NULL,
+  maker_address TEXT NOT NULL,
+  builder_address TEXT,
+  metadata_hash TEXT NOT NULL,
+  signature TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (side IN ('YES', 'NO')),
+  CHECK (order_type IN ('buy', 'sell')),
+  CHECK (status IN ('open', 'filled', 'cancelled', 'expired'))
+);
+CREATE INDEX IF NOT EXISTS order_intents_market_status_idx ON order_intents (market_id, status, limit_price_bps);
+CREATE INDEX IF NOT EXISTS order_intents_maker_idx ON order_intents (lower(maker_address), created_at DESC);
+
+CREATE TABLE IF NOT EXISTS order_fills (
+  id TEXT PRIMARY KEY,
+  order_hash TEXT NOT NULL REFERENCES order_intents(hash) ON DELETE CASCADE,
+  counterparty_hash TEXT,
+  amount_usd NUMERIC NOT NULL,
+  price_bps INTEGER NOT NULL,
+  transaction_hash TEXT,
+  chain_id INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS order_cancellations (
+  order_hash TEXT PRIMARY KEY REFERENCES order_intents(hash) ON DELETE CASCADE,
+  maker_address TEXT NOT NULL,
+  cancelled_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS market_groups (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  winning_market_id TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (status IN ('open', 'resolved', 'archived'))
+);
+
+CREATE TABLE IF NOT EXISTS market_group_outcomes (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES market_groups(id) ON DELETE CASCADE,
+  market_id TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+  probability_bps INTEGER NOT NULL DEFAULT 5000,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (group_id, market_id)
+);
+CREATE INDEX IF NOT EXISTS market_group_outcomes_group_idx ON market_group_outcomes (group_id);
+
+CREATE TABLE IF NOT EXISTS market_group_positions (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES market_groups(id) ON DELETE CASCADE,
+  address TEXT NOT NULL,
+  market_id TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+  side TEXT NOT NULL,
+  stake_usd NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS neg_risk_conversions (
+  id TEXT PRIMARY KEY,
+  group_id TEXT NOT NULL REFERENCES market_groups(id) ON DELETE CASCADE,
+  address TEXT NOT NULL,
+  source_market_id TEXT NOT NULL,
+  target_market_id TEXT NOT NULL,
+  amount_usd NUMERIC NOT NULL,
+  transaction_hash TEXT,
+  chain_id INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS resolution_disputes (
+  id TEXT PRIMARY KEY,
+  market_id TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+  pool_address TEXT,
+  status TEXT NOT NULL,
+  outcome TEXT,
+  evidence_hash TEXT,
+  challenger_address TEXT,
+  bond_amount NUMERIC NOT NULL DEFAULT 0,
+  transaction_hash TEXT,
+  chain_id INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS resolution_disputes_market_idx ON resolution_disputes (market_id, created_at ASC);
+
+CREATE TABLE IF NOT EXISTS creators (
+  handle TEXT PRIMARY KEY,
+  wallet_address TEXT NOT NULL,
+  channel_url TEXT NOT NULL,
+  preferred_games TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  verified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS creators_wallet_uidx ON creators (lower(wallet_address));
+
+CREATE TABLE IF NOT EXISTS parlay_drafts (
+  id TEXT PRIMARY KEY,
+  address TEXT NOT NULL,
+  legs JSONB NOT NULL,
+  naive_probability_bps INTEGER NOT NULL,
+  correlation_warning TEXT,
+  executable BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS parlay_drafts_address_idx ON parlay_drafts (lower(address), created_at DESC);
+
+CREATE TABLE IF NOT EXISTS market_opportunities (
+  id TEXT PRIMARY KEY,
+  market_id TEXT REFERENCES markets(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  probability_gap_bps INTEGER NOT NULL DEFAULT 0,
+  liquidity_depth_usd NUMERIC NOT NULL DEFAULT 0,
+  confidence NUMERIC NOT NULL DEFAULT 0,
+  source_url TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK (status IN ('open', 'closed'))
+);
+CREATE INDEX IF NOT EXISTS market_opportunities_market_idx ON market_opportunities (market_id, created_at DESC);

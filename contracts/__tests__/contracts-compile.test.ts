@@ -10,13 +10,26 @@ function findImports(importPath: string) {
   return { error: `Unsupported import: ${importPath}` };
 }
 
-function compileContracts() {
+type CompileOutput = {
+  errors?: Array<{ severity: "error" | "warning"; formattedMessage: string }>;
+  contracts: Record<string, Record<string, { abi: Array<{ type: string; name?: string }>; evm: { bytecode: { object: string } } }>>;
+};
+
+let cachedCompileOutput: CompileOutput | null = null;
+
+function compileContracts(): CompileOutput {
+  if (cachedCompileOutput) return cachedCompileOutput;
   const root = join(process.cwd(), "contracts", "src");
   const input = {
     language: "Solidity",
     sources: {
       "ParimutuelPool.sol": { content: readFileSync(join(root, "ParimutuelPool.sol"), "utf8") },
       "MarketFactory.sol": { content: readFileSync(join(root, "MarketFactory.sol"), "utf8") },
+      "OutcomeSharePool.sol": { content: readFileSync(join(root, "OutcomeSharePool.sol"), "utf8") },
+      "LiquidityVault.sol": { content: readFileSync(join(root, "LiquidityVault.sol"), "utf8") },
+      "AdjudexOrderMatcher.sol": { content: readFileSync(join(root, "AdjudexOrderMatcher.sol"), "utf8") },
+      "ExclusiveOutcomeRegistry.sol": { content: readFileSync(join(root, "ExclusiveOutcomeRegistry.sol"), "utf8") },
+      "ParlayPoolPrototype.sol": { content: readFileSync(join(root, "ParlayPoolPrototype.sol"), "utf8") },
       "ReputationOracle.sol": { content: readFileSync(join(root, "ReputationOracle.sol"), "utf8") },
       "TestUSDC.sol": { content: readFileSync(join(root, "TestUSDC.sol"), "utf8") },
       "AIJudgeVerifier.sol": { content: readFileSync(join(root, "AIJudgeVerifier.sol"), "utf8") },
@@ -31,10 +44,8 @@ function compileContracts() {
       outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
     },
   };
-  return JSON.parse(solc.compile(JSON.stringify(input), { import: findImports })) as {
-    errors?: Array<{ severity: "error" | "warning"; formattedMessage: string }>;
-    contracts: Record<string, Record<string, { abi: Array<{ type: string; name?: string }>; evm: { bytecode: { object: string } } }>>;
-  };
+  cachedCompileOutput = JSON.parse(solc.compile(JSON.stringify(input), { import: findImports })) as CompileOutput;
+  return cachedCompileOutput;
 }
 
 describe("contracts", () => {
@@ -90,7 +101,10 @@ describe("contracts", () => {
         "createMarket",
         "createMarketWithSpec",
         "createSoftMarket",
+        "createAmmMarket",
+        "AmmMarketCreated",
         "getMarket",
+        "liquidityVault",
         "nextMarketId",
         "stakeToken",
         "specHashes",
@@ -103,6 +117,100 @@ describe("contracts", () => {
         "pause",
         "unpause",
         "paused",
+      ]),
+    );
+  });
+
+  it("OutcomeSharePool exposes buy/sell liquidity surface", () => {
+    const output = compileContracts();
+    const pool = output.contracts["OutcomeSharePool.sol"].OutcomeSharePool;
+    const names = pool.abi.map((item) => item.name).filter(Boolean);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "buy",
+        "sell",
+        "claim",
+        "repayVault",
+        "seedFromVault",
+        "quoteBuy",
+        "quoteSell",
+        "addLiquidity",
+        "resolve",
+        "yesShares",
+        "noShares",
+        "yesBalanceOf",
+        "noBalanceOf",
+        "SharesBought",
+        "SharesSold",
+        "LiquidityAdded",
+        "LiquidityRemoved",
+        "VaultSeeded",
+      ]),
+    );
+  });
+
+  it("LiquidityVault tracks registered market debt and surplus", () => {
+    const output = compileContracts();
+    const vault = output.contracts["LiquidityVault.sol"].LiquidityVault;
+    const names = vault.abi.map((item) => item.name).filter(Boolean);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "setFactory",
+        "registerMarket",
+        "repay",
+        "claimSurplus",
+        "marketDebt",
+        "marketSurplus",
+        "totalOutstandingDebt",
+      ]),
+    );
+  });
+
+  it("AdjudexOrderMatcher exposes EIP-712 order lifecycle", () => {
+    const output = compileContracts();
+    const matcher = output.contracts["AdjudexOrderMatcher.sol"].AdjudexOrderMatcher;
+    const names = matcher.abi.map((item) => item.name).filter(Boolean);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "hashOrder",
+        "verify",
+        "matchOrders",
+        "cancelOrder",
+        "cancelUpTo",
+        "OrdersMatched",
+        "OrderCancelled",
+        "FeeCharged",
+      ]),
+    );
+  });
+
+  it("ExclusiveOutcomeRegistry exposes group lifecycle", () => {
+    const output = compileContracts();
+    const registry = output.contracts["ExclusiveOutcomeRegistry.sol"].ExclusiveOutcomeRegistry;
+    const names = registry.abi.map((item) => item.name).filter(Boolean);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "createGroup",
+        "linkOutcome",
+        "resolveGroup",
+        "OutcomeGroupCreated",
+        "GroupOutcomeLinked",
+        "GroupResolved",
+      ]),
+    );
+  });
+
+  it("ParlayPoolPrototype exposes gated draft lifecycle", () => {
+    const output = compileContracts();
+    const pool = output.contracts["ParlayPoolPrototype.sol"].ParlayPoolPrototype;
+    const names = pool.abi.map((item) => item.name).filter(Boolean);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "openDraft",
+        "ownerSettle",
+        "hashLegs",
+        "ParlayDraftOpened",
+        "ParlayDraftSettled",
       ]),
     );
   });
@@ -171,7 +279,12 @@ describe("contracts", () => {
         "Challenged",
         "Finalized",
         "Overridden",
+        "ProposalReset",
+        "ProposalEscalated",
+        "ChallengeBondPosted",
         "CHALLENGE_WINDOW",
+        "challengeBond",
+        "setChallengeBond",
         "fastTrackUntil",
         "setFastTrackUntil",
         // OZ production hardening: 2-step ownership handshake.
@@ -391,5 +504,36 @@ describe("v2 invariants", () => {
         "QuoteConsumed",
       ]),
     );
+  });
+});
+
+function quoteBuy(amount: bigint, reserve: bigint, oppositeReserve: bigint): bigint {
+  if (amount === 0n) throw new Error("zero amount");
+  if (reserve === 0n || oppositeReserve === 0n) return amount;
+  return (amount * oppositeReserve) / (reserve + amount);
+}
+
+function quoteSell(shares: bigint, reserve: bigint, oppositeReserve: bigint): bigint {
+  if (shares === 0n) throw new Error("zero shares");
+  if (oppositeReserve === 0n) return 0n;
+  return (shares * reserve) / (oppositeReserve + shares);
+}
+
+describe("OutcomeSharePool AMM quote invariants", () => {
+  it("buy quotes are monotonic with input amount", () => {
+    const small = quoteBuy(10n, 100n, 100n);
+    const large = quoteBuy(20n, 100n, 100n);
+    expect(large).toBeGreaterThan(small);
+  });
+
+  it("sell quotes never exceed available side reserve", () => {
+    const reserve = 100n;
+    const amountOut = quoteSell(1_000_000n, reserve, 100n);
+    expect(amountOut).toBeLessThanOrEqual(reserve);
+  });
+
+  it("empty AMM bootstrap quotes one share per unit", () => {
+    expect(quoteBuy(25n, 0n, 0n)).toBe(25n);
+    expect(quoteSell(25n, 100n, 0n)).toBe(0n);
   });
 });

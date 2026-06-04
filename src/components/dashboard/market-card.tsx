@@ -84,6 +84,7 @@ export function MarketCard({ market, variant = "default" }: Props) {
               <div className="min-w-0 flex-1">
                 <div className="text-[10.5px] text-gray-500 mb-0.5">
                   {market.category} - {market.asset}
+                  {market.creatorHandle ? ` - @${market.creatorHandle}` : ""}
                 </div>
                 <Link href={marketHref} className="block">
                   <h2 className="text-white text-[18px] font-semibold leading-tight tracking-tight hover:text-white/90">
@@ -212,6 +213,11 @@ export function MarketCard({ market, variant = "default" }: Props) {
                 }}
               />
               <MarketKindBadge kind={market.kind} />
+              {market.creatorHandle && (
+                <span className="text-[10.5px] font-mono text-gray-500">
+                  @{market.creatorHandle}
+                </span>
+              )}
               {market.isHot && (
                 <span className="inline-flex items-center gap-1 text-[10.5px] text-[#CCE9E7]">
                   <Flame className="w-3 h-3" strokeWidth={2} />
@@ -285,4 +291,3 @@ export function MarketCard({ market, variant = "default" }: Props) {
     </div>
   );
 }
-

@@ -22,13 +22,13 @@ type GaslessBetInput = {
   walletClient: WalletClient;
   chainId: number;
   poolAddress: Address;
+  stakeTokenAddress?: Address;
   side: "YES" | "NO";
   stakeUsd: number;
   onStep: (step: string) => void;
 };
 
 const ENTRY_POINT = getEntryPoint("0.7");
-const STAKE_TOKEN = process.env.NEXT_PUBLIC_STAKE_TOKEN_ADDRESS as Address | undefined;
 const MAX_UINT256 = 2n ** 256n - 1n;
 
 export function isZeroDevGaslessEnabled() {
@@ -75,10 +75,10 @@ export async function placeGaslessBetWithZeroDev(input: GaslessBetInput) {
     functionName: "bet",
     args: [input.side === "YES" ? 0 : 1, amount],
   });
-  const calls = STAKE_TOKEN
+  const calls = input.stakeTokenAddress
     ? [
         {
-          to: STAKE_TOKEN,
+          to: input.stakeTokenAddress,
           value: 0n,
           data: encodeFunctionData({
             abi: testUsdcAbi,

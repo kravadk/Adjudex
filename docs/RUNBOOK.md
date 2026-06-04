@@ -125,13 +125,13 @@ and surfaces stage-aware buttons. Tx links go to Arbiscan Sepolia.
 
 1. User runs zkTLS via Reclaim; attestor POSTs to `/api/reclaim/callback`.
 2. Next route verifies the proof, persists it via `putProof()`, pins the
-   JSON via `IPFS_PROVIDER` (`pinata|web3storage|kubo|stub`), and calls
+   JSON via `IPFS_PROVIDER` (`pinata|web3storage|kubo`), and calls
    `ProofAnchor.anchor(sessionId, proofHash, cid)`.
 3. Indexer (or any external reader) can resolve a proof from on-chain
    alone: read `anchors[keccak(sessionId)]` then fetch JSON from IPFS by CID.
 
-`stub` provider returns deterministic `localcid-{hex}` so dev/CI works
-without network. Production must set `IPFS_PROVIDER=pinata` + `PINATA_JWT`
+Missing or unsupported `IPFS_PROVIDER` fails the proof flow before any
+on-chain anchor is attempted. Set `IPFS_PROVIDER=pinata` + `PINATA_JWT`
 (or web3storage / kubo equivalent).
 
 ## 8. Rate limits, admin allowlist

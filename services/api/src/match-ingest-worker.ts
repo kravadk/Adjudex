@@ -1,5 +1,5 @@
 // Match-ingest worker. On an interval it pulls upcoming matches from every
-// active feed (PandaScore / football-data / fixture), filters to the
+// active real feed (PandaScore / football-data), filters to the
 // verticals we support (CS2, Dota2, football), and auto-deploys a soft
 // market for each new one via the market-deployer. Mirrors the lifecycle
 // shape of notification-worker (single-instance, unref'd, Sentry-wrapped).

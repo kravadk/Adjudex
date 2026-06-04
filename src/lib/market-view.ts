@@ -38,6 +38,7 @@ export type MarketView = {
   matchStartsAtIso?: string;
   bestOfMaps?: number;
   streamUrl?: string;
+  creatorHandle?: string;
   // Traditional-sports opt-in (mirrors Market sport/league fields).
   sport?: SportKind;
   league?: string;
@@ -122,6 +123,7 @@ export function toMarketView(market: Market, opts: { featured?: boolean } = {}):
     matchStartsAtIso: market.matchStartsAtIso,
     bestOfMaps: market.bestOfMaps,
     streamUrl: market.streamUrl,
+    creatorHandle: market.creatorHandle,
     sport: market.sport,
     league: market.league,
     parentMarketId: market.parentMarketId,
@@ -153,4 +155,3 @@ export function multiplierFromPct(pct: number): number {
   if (pct <= 0) return 0;
   return 1 / pct;
 }
-

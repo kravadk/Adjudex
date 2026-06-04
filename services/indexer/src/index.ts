@@ -40,6 +40,10 @@ const poolAbi = [
     inputs: [],
     outputs: [{ type: "uint8" }],
   },
+  { type: "function", name: "yesReserve", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "noReserve", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "yesShares", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "noShares", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
 ] as const;
 
 const poolEventAbi = [
@@ -76,6 +80,43 @@ const poolEventAbi = [
       { indexed: false, name: "amount", type: "uint256" },
     ],
   },
+  {
+    type: "event",
+    name: "SharesBought",
+    inputs: [
+      { indexed: true, name: "trader", type: "address" },
+      { indexed: false, name: "side", type: "uint8" },
+      { indexed: false, name: "amount", type: "uint256" },
+      { indexed: false, name: "shares", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "SharesSold",
+    inputs: [
+      { indexed: true, name: "trader", type: "address" },
+      { indexed: false, name: "side", type: "uint8" },
+      { indexed: false, name: "shares", type: "uint256" },
+      { indexed: false, name: "amount", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "LiquidityAdded",
+    inputs: [
+      { indexed: true, name: "provider", type: "address" },
+      { indexed: false, name: "yesAmount", type: "uint256" },
+      { indexed: false, name: "noAmount", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "VaultSeeded",
+    inputs: [
+      { indexed: false, name: "yesAmount", type: "uint256" },
+      { indexed: false, name: "noAmount", type: "uint256" },
+    ],
+  },
 ] as const;
 
 const aiJudgeVerifierEventAbi = [
@@ -88,6 +129,42 @@ const aiJudgeVerifierEventAbi = [
       { indexed: false, name: "outcome", type: "uint8" },
       { indexed: false, name: "evidenceHash", type: "bytes32" },
       { indexed: false, name: "proposedAt", type: "uint64" },
+    ],
+  },
+  {
+    type: "event",
+    name: "Challenged",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "challenger", type: "address" },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProposalReset",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: false, name: "evidenceHash", type: "bytes32" },
+    ],
+  },
+  {
+    type: "event",
+    name: "ProposalEscalated",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "challenger", type: "address" },
+    ],
+  },
+  {
+    type: "event",
+    name: "ChallengeBondPosted",
+    inputs: [
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "challenger", type: "address" },
+      { indexed: false, name: "amount", type: "uint256" },
     ],
   },
   {
@@ -107,6 +184,7 @@ type MarketRow = {
   pool_address: string;
   chain_id: number;
   resolver_address: string | null;
+  liquidity_mode: "parimutuel" | "amm";
 };
 
 async function syncOnce() {
@@ -155,7 +233,7 @@ async function syncOnce() {
       : min(safeHead, fromBlock + config.maxBlockRange - 1n);
 
   const markets = await query<MarketRow>(
-    "SELECT id, pool_address, chain_id, resolver_address FROM markets WHERE pool_address IS NOT NULL AND chain_id = $1 ORDER BY created_at ASC",
+    "SELECT id, pool_address, chain_id, resolver_address, liquidity_mode FROM markets WHERE pool_address IS NOT NULL AND chain_id = $1 ORDER BY created_at ASC",
     [config.chainId]
   );
 
@@ -241,7 +319,7 @@ export async function backfill(fromBlock: bigint, toBlock: bigint) {
     `[indexer] backfill chain=${config.chainId} from=${fromBlock} to=${toBlock}`,
   );
   const markets = await query<MarketRow>(
-    "SELECT id, pool_address, chain_id, resolver_address FROM markets WHERE pool_address IS NOT NULL AND chain_id = $1 ORDER BY created_at ASC",
+    "SELECT id, pool_address, chain_id, resolver_address, liquidity_mode FROM markets WHERE pool_address IS NOT NULL AND chain_id = $1 ORDER BY created_at ASC",
     [config.chainId]
   );
   for (const market of markets.rows) {
@@ -255,6 +333,10 @@ export async function backfill(fromBlock: bigint, toBlock: bigint) {
 
 async function syncMarketState(market: MarketRow) {
   const address = market.pool_address as Address;
+  if (market.liquidity_mode === "amm") {
+    await refreshAmmLiquidity(market);
+    return;
+  }
   const [yesPctRaw, totalVolumeRaw, bettorCountRaw, resolved, resolvedSideRaw] = await Promise.all([
     client.readContract({ address, abi: poolAbi, functionName: "getYesPct" }),
     client.readContract({ address, abi: poolAbi, functionName: "getTotalVolume" }),
@@ -324,8 +406,120 @@ async function syncMarketEvents(market: MarketRow, fromBlock: bigint, toBlock: b
          resolution_proposed_at = to_timestamp($4),
          resolution_proof_tx_hash = $5,
          updated_at = now()
-       WHERE id = $1`,
+      WHERE id = $1`,
       [market.id, args.evidenceHash, tx.from, Number(args.proposedAt), event.transactionHash]
+    );
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, outcome, evidence_hash, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'proposed',$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "resolution-proposed", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        Number(args.outcome) === 0 ? "YES" : "NO",
+        args.evidenceHash,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ]
+    );
+  }
+
+  const challengedEvents = parseEventLogs({ abi: aiJudgeVerifierEventAbi, eventName: "Challenged", logs: verifierLogs });
+  for (const event of challengedEvents) {
+    const args = event.args as { pool: Address; marketId: bigint; challenger: Address };
+    if (args.pool.toLowerCase() !== market.pool_address.toLowerCase()) continue;
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, challenger_address, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'challenged',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "resolution-challenged", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.challenger,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ]
+    );
+  }
+
+  const resetEvents = parseEventLogs({ abi: aiJudgeVerifierEventAbi, eventName: "ProposalReset", logs: verifierLogs });
+  for (const event of resetEvents) {
+    const args = event.args as { pool: Address; marketId: bigint; evidenceHash: Hex };
+    if (args.pool.toLowerCase() !== market.pool_address.toLowerCase()) continue;
+    await query("UPDATE markets SET status = 'resolving', updated_at = now() WHERE id = $1 AND status <> 'resolved'", [market.id]);
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, evidence_hash, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'reset',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "resolution-reset", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.evidenceHash,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ]
+    );
+  }
+
+  const escalatedEvents = parseEventLogs({ abi: aiJudgeVerifierEventAbi, eventName: "ProposalEscalated", logs: verifierLogs });
+  for (const event of escalatedEvents) {
+    const args = event.args as { pool: Address; marketId: bigint; challenger: Address };
+    if (args.pool.toLowerCase() !== market.pool_address.toLowerCase()) continue;
+    await query("UPDATE markets SET status = 'resolving', updated_at = now() WHERE id = $1 AND status <> 'resolved'", [market.id]);
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, challenger_address, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'escalated',$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "resolution-escalated", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.challenger,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ]
+    );
+  }
+
+  const bondEvents = parseEventLogs({ abi: aiJudgeVerifierEventAbi, eventName: "ChallengeBondPosted", logs: verifierLogs });
+  for (const event of bondEvents) {
+    const args = event.args as { marketId: bigint; challenger: Address; amount: bigint };
+    const dbMarketId = `${config.chainId}:${args.marketId.toString()}`;
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, status, challenger_address, bond_amount, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,'bond_posted',$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "resolution-bond", String(logIndexNumber(event.logIndex))),
+        dbMarketId,
+        args.challenger,
+        args.amount.toString(),
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ]
     );
   }
 
@@ -342,8 +536,26 @@ async function syncMarketEvents(market: MarketRow, fromBlock: bigint, toBlock: b
          resolution_evidence_hash = $4,
          resolution_proof_tx_hash = COALESCE(resolution_proof_tx_hash, $3),
          updated_at = now()
-       WHERE id = $1`,
+      WHERE id = $1`,
       [market.id, outcome, event.transactionHash, args.evidenceHash]
+    );
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, outcome, evidence_hash, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'finalized',$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "resolution-finalized", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        outcome,
+        args.evidenceHash,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ]
     );
   }
 
@@ -387,6 +599,66 @@ async function syncMarketEvents(market: MarketRow, fromBlock: bigint, toBlock: b
       [activityId, market.id, side, amountUsd, walletShort(args.bettor), txHash, config.chainId, blockHash, blockNumber, logIndex]
     );
     await insertTimelinePoint(market.id, "bet", txHash, event.blockNumber, blockHash, logIndex);
+  }
+
+  const shareBoughtEvents = parseEventLogs({ abi: poolEventAbi, eventName: "SharesBought", logs });
+  for (const event of shareBoughtEvents) {
+    const args = event.args as { trader: Address; side: number; amount: bigint; shares: bigint };
+    const logIndex = logIndexNumber(event.logIndex);
+    await query(
+      `INSERT INTO share_trades
+         (id, market_id, address, side, action, amount_usd, shares, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,$4,'buy',$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "share-buy", String(logIndex)),
+        market.id,
+        args.trader.toLowerCase(),
+        Number(args.side) === 0 ? "YES" : "NO",
+        Number(args.amount) / 1_000_000,
+        Number(args.shares) / 1_000_000,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndex,
+      ],
+    );
+    await refreshAmmLiquidity(market);
+  }
+
+  const shareSoldEvents = parseEventLogs({ abi: poolEventAbi, eventName: "SharesSold", logs });
+  for (const event of shareSoldEvents) {
+    const args = event.args as { trader: Address; side: number; shares: bigint; amount: bigint };
+    const logIndex = logIndexNumber(event.logIndex);
+    await query(
+      `INSERT INTO share_trades
+         (id, market_id, address, side, action, amount_usd, shares, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,$4,'sell',$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "share-sell", String(logIndex)),
+        market.id,
+        args.trader.toLowerCase(),
+        Number(args.side) === 0 ? "YES" : "NO",
+        Number(args.amount) / 1_000_000,
+        Number(args.shares) / 1_000_000,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndex,
+      ],
+    );
+    await refreshAmmLiquidity(market);
+  }
+
+  const liquidityEvents = [
+    ...parseEventLogs({ abi: poolEventAbi, eventName: "LiquidityAdded", logs }),
+    ...parseEventLogs({ abi: poolEventAbi, eventName: "VaultSeeded", logs }),
+  ];
+  if (liquidityEvents.length > 0) {
+    await refreshAmmLiquidity(market);
   }
 
   const resolutionEvents = parseEventLogs({ abi: poolEventAbi, eventName: "MarketResolved", logs });
@@ -505,6 +777,53 @@ async function insertTimelinePoint(marketId: string, eventKind: string, transact
 async function readYesPct(pool: Address, blockNumber: bigint) {
   const yesPctRaw = await client.readContract({ address: pool, abi: poolAbi, functionName: "getYesPct", blockNumber });
   return Number(yesPctRaw) / 100;
+}
+
+async function refreshAmmLiquidity(market: MarketRow) {
+  try {
+    const address = market.pool_address as Address;
+    const [yesReserve, noReserve, yesShares, noShares] = await Promise.all([
+      client.readContract({ address, abi: poolAbi, functionName: "yesReserve" }),
+      client.readContract({ address, abi: poolAbi, functionName: "noReserve" }),
+      client.readContract({ address, abi: poolAbi, functionName: "yesShares" }),
+      client.readContract({ address, abi: poolAbi, functionName: "noShares" }),
+    ]);
+    const yesReserveUsd = Number(yesReserve) / 1_000_000;
+    const noReserveUsd = Number(noReserve) / 1_000_000;
+    const totalReserveUsd = yesReserveUsd + noReserveUsd;
+    const yesProbability = totalReserveUsd > 0 ? (yesReserveUsd / totalReserveUsd) * 100 : 50;
+    await query(
+      `INSERT INTO market_liquidity
+         (market_id, mode, yes_reserve, no_reserve, yes_shares, no_shares, updated_at)
+       VALUES ($1,'amm',$2,$3,$4,$5,now())
+       ON CONFLICT (market_id) DO UPDATE SET
+         mode = 'amm',
+         yes_reserve = EXCLUDED.yes_reserve,
+         no_reserve = EXCLUDED.no_reserve,
+         yes_shares = EXCLUDED.yes_shares,
+         no_shares = EXCLUDED.no_shares,
+         updated_at = now()`,
+      [
+        market.id,
+        yesReserveUsd,
+        noReserveUsd,
+        Number(yesShares) / 1_000_000,
+        Number(noShares) / 1_000_000,
+      ],
+    );
+    await query(
+      `INSERT INTO market_stats (market_id, volume_usd, yes_probability, bettors, updated_at)
+       VALUES ($1, $2, $3, 0, now())
+       ON CONFLICT (market_id) DO UPDATE SET
+         volume_usd = EXCLUDED.volume_usd,
+         yes_probability = EXCLUDED.yes_probability,
+         yes_probability_change_1h = EXCLUDED.yes_probability - market_stats.yes_probability,
+         updated_at = now()`,
+      [market.id, totalReserveUsd, yesProbability],
+    );
+  } catch {
+    return;
+  }
 }
 
 function logIndexNumber(logIndex: number | bigint | undefined) {

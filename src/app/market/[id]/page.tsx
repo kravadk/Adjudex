@@ -23,7 +23,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = decodeURIComponent(rawId);
   const market = await loadMarket(id);
   if (!market) {
     return { title: "Market · Adjudex" };
@@ -54,7 +55,8 @@ export async function generateMetadata({
 }
 
 export default async function MarketPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = decodeURIComponent(rawId);
   const market = await loadMarket(id);
   return (
     <>

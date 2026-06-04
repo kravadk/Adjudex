@@ -5,16 +5,15 @@
 //   pnpm env:check --profile=full         -> strict, requires every secret
 //   pnpm env:check --profile=production   -> production-only invariants:
 //                                            forbids JUDGE_MODE=local,
-//                                            IPFS_PROVIDER=stub,
-//                                            NEXT_PUBLIC_BACKEND=mock,
-//                                            requires SENTRY_DSN, PINATA_JWT, etc.
+//                                            MATCH_FIXTURE_MODE=1,
+//                                            requires SENTRY_DSN, IPFS credential, etc.
 //
 // Categories:
 //   FRONTEND  - anything Next reads (NEXT_PUBLIC_*, oracle URLs)
 //   BACKEND   - Fastify API (Postgres, RPC, SIWE, signers)
 //   INDEXER   - Postgres + RPC + indexer config
 //   AGENTS    - mm-agent + ai-judge keys
-//   IPFS      - ProofAnchor pin provider (only required if IPFS_PROVIDER != stub)
+//   IPFS      - ProofAnchor pin provider
 //   OBSERV    - Sentry, log level, alerting webhooks
 //
 // Each rule says (a) what env key, (b) which profile demands it, (c) what
@@ -49,14 +48,9 @@ const PRODUCTION_FORBID: Forbid[] = [
     reason: "JUDGE_MODE=local exposes a host-held signing key; production must run inside Phala TEE (JUDGE_MODE=phala) with JUDGE_REMOTE_URL set.",
   },
   {
-    key: "IPFS_PROVIDER",
-    forbiddenValues: ["stub"],
-    reason: "IPFS_PROVIDER=stub does not actually pin proofs. Production must use pinata / web3storage / kubo with a real credential.",
-  },
-  {
-    key: "NEXT_PUBLIC_BACKEND",
-    forbiddenValues: ["mock"],
-    reason: "Mock service layer ships hard-coded fixtures and must never reach production.",
+    key: "MATCH_FIXTURE_MODE",
+    forbiddenValues: ["1"],
+    reason: "Fixture match feeds are not allowed in runtime. Auto-ingest must use PandaScore or football-data.org.",
   },
   {
     key: "NODE_ENV",
@@ -71,7 +65,7 @@ const RULES: Rule[] = [
     key: "NEXT_PUBLIC_BACKEND",
     category: "FRONTEND",
     required: ["soft", "full"],
-    format: /^(onchain|api|mock)$/,
+    format: /^(onchain|api)$/,
     description: "frontend service-layer selector",
   },
   {
@@ -108,6 +102,34 @@ const RULES: Rule[] = [
     required: ["full"],
     format: /^0x[0-9a-fA-F]{40}$/,
     description: "ProofAnchor contract (Reclaim CID anchor)",
+  },
+  {
+    key: "NEXT_PUBLIC_ORDER_MATCHER_ADDRESS",
+    category: "FRONTEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "AdjudexOrderMatcher deployment address",
+  },
+  {
+    key: "NEXT_PUBLIC_LIQUIDITY_VAULT_ADDRESS",
+    category: "FRONTEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "LiquidityVault deployment address",
+  },
+  {
+    key: "NEXT_PUBLIC_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS",
+    category: "FRONTEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "ExclusiveOutcomeRegistry deployment address",
+  },
+  {
+    key: "NEXT_PUBLIC_PARLAY_POOL_PROTOTYPE_ADDRESS",
+    category: "FRONTEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "ParlayPoolPrototype deployment address when testnet prototype execution is enabled",
   },
 
   // Backend (Fastify)
@@ -151,6 +173,55 @@ const RULES: Rule[] = [
     required: ["full"],
     format: /^0x[0-9a-fA-F]{40}$/,
     description: "BetQuoteVerifier deployment for EIP-712 domain",
+  },
+  {
+    key: "ORDER_MATCHER_ADDRESS",
+    category: "BACKEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "AdjudexOrderMatcher deployment address",
+  },
+  {
+    key: "LIQUIDITY_VAULT_ADDRESS",
+    category: "BACKEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "LiquidityVault deployment address",
+  },
+  {
+    key: "EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS",
+    category: "BACKEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "ExclusiveOutcomeRegistry deployment address",
+  },
+  {
+    key: "PARLAY_PROTOTYPE_ENABLED",
+    category: "BACKEND",
+    required: [],
+    format: /^(0|1)$/,
+    description: "enable testnet-only parlay execution prototype",
+  },
+  {
+    key: "PARLAY_POOL_PROTOTYPE_ADDRESS",
+    category: "BACKEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "ParlayPoolPrototype deployment address when prototype execution is enabled",
+  },
+  {
+    key: "CREATOR_MARKETS_ENABLED",
+    category: "BACKEND",
+    required: [],
+    format: /^(0|1)$/,
+    description: "enable creator market API surface",
+  },
+  {
+    key: "OPPORTUNITIES_ENABLED",
+    category: "BACKEND",
+    required: [],
+    format: /^(0|1)$/,
+    description: "enable opportunities/intelligence API surface",
   },
   {
     key: "IMPORT_ADMIN_ADDRESSES",
@@ -223,9 +294,9 @@ const RULES: Rule[] = [
     description: "Claude key for AI judge",
   },
 
-  // Auto-ingest pipeline (CS2 / Dota2 / football). All optional — the
-  // pipeline is opt-in via MATCH_INGEST_ENABLED and degrades to the
-  // offline fixture feed when no provider token is set.
+  // Auto-ingest pipeline (CS2 / Dota2 / football). All optional: the
+  // pipeline is opt-in via MATCH_INGEST_ENABLED and has no active sources
+  // unless at least one real provider token is configured.
   {
     key: "MARKET_CREATOR_PRIVATE_KEY",
     category: "AGENTS",
@@ -250,15 +321,42 @@ const RULES: Rule[] = [
   {
     key: "IPFS_PROVIDER",
     category: "IPFS",
-    required: ["full", "production"],
-    format: /^(stub|pinata|web3storage|kubo)$/,
+    required: ["soft", "full", "production"],
+    format: /^(pinata|web3storage|kubo)$/,
     description: "pin provider for Reclaim proofs",
   },
   {
     key: "PINATA_JWT",
     category: "IPFS",
-    required: ["production"],
+    required: [],
     description: "Pinata API JWT for pinning ProofAnchor CIDs",
+  },
+  {
+    key: "WEB3_STORAGE_TOKEN",
+    category: "IPFS",
+    required: [],
+    description: "web3.storage token for pinning ProofAnchor CIDs",
+  },
+  {
+    key: "IPFS_API_URL",
+    category: "IPFS",
+    required: [],
+    format: /^https?:\/\//,
+    description: "Kubo HTTP API URL for IPFS pinning",
+  },
+  {
+    key: "STRIPE_SECRET_KEY",
+    category: "BACKEND",
+    required: [],
+    format: /^sk_(test|live)_[A-Za-z0-9]+/,
+    description: "Stripe API secret for subscription checkout",
+  },
+  {
+    key: "STRIPE_WEBHOOK_SECRET",
+    category: "BACKEND",
+    required: [],
+    format: /^whsec_[A-Za-z0-9]+/,
+    description: "Stripe webhook signing secret",
   },
 
   // Observability (Sentry + structured logging + alert routing)
@@ -342,6 +440,7 @@ function main() {
   const missing: Rule[] = [];
   const invalid: Array<{ rule: Rule; reason: string }> = [];
   const optionalMissing: Rule[] = [];
+  const conditionalMissing: Array<{ key: string; category: Rule["category"]; description: string }> = [];
 
   for (const rule of RULES) {
     const value = env[rule.key]?.trim();
@@ -393,7 +492,7 @@ function main() {
   }
 
   // Cross-rule production guards: reject literal forbidden values for
-  // specific keys (e.g. JUDGE_MODE=local, IPFS_PROVIDER=stub).
+  // specific keys (e.g. JUDGE_MODE=local).
   const forbidden: Array<{ forbid: Forbid; actual: string }> = [];
   if (profile === "production") {
     for (const f of PRODUCTION_FORBID) {
@@ -413,9 +512,43 @@ function main() {
     console.error("");
   }
 
-  if (missing.length || invalid.length || forbidden.length) {
+  const ipfsProvider = env.IPFS_PROVIDER?.trim();
+  if (ipfsProvider === "pinata" && !env.PINATA_JWT?.trim()) {
+    conditionalMissing.push({
+      key: "PINATA_JWT",
+      category: "IPFS",
+      description: "required when IPFS_PROVIDER=pinata",
+    });
+  }
+  if (ipfsProvider === "web3storage" && !env.WEB3_STORAGE_TOKEN?.trim()) {
+    conditionalMissing.push({
+      key: "WEB3_STORAGE_TOKEN",
+      category: "IPFS",
+      description: "required when IPFS_PROVIDER=web3storage",
+    });
+  }
+  if (env.STRIPE_SECRET_KEY?.trim() && !env.STRIPE_WEBHOOK_SECRET?.trim()) {
+    conditionalMissing.push({
+      key: "STRIPE_WEBHOOK_SECRET",
+      category: "BACKEND",
+      description: "required when STRIPE_SECRET_KEY enables billing",
+    });
+  }
+
+  if (conditionalMissing.length) {
+    console.error("MISSING conditional env keys:");
+    const groups: Record<string, typeof conditionalMissing> = {};
+    for (const r of conditionalMissing) (groups[r.category] ??= []).push(r);
+    for (const cat of Object.keys(groups)) {
+      console.error(`  [${cat}]`);
+      for (const r of groups[cat]) console.error(`    - ${r.key}: ${r.description}`);
+    }
+    console.error("");
+  }
+
+  if (missing.length || invalid.length || forbidden.length || conditionalMissing.length) {
     console.error(
-      `FAIL: ${missing.length} missing, ${invalid.length} invalid, ${forbidden.length} forbidden in profile=${profile}`,
+      `FAIL: ${missing.length + conditionalMissing.length} missing, ${invalid.length} invalid, ${forbidden.length} forbidden in profile=${profile}`,
     );
     process.exit(1);
   }

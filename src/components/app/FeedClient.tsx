@@ -9,7 +9,7 @@ import {
   LoadingState,
 } from "@/components/dashboard/state-blocks";
 import { toMarketView } from "@/lib/market-view";
-import type { Market } from "@/lib/types/domain";
+import type { Market, Opportunity } from "@/lib/types/domain";
 
 // Personalised feed (S6.C). Renders /api/feed rows as MarketCards with
 // a small "reason chip" above each card explaining why it surfaced
@@ -22,6 +22,7 @@ type FeedMarket = Market & {
 
 export function FeedClient() {
   const [markets, setMarkets] = useState<FeedMarket[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -34,14 +35,22 @@ export function FeedClient() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
-    fetch("/api/feed?limit=30", { cache: "no-store" })
-      .then(async (res) => {
+    Promise.all([
+      fetch("/api/feed?limit=30", { cache: "no-store" }).then(async (res) => {
         if (!res.ok) throw new Error(`feed_${res.status}`);
         return (await res.json()) as FeedMarket[];
-      })
-      .then((rows) => {
+      }),
+      fetch("/api/opportunities", { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`opportunities_${res.status}`);
+          return (await res.json()) as Opportunity[];
+        })
+        .catch(() => [] as Opportunity[]),
+    ])
+      .then(([rows, nextOpportunities]) => {
         if (!active) return;
         setMarkets(Array.isArray(rows) ? rows : []);
+        setOpportunities(Array.isArray(nextOpportunities) ? nextOpportunities : []);
       })
       .catch((err) => {
         if (!active) return;
@@ -94,6 +103,33 @@ export function FeedClient() {
           Refresh
         </button>
       </div>
+
+      {opportunities.length > 0 && (
+        <section className="panel mb-5 p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-gray-500">Opportunity watchlist</span>
+            <span className="caps">read-only signals</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+            {opportunities.slice(0, 6).map((item) => (
+              <a
+                key={item.id}
+                href={item.marketId ? `/market/${encodeURIComponent(item.marketId)}` : item.sourceUrl ?? "#"}
+                className="rounded-[6px] border border-[#262626] bg-[#111111] p-3 hover:border-[#3a3a3a]"
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="line-clamp-1 text-[12px] font-medium text-gray-200">{item.title}</span>
+                  <span className="font-mono text-[11px] text-[#CCE9E7]">{(item.probabilityGapBps / 100).toFixed(2)}%</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-500">
+                  <span>Depth ${item.liquidityDepthUsd.toFixed(2)}</span>
+                  <span>Confidence {(item.confidence * 100).toFixed(1)}%</span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
 
       {error ? (
         <ErrorState

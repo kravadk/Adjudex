@@ -44,7 +44,13 @@ createMarket -> approve -> bet -> indexer picks up event ->
 
 **Trading**
 - Parimutuel YES/NO pools with USDC stake; winners split the total pool
-  pro-rata. No AMM, no impermanent loss.
+  pro-rata.
+- Opt-in AMM markets via `OutcomeSharePool`: buy/sell outcome shares,
+  vault-seeded liquidity, chain-event indexing, and a real Exit/Sell panel
+  on AMM market pages.
+- Signed limit orders via EIP-712 order intents: the UI signs real intents,
+  the backend stores only signed rows, and settlement is guarded by
+  `AdjudexOrderMatcher`.
 - One-click USDC faucet on testnet; `approve(MAX_UINT256)` so each
   wallet approves the stake token once per pool.
 - BetForm with real on-chain balance, accurate post-bet probability
@@ -100,7 +106,7 @@ createMarket -> approve -> bet -> indexer picks up event ->
   per minute per IP).
 - SIWE + admin allowlist on importer routes; `RECLAIM_PROOF_WRITE_SECRET`
   on server-to-server proof writes.
-- `pnpm env:check [--profile=full]` — 23 rules across FRONTEND /
+- `pnpm env:check [--profile=full]` — required rules across FRONTEND /
   BACKEND / INDEXER / AGENTS / IPFS, never prints secret values.
 - `pnpm e2e:live [--dry]` — full create → bet → propose → finalize →
   claim flow on testnet, every tx hash logged.
@@ -115,9 +121,10 @@ createMarket -> approve -> bet -> indexer picks up event ->
   same ABI) for native Rust execution on Arbitrum.
 
 **Sponsor & ecosystem integrations**
-- **GMX** market intelligence (`@gmx-io/sdk` v2): live liquidity / open
-  interest / funding / OHLCV / trades. Powers GMX **signal cards** on
-  crypto market pages, auto-generated **liquidity / OI-imbalance /
+- **GMX** market intelligence (GMX API snapshot + `@gmx-io/sdk` v2
+  enrichment): live liquidity / open interest / funding / APY / OHLCV /
+  trades. Powers GMX **signal cards** on crypto market pages,
+  auto-generated **liquidity / OI-imbalance /
   funding** markets (`POST /api/import/gmx/scan`), and a live GMX snapshot
   folded into the AI-judge `evidenceHash` for GMX-sourced verdicts.
 - **RWA / tokenized stocks**: `POST /api/import/rwa/scan` generates
@@ -146,6 +153,11 @@ createMarket -> approve -> bet -> indexer picks up event ->
 |---|---|
 | `MarketFactory`         | Deploys a new `ParimutuelPool` per market, emits `MarketCreated`. |
 | `ParimutuelPool`        | Holds yes/no USDC pools. Bet, resolve, claim, refundAfterGrace. |
+| `OutcomeSharePool`      | Opt-in binary AMM market with buy/sell outcome-share accounting and claim after resolution. |
+| `LiquidityVault`        | Operator vault for registered AMM seed liquidity, debt repayment, and surplus accounting. |
+| `AdjudexOrderMatcher`   | EIP-712 signed order-intent matcher with cancellation, nonce replay protection, and EIP-1271 support. |
+| `ExclusiveOutcomeRegistry` | Protocol metadata for exclusive multi-outcome groups and exactly-one-YES finalization. |
+| `ParlayPoolPrototype`   | Testnet-only parlay draft escrow prototype, deployed only with `PARLAY_PROTOTYPE_ENABLED=1`. |
 | `AIJudgeVerifier` (V2)  | Optimistic resolution: `propose` → 2h challenge window → `finalize`. Owner can `overrideAndFinalize` if disputed. Backwards-compatible `verifyAndResolve` gated by `fastTrackUntil`. |
 | `ProofAnchor`           | Public registry mapping a Reclaim sessionId → (`proofHash`, IPFS `cid`). Emits `ProofAnchored`. |
 | `BetQuoteVerifier`      | EIP-712 verifier for signed bet quotes (slippage, deadline, nonce). Currently a standalone verifier consumed by the API; pool integration is the next contract upgrade. |
@@ -154,6 +166,11 @@ createMarket -> approve -> bet -> indexer picks up event ->
 | `TokenizedStockAdapter` | Registry of tokenized-equity adapters (TSLA, AAPL, …). |
 | `TestUSDC`              | ERC-20 with public `mint()` for testnet. |
 | `TestAggregatorV3`      | Chainlink-shape test feed for `PriceOracle` testing. |
+
+`AIJudgeVerifier` now keeps a dispute ledger on-chain: the first valid
+challenge resets a pending proposal and requires a fresh evidence hash; a
+second challenge escalates to owner/multisig override. The backend/indexer
+mirrors those events into `resolution_disputes` for the market timeline.
 
 **OpenZeppelin hardening:** `MarketFactory`, `AIJudgeVerifier`, `ProofAnchor`,
 `ReputationOracle`, `PriceOracle`, and `TokenizedStockAdapter` use
@@ -222,6 +239,7 @@ incident triage, and live verification flow.
 - `NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL`
 - `NEXT_PUBLIC_MARKET_FACTORY_ADDRESS`
 - `NEXT_PUBLIC_STAKE_TOKEN_ADDRESS`
+- `NEXT_PUBLIC_RHC_STAKE_TOKEN_ADDRESS` (when RHC uses a separate TestUSDC)
 - `NEXT_PUBLIC_AI_JUDGE_VERIFIER_ADDRESS`
 - `NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS`
 - `NEXT_PUBLIC_BET_QUOTE_VERIFIER_ADDRESS`
@@ -282,7 +300,7 @@ incident triage, and live verification flow.
 - `INDEXER_CONFIRMATIONS` (default `3`) — block depth before indexing
 
 **IPFS (ProofAnchor)**
-- `IPFS_PROVIDER` — `stub` | `pinata` | `web3storage` | `kubo`
+- `IPFS_PROVIDER` - `pinata` | `web3storage` | `kubo`
 - `PINATA_JWT` or `WEB3_STORAGE_TOKEN` or `IPFS_API_URL`
 - `PROOF_ANCHOR_DEPLOYER_KEY` — wallet that submits `anchor()` tx
 
@@ -346,8 +364,9 @@ explicitly desired.
    signs its verdict — so a finalized market is cryptographically tied to
    the anchored proof.
 
-`IPFS_PROVIDER=stub` returns a deterministic `localcid-{hex}` for dev/CI;
-production should set `pinata` (or `web3storage` / `kubo`).
+`IPFS_PROVIDER` must use a real pinning path (`pinata`, `web3storage`, or
+`kubo`). Missing or unsupported providers fail the proof flow before any
+on-chain anchor is attempted.
 
 ---
 
@@ -425,7 +444,7 @@ touching the live cursor.
   which returns 401 / 403 / 503 with explicit error codes.
 - **SIWE sessions** — wallet-scoped writes (settings, watchlist,
   notifications, importer, proof storage) require SIWE.
-- **Env validation** — `pnpm env:check [--profile=full]` runs 23 rules
+- **Env validation** — `pnpm env:check [--profile=full]` runs required rules
   across FRONTEND / BACKEND / INDEXER / AGENTS / IPFS. Exits non-zero
   with categorized missing/invalid lists. Wire into CI.
 
@@ -446,7 +465,7 @@ touching the live cursor.
 | `/create`           | Spec generator + Market Importer flow |
 | `/resolve`          | Source-proof resolution UI (`<ResolutionClient>`) |
 | `/rhc`              | Robinhood Chain markets tab (indexed RHC markets + RPC/indexer health) |
-| `/rhc/create`       | RHC-native market creation flow (RHC factory + RWA samples) |
+| `/rhc/create`       | RHC-native market creation flow (RHC factory + RWA import candidates) |
 | `/integrations`     | Sponsor integration status: Alchemy / RHC / Dune / GMX / ZeroDev / Fhenix / OZ / AWS |
 | `/analytics/sponsors` | Public proof-of-traction: cross-chain totals + Dune-backed metrics + query templates |
 | `/docs`             | In-app live status + proof panel (`<DocsStatusClient>`) — backend, RPC, factory, indexer readiness |
@@ -527,6 +546,17 @@ Adjudex runs two HTTP layers:
 - `POST /api/bets/quote` — EIP-712 signed quote (`BetQuoteVerifier`)
 - `POST /api/bets` — confirm a placed bet against a tx receipt
 - `POST /api/claim`
+- `GET /api/markets/:id/liquidity`, `POST /api/markets/:id/share-quote`
+- `POST /api/sync/share-transaction`
+- `GET/POST /api/orders`, `DELETE /api/orders/:hash`, `POST /api/orders/match-preview`
+
+**Competitive surfaces**
+- `POST /api/market-groups`, `GET /api/market-groups/:id`, `/api/market-groups/:id/arbitrage`, `/convert`
+- `GET /api/markets/:id/resolution`
+- `GET/POST /api/creators`, `POST /api/creators/:handle/markets`
+- `POST /api/parlays/preview`, `POST /api/parlays`, `GET /api/parlays/:id`
+- `GET /api/opportunities`, `GET /api/markets/:id/opportunities`
+- `POST /api/opportunities/rebuild` - internal-secret rebuild from real exclusive-outcome probability gaps
 
 **Portfolio & agents**
 - `GET /api/portfolio/:address/positions`, `/history`
@@ -938,13 +968,13 @@ and importer `validateImportCandidate`)
   decoding + chain-mismatch rejection
 - `user-preferences.test.ts` — settings patch validator
 
-Run everything with `pnpm test` (current count: **128 passing**).
+Run everything with `pnpm test` (current count: **170 passing**).
 
 ### Scripts catalog (`scripts/`)
 
 | Script | npm alias | Purpose |
 |---|---|---|
-| `check-env.ts` | `pnpm env:check [--profile=full]` | Env validation (23 rules, 5 categories) |
+| `check-env.ts` | `pnpm env:check [--profile=full]` | Env validation by category |
 | `compile-abis.ts` | `pnpm contracts:abi` | Solidity → ABI JSON for `src/lib/abi/` |
 | `deploy-contracts.ts` | `pnpm contracts:deploy` / `pnpm contracts:deploy:rhc` | Arbitrum Sepolia or Robinhood Chain testnet deploy + `.env.local` patcher |
 | `register-feed.ts` | `pnpm contracts:register-feeds` | Wire Chainlink-shape feeds into `PriceOracle` |
@@ -955,14 +985,15 @@ Run everything with `pnpm test` (current count: **128 passing**).
 | `bootstrap-mm-agent.ts` | manual | Initialise the MM agent account + reputation |
 | `verify-onchain.ts` | manual | Sanity-check deployed contract state |
 
-### Full env key catalog (56 keys)
+### Env key catalog
 
-`pnpm env:check` is the authoritative validator. The full list grouped:
+`pnpm env:check` is the authoritative validator. Common keys grouped:
 
 **Frontend** — `NEXT_PUBLIC_BACKEND`,
 `NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL`,
 `NEXT_PUBLIC_MARKET_FACTORY_ADDRESS`,
 `NEXT_PUBLIC_STAKE_TOKEN_ADDRESS`,
+`NEXT_PUBLIC_RHC_STAKE_TOKEN_ADDRESS`,
 `NEXT_PUBLIC_AI_JUDGE_VERIFIER_ADDRESS`,
 `NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS`,
 `NEXT_PUBLIC_BET_QUOTE_VERIFIER_ADDRESS`,
@@ -970,6 +1001,9 @@ Run everything with `pnpm test` (current count: **128 passing**).
 `NEXT_PUBLIC_RHC_MARKET_FACTORY_ADDRESS`,
 `NEXT_PUBLIC_RHC_AI_JUDGE_VERIFIER_ADDRESS`,
 `NEXT_PUBLIC_REPUTATION_ORACLE_ADDRESS`,
+`NEXT_PUBLIC_ORDER_MATCHER_ADDRESS`,
+`NEXT_PUBLIC_LIQUIDITY_VAULT_ADDRESS`,
+`NEXT_PUBLIC_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`,
 `NEXT_PUBLIC_TOKENIZED_STOCK_ADAPTER_ADDRESS`,
 `NEXT_PUBLIC_PRICE_ORACLE_ADDRESS`,
 `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_APP_URL`,
@@ -978,10 +1012,16 @@ Run everything with `pnpm test` (current count: **128 passing**).
 `NEXT_PUBLIC_FAUCET_URL`,
 `NEXT_PUBLIC_WALLET_ENABLED`,
 `NEXT_PUBLIC_AI_JUDGE_ENABLED`,
+`NEXT_PUBLIC_ZERODEV_GASLESS_ENABLED`,
+`NEXT_PUBLIC_ZERODEV_BUNDLER_RPC_URL`,
+`NEXT_PUBLIC_ZERODEV_PAYMASTER_ENABLED`,
 `NEXT_PUBLIC_BACKEND_URL`
 
 **Backend** — `DATABASE_URL`, `ARBITRUM_SEPOLIA_RPC_URL`,
 `RHC_RPC_URL`, `RHC_CHAIN_ID`, `SIWE_DOMAIN`,
+`ORDER_MATCHER_ADDRESS`, `LIQUIDITY_VAULT_ADDRESS`,
+`EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`, `PARLAY_PROTOTYPE_ENABLED`,
+`CREATOR_MARKETS_ENABLED`, `OPPORTUNITIES_ENABLED`,
 `JUDGE_PRIVATE_KEY`, `JUDGE_REMOTE_URL`, `JUDGE_REMOTE_SECRET`,
 `QUOTE_SIGNER_PRIVATE_KEY`, `BET_QUOTE_VERIFIER_ADDRESS`,
 `IMPORT_ADMIN_ADDRESSES` (or legacy `ADMIN_WALLET_ADDRESSES`),
@@ -989,7 +1029,18 @@ Run everything with `pnpm test` (current count: **128 passing**).
 `STATUS_INDEXER_STALE_MS`, `STATUS_INDEXER_LAG_BLOCKS`,
 `TRANSACTION_SYNC_MIN_CONFIRMATIONS`,
 `MARKET_FACTORY_ADDRESS`, `STAKE_TOKEN_ADDRESS`,
-`REPUTATION_ORACLE_ADDRESS`, `BACKEND_API_URL`, `PUBLIC_APP_URL`
+`RHC_MARKET_FACTORY_ADDRESS`, `RHC_STAKE_TOKEN_ADDRESS`,
+`REPUTATION_ORACLE_ADDRESS`, `BACKEND_API_URL`, `PUBLIC_APP_URL`,
+`DUNE_API_KEY`, `DUNE_ADJUDEX_SUMMARY_QUERY_ID`, `DUNE_API_BASE_URL`,
+`DUNE_QUERY_PERFORMANCE`, `GMX_CHAIN_ID`, `GMX_API_URL`,
+`ZERODEV_PROJECT_ID`, `ZERODEV_PAYMASTER_POLICY_ID`,
+`ZERODEV_BUNDLER_RPC_URL`, `ZERODEV_CHAIN_IDS`,
+`ZERODEV_SESSION_TTL_HOURS`, `ZERODEV_SESSION_SPEND_CAP_USDC`,
+`FHENIX_RPC_URL`, `FHENIX_CHAIN_ID`, `AWS_REGION`,
+`RESOLUTION_EVIDENCE_BUCKET`, `CLOUDWATCH_EMF`, `CLOUDWATCH_NAMESPACE`,
+`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`,
+`STRIPE_PRICE_ESPORTS_PRO`, `STRIPE_PRICE_TRADING_PRO`,
+`STRIPE_PRICE_AGENT_PRO`, `STRIPE_PRICE_ENTERPRISE`
 
 **Indexer** — `INDEXER_RPC_URL`, `INDEXER_CHAIN_ID`,
 `INDEXER_ID`, `INDEXER_INTERVAL_MS`,

@@ -2,9 +2,8 @@
 //
 // Free "Schedules, Results & Context" plan covers what we need: upcoming
 // matches (to spawn markets) and finished-match winners (to resolve). It
-// is NOT an odds feed and its free tier forbids betting use — fine for a
-// testnet / educational demo, but a paid plan or different source is
-// required before real-money production. See docs/SECRETS.md.
+// is NOT an odds feed and its free tier forbids betting use. Use a paid
+// plan or different source before real-money production. See docs/SECRETS.md.
 //
 // Docs: https://developers.pandascore.co/reference
 

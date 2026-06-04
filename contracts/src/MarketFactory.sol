@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {ParimutuelPool} from "./ParimutuelPool.sol";
+import {OutcomeSharePool} from "./OutcomeSharePool.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
@@ -22,6 +23,7 @@ contract MarketFactory is Ownable2Step, Pausable {
     // factory creates. To rotate the verifier deploy a fresh factory; this
     // keeps the binding immutable for the lifetime of each market.
     address public immutable quoteVerifier;
+    address public immutable liquidityVault;
     uint256 public nextMarketId = 1;
 
     mapping(uint256 => address) public pools;
@@ -39,13 +41,15 @@ contract MarketFactory is Ownable2Step, Pausable {
         uint256 deadline,
         string specUri
     );
+    event AmmMarketCreated(uint256 indexed marketId, address indexed pool, uint256 seedAmount);
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
 
     constructor(
         address _stakeToken,
         uint256 _feeBps,
         address _feeRecipient,
-        address _quoteVerifier
+        address _quoteVerifier,
+        address _liquidityVault
     ) Ownable(msg.sender) {
         require(_stakeToken != address(0), "stake=0");
         require(
@@ -58,6 +62,9 @@ contract MarketFactory is Ownable2Step, Pausable {
         // Zero allowed — disables the quote feature for every pool spawned
         // by this factory.
         quoteVerifier = _quoteVerifier;
+        // Zero allowed: AMM market creation stays disabled until a vault is
+        // configured in a fresh factory deployment.
+        liquidityVault = _liquidityVault;
     }
 
     // Hard market: creator is the resolver. Used for price-oracle markets
@@ -85,6 +92,33 @@ contract MarketFactory is Ownable2Step, Pausable {
     ) external returns (uint256 marketId) {
         require(verifier != address(0), "verifier=0");
         return _create(specHash, deadline, verifier, specUri);
+    }
+
+    function createAmmMarket(
+        bytes32 specHash,
+        uint256 deadline,
+        address resolver,
+        string calldata specUri,
+        uint256 seedAmount
+    ) external whenNotPaused returns (uint256 marketId) {
+        require(liquidityVault != address(0), "vault=0");
+        require(resolver != address(0), "resolver=0");
+        marketId = nextMarketId++;
+        OutcomeSharePool pool = new OutcomeSharePool(
+            stakeToken,
+            specHash,
+            resolver,
+            deadline,
+            feeBps,
+            feeRecipient,
+            liquidityVault
+        );
+        pools[marketId] = address(pool);
+        specHashes[marketId] = specHash;
+        if (bytes(specUri).length > 0) specUris[marketId] = specUri;
+        ILiquidityVaultFactory(liquidityVault).registerMarket(address(pool), seedAmount);
+        emit MarketCreated(marketId, address(pool), specHash, msg.sender, resolver, deadline, specUri);
+        emit AmmMarketCreated(marketId, address(pool), seedAmount);
     }
 
     function _create(
@@ -123,4 +157,8 @@ contract MarketFactory is Ownable2Step, Pausable {
         pool = pools[marketId];
         require(pool != address(0), "not found");
     }
+}
+
+interface ILiquidityVaultFactory {
+    function registerMarket(address market, uint256 seedAmount) external;
 }

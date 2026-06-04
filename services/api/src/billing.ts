@@ -201,8 +201,8 @@ function subscriptionId(input: {
 }): string {
   if (input.stripeSubscriptionId) return `stripe_${input.stripeSubscriptionId}`;
   if (input.usdcStreamId) return `sablier_${input.usdcStreamId}`;
-  // Free tier or trial bootstrap — synthesise a stable id per address.
-  return `local_${input.address.toLowerCase()}`;
+  // Free tier or trial bootstrap: stable internal row keyed by wallet.
+  return `wallet_${input.address.toLowerCase()}`;
 }
 
 // ─── Stripe Checkout (env-gated) ───────────────────────────────────────
@@ -262,10 +262,8 @@ function stripePriceFor(tier: Exclude<Tier, "free">): string | undefined {
   return process.env[envKey[tier]];
 }
 
-// Webhook handler — minimal Stripe event parser. Real production should
-// verify the signature header using STRIPE_WEBHOOK_SECRET + HMAC; we
-// stub that here and TODO it for the route handler that adds the body
-// parser. This module only does the persistence side.
+// Webhook handler: the route verifies Stripe-Signature against the raw body;
+// this module only does event persistence and subscription reconciliation.
 export async function handleStripeWebhookEvent(event: {
   id: string;
   type: string;

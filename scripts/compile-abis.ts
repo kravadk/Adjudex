@@ -18,6 +18,11 @@ function findImports(importPath: string) {
 const sources = {
   "ParimutuelPool.sol": { content: readFileSync(join(src, "ParimutuelPool.sol"), "utf8") },
   "MarketFactory.sol": { content: readFileSync(join(src, "MarketFactory.sol"), "utf8") },
+  "OutcomeSharePool.sol": { content: readFileSync(join(src, "OutcomeSharePool.sol"), "utf8") },
+  "LiquidityVault.sol": { content: readFileSync(join(src, "LiquidityVault.sol"), "utf8") },
+  "AdjudexOrderMatcher.sol": { content: readFileSync(join(src, "AdjudexOrderMatcher.sol"), "utf8") },
+  "ExclusiveOutcomeRegistry.sol": { content: readFileSync(join(src, "ExclusiveOutcomeRegistry.sol"), "utf8") },
+  "ParlayPoolPrototype.sol": { content: readFileSync(join(src, "ParlayPoolPrototype.sol"), "utf8") },
   "ReputationOracle.sol": { content: readFileSync(join(src, "ReputationOracle.sol"), "utf8") },
   "TestUSDC.sol": { content: readFileSync(join(src, "TestUSDC.sol"), "utf8") },
   "AIJudgeVerifier.sol": { content: readFileSync(join(src, "AIJudgeVerifier.sol"), "utf8") },
@@ -54,6 +59,11 @@ mkdirSync(abiDir, { recursive: true });
 const writes: Array<[string, string]> = [
   ["ParimutuelPool.sol", "ParimutuelPool"],
   ["MarketFactory.sol", "MarketFactory"],
+  ["OutcomeSharePool.sol", "OutcomeSharePool"],
+  ["LiquidityVault.sol", "LiquidityVault"],
+  ["AdjudexOrderMatcher.sol", "AdjudexOrderMatcher"],
+  ["ExclusiveOutcomeRegistry.sol", "ExclusiveOutcomeRegistry"],
+  ["ParlayPoolPrototype.sol", "ParlayPoolPrototype"],
   ["ReputationOracle.sol", "ReputationOracle"],
   ["TestUSDC.sol", "TestUSDC"],
   ["AIJudgeVerifier.sol", "AIJudgeVerifier"],

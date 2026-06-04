@@ -54,7 +54,7 @@ Each service in production pulls its subset:
 | Service | Config | Subset (examples) |
 |---|---|---|
 | Next (Vercel) | production | `NEXT_PUBLIC_*`, `RECLAIM_PROOF_WRITE_SECRET` |
-| API (Fastify) | production | `DATABASE_URL`, `JUDGE_PRIVATE_KEY`, `PINATA_JWT`, `SENTRY_DSN` |
+| API (Fastify) | production | `DATABASE_URL`, `JUDGE_PRIVATE_KEY`, `IPFS_PROVIDER` + matching IPFS credential, `SENTRY_DSN` |
 | Indexer | production | `DATABASE_URL`, `INDEXER_RPC_URL`, explicitly no signer keys |
 | AI Judge (Phala CVM) | production | `ANTHROPIC_API_KEY`, derived TEE key (not env!) |
 | MM Agent | production | `MM_AGENT_PRIVATE_KEY` (hot wallet), `MARKET_FACTORY_ADDRESS` |
@@ -98,8 +98,7 @@ Each service in production pulls its subset:
 
 `pnpm env:check --profile=production` blocks deploy if:
 - `JUDGE_MODE=local` (forbidden in production)
-- `IPFS_PROVIDER=stub` (forbidden in production)
-- `NEXT_PUBLIC_BACKEND=mock` (forbidden in production)
+- `MATCH_FIXTURE_MODE=1` (runtime fixture feeds are not supported)
 - Any required env var is missing or malformed
 
 Add to `.github/workflows/deploy.yml`:

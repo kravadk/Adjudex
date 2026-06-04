@@ -20,10 +20,8 @@ DATABASE_URL              direct connection (migrations, server start)
 DATABASE_POOL_URL         pgBouncer pooled (runtime queries)
 ```
 
-Neon provides both — set both env vars and the API code uses
-`DATABASE_POOL_URL` if present, falls back to `DATABASE_URL`. **TODO**:
-wire this fallback in `services/api/src/db.ts` (currently uses single
-`DATABASE_URL`).
+Neon provides both: set both env vars and the API code uses
+`DATABASE_POOL_URL` if present, falling back to `DATABASE_URL`.
 
 ## Migrations
 

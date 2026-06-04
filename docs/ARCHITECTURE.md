@@ -433,8 +433,9 @@ user           Reclaim attestor      /api/reclaim/callback     IPFS provider   P
 ```
 
 `IPFS_PROVIDER` controls the pin: `pinata` (Pinata JWT),
-`web3storage` (Storacha token), `kubo` (local IPFS daemon), or `stub`
-(deterministic `localcid-{hex}` for dev/CI without network).
+`web3storage` (Storacha token), or `kubo` (IPFS daemon). Missing or
+unsupported providers fail the proof flow before any on-chain anchor is
+attempted.
 
 Anchor calls are best-effort — a missing
 `PROOF_ANCHOR_DEPLOYER_KEY` / `NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS` degrades
@@ -494,12 +495,11 @@ allowlist).
 A fully automated variant of the importer runs as two interval workers in
 the API service, gated by `MATCH_INGEST_ENABLED=1`:
 
-- **Feed adapters** (`services/api/src/feeds/`) normalise three providers
-  to one `IngestMatch` shape: PandaScore (CS2/Dota2 schedules + results),
-  football-data.org (football fixtures + results), and an offline fixture
-  feed used when no provider token is set. Selection is automatic
-  (`getActiveMatchSources()`): real tokens win; otherwise the fixture feed
-  keeps the pipeline non-empty for local/hackathon demos.
+- **Feed adapters** (`services/api/src/feeds/`) normalise real providers
+  to one `IngestMatch` shape: PandaScore (CS2/Dota2 schedules + results)
+  and football-data.org (football fixtures + results). Selection is
+  automatic (`getActiveMatchSources()`); if no provider token is configured,
+  the ingest worker has no active source and creates no markets.
 - **match-ingest-worker** pulls upcoming matches, filters to CS2/Dota2/
   football, derives a binary market (`"Will {teamA} beat {teamB}?"`, YES =
   teamA wins) with a deadline of kickoff + expected duration +
@@ -523,8 +523,7 @@ Tracking lives in `auto_markets` (lifecycle: open → proposed → finalized |
 skipped); the markets themselves appear in `/api/markets` immediately
 because the deployer seeds a `market_stats` row alongside the `markets`
 insert. PandaScore's free tier forbids betting use, so real-money mainnet
-requires a paid plan or a different provider — testnet/TestUSDC demo is
-treated as educational.
+requires a paid plan or a different provider.
 
 ## 10. Resolution lifecycle in detail
 
@@ -608,7 +607,7 @@ Before mainnet:
   exposed by `/api/status`.
 - Multi-instance backend uses Redis-backed rate limit instead of the
   in-memory `services/api/src/rate-limit.ts` shim.
-- IPFS provider configured (`IPFS_PROVIDER != stub`).
+- IPFS provider configured (`pinata`, `web3storage`, or `kubo`).
 - All env keys pass `pnpm env:check --profile=full`.
 - Live E2E (`pnpm e2e:live`) green on the target chain.
 

@@ -72,10 +72,105 @@ export type Market = {
   // moneyline market for the same event; `kind` distinguishes the type.
   parentMarketId?: string;
   kind?: MarketKind;
+  liquidityMode?: "parimutuel" | "amm";
+  groupId?: string;
+  creatorHandle?: string;
+  bestBidBps?: number;
+  bestAskBps?: number;
   // Social-proof preview (S6.A). Up to 3 most recent distinct trader
   // addresses on this market, ordered newest-first. Used by <TraderStack>
   // on market cards. The full bettor count stays in `bettors`.
   recentTraders?: string[];
+};
+
+export type LiquidityQuote = {
+  marketId: string;
+  side: BetSide;
+  action: "buy" | "sell";
+  amountUsd: number;
+  shares: number;
+  priceBps: number;
+};
+
+export type OrderIntent = {
+  hash: string;
+  marketId: string;
+  pool: string;
+  side: BetSide;
+  orderType: "limit" | "market";
+  amountUsd: number;
+  limitPriceBps: number;
+  expiresAtIso: string;
+  nonce: string;
+  maker: string;
+  builder?: string;
+  metadataHash: string;
+  signature: string;
+  status: "open" | "filled" | "cancelled" | "expired";
+  createdAtIso: string;
+};
+
+export type OrderFill = {
+  id: string;
+  orderHash: string;
+  makerAddress: string;
+  takerAddress: string;
+  amountUsd: number;
+  priceBps: number;
+  transactionHash?: string;
+  chainId?: number;
+  createdAtIso: string;
+};
+
+export type MarketGroupOutcome = {
+  id: string;
+  marketId: string;
+  label: string;
+  probabilityBps: number;
+  resolvedOutcome?: BetSide;
+};
+
+export type MarketGroup = {
+  id: string;
+  title: string;
+  resolvedMarketId?: string;
+  resolvedAtIso?: string;
+  createdAtIso: string;
+  outcomes: MarketGroupOutcome[];
+};
+
+export type ResolutionDispute = {
+  id: string;
+  marketId: string;
+  poolAddress?: string;
+  status: "proposed" | "challenged" | "reset" | "escalated" | "bond_posted" | "finalized" | string;
+  outcome?: BetSide;
+  evidenceHash?: string;
+  challengerAddress?: string;
+  bondAmount: number;
+  transactionHash?: string;
+  chainId?: number;
+  createdAtIso: string;
+};
+
+export type Opportunity = {
+  id: string;
+  marketId?: string;
+  kind: string;
+  title: string;
+  probabilityGapBps: number;
+  liquidityDepthUsd: number;
+  confidence: number;
+  sourceUrl?: string;
+  status: string;
+  createdAtIso: string;
+};
+
+export type ParlayPreview = {
+  legs: Array<{ marketId: string; side: BetSide }>;
+  naiveProbabilityBps: number;
+  correlationWarning: string;
+  executable: boolean;
 };
 
 export type AgentBadge = {

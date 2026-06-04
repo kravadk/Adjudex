@@ -26,7 +26,8 @@ export default async function OpenGraphImage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
+  const { id: rawId } = await params;
+  const id = decodeURIComponent(rawId);
 
   let market: Market | null = null;
   try {

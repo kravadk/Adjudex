@@ -30,7 +30,7 @@ function assertTestnetOptIn() {
   if (process.env[TESTNET_OPT_IN] !== "1") {
     throw new Error(
       "Refusing to deploy test collateral/oracle contracts without explicit testnet opt-in. " +
-        `Set ${TESTNET_OPT_IN}=1 only for Arbitrum Sepolia testnet deployment.`,
+        `Set ${TESTNET_OPT_IN}=1 only for supported testnet deployments.`,
     );
   }
 }
@@ -45,6 +45,9 @@ function targetDeploymentChain(): { chain: Chain; rpcUrl?: string; env: "arb" | 
   const target = (process.env.DEPLOY_CHAIN ?? process.env.CONTRACT_DEPLOY_CHAIN ?? "arbitrum-sepolia").toLowerCase();
   if (target === "rhc" || target === "robinhood" || target === "robinhood-chain") {
     const chainId = Number(process.env.RHC_CHAIN_ID ?? "46630");
+    if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+      throw new Error(`Invalid RHC_CHAIN_ID: ${process.env.RHC_CHAIN_ID}`);
+    }
     const rpcUrl =
       process.env.RHC_RPC_URL?.trim() ||
       alchemyRpcUrl("robinhood-testnet", process.env.ALCHEMY_RHC_API_KEY);
@@ -88,6 +91,11 @@ function compile(root: string): SolcOutput {
     sources: {
       "ParimutuelPool.sol": { content: readFileSync(join(src, "ParimutuelPool.sol"), "utf8") },
       "MarketFactory.sol": { content: readFileSync(join(src, "MarketFactory.sol"), "utf8") },
+      "OutcomeSharePool.sol": { content: readFileSync(join(src, "OutcomeSharePool.sol"), "utf8") },
+      "LiquidityVault.sol": { content: readFileSync(join(src, "LiquidityVault.sol"), "utf8") },
+      "AdjudexOrderMatcher.sol": { content: readFileSync(join(src, "AdjudexOrderMatcher.sol"), "utf8") },
+      "ExclusiveOutcomeRegistry.sol": { content: readFileSync(join(src, "ExclusiveOutcomeRegistry.sol"), "utf8") },
+      "ParlayPoolPrototype.sol": { content: readFileSync(join(src, "ParlayPoolPrototype.sol"), "utf8") },
       "ReputationOracle.sol": { content: readFileSync(join(src, "ReputationOracle.sol"), "utf8") },
       "TestUSDC.sol": { content: readFileSync(join(src, "TestUSDC.sol"), "utf8") },
       "AIJudgeVerifier.sol": { content: readFileSync(join(src, "AIJudgeVerifier.sol"), "utf8") },
@@ -147,6 +155,12 @@ function printDeployPlan(
     ["TestUSDC.sol", "TestUSDC"],
     ["AIJudgeVerifier.sol", "AIJudgeVerifier"],
     ["BetQuoteVerifier.sol", "BetQuoteVerifier"],
+    ["LiquidityVault.sol", "LiquidityVault"],
+    ["AdjudexOrderMatcher.sol", "AdjudexOrderMatcher"],
+    ["ExclusiveOutcomeRegistry.sol", "ExclusiveOutcomeRegistry"],
+    ...(process.env.PARLAY_PROTOTYPE_ENABLED === "1"
+      ? ([["ParlayPoolPrototype.sol", "ParlayPoolPrototype"]] as Array<[string, string]>)
+      : []),
     ["MarketFactory.sol", "MarketFactory"],
     ["ReputationOracle.sol", "ReputationOracle"],
     ["PriceOracle.sol", "PriceOracle"],
@@ -215,6 +229,11 @@ async function main() {
 
   const compiled = compile(root);
   const factory = compiled.contracts["MarketFactory.sol"].MarketFactory;
+  const outcomeSharePool = compiled.contracts["OutcomeSharePool.sol"].OutcomeSharePool;
+  const liquidityVault = compiled.contracts["LiquidityVault.sol"].LiquidityVault;
+  const orderMatcher = compiled.contracts["AdjudexOrderMatcher.sol"].AdjudexOrderMatcher;
+  const exclusiveOutcomeRegistry = compiled.contracts["ExclusiveOutcomeRegistry.sol"].ExclusiveOutcomeRegistry;
+  const parlayPrototype = compiled.contracts["ParlayPoolPrototype.sol"].ParlayPoolPrototype;
   const reputation = compiled.contracts["ReputationOracle.sol"].ReputationOracle;
   const pool = compiled.contracts["ParimutuelPool.sol"].ParimutuelPool;
   const usdc = compiled.contracts["TestUSDC.sol"].TestUSDC;
@@ -226,6 +245,11 @@ async function main() {
   const betQuoteVerifier = compiled.contracts["BetQuoteVerifier.sol"].BetQuoteVerifier;
 
   writeAbi(root, "MarketFactory", factory.abi);
+  writeAbi(root, "OutcomeSharePool", outcomeSharePool.abi);
+  writeAbi(root, "LiquidityVault", liquidityVault.abi);
+  writeAbi(root, "AdjudexOrderMatcher", orderMatcher.abi);
+  writeAbi(root, "ExclusiveOutcomeRegistry", exclusiveOutcomeRegistry.abi);
+  writeAbi(root, "ParlayPoolPrototype", parlayPrototype.abi);
   writeAbi(root, "ReputationOracle", reputation.abi);
   writeAbi(root, "ParimutuelPool", pool.abi);
   writeAbi(root, "TestUSDC", usdc.abi);
@@ -299,7 +323,21 @@ async function main() {
     console.log("\nskip Skipping BetQuoteVerifier (QUOTE_SIGNER_PUBLIC_ADDRESS not set)");
   }
 
-  // 4. MarketFactory(stakeToken, feeBps, feeRecipient, quoteVerifier)
+  // 4. LiquidityVault(stakeToken) - optional seed-liquidity primitive for
+  // AMM markets. The factory is set after MarketFactory is deployed.
+  console.log("\n> Deploying LiquidityVault...");
+  const vaultArgs = encodeAbiParameters([{ type: "address" }], [usdcAddress]);
+  const vaultHash = await walletClient.deployContract({
+    abi: liquidityVault.abi,
+    bytecode: (`0x${liquidityVault.evm.bytecode.object}` + vaultArgs.slice(2)) as Hex,
+  });
+  console.log(`  tx: ${vaultHash}`);
+  const vaultReceipt = await publicClient.waitForTransactionReceipt({ hash: vaultHash });
+  if (vaultReceipt.status !== "success") throw new Error(`LiquidityVault reverted: ${vaultHash}`);
+  const vaultAddress = vaultReceipt.contractAddress!;
+  console.log(`  ok LiquidityVault: ${vaultAddress}`);
+
+  // 5. MarketFactory(stakeToken, feeBps, feeRecipient, quoteVerifier, liquidityVault)
   console.log("\n> Deploying MarketFactory...");
   // Fee config: 150 bps (1.5%) by default. Recipient defaults to the
   // deployer EOA — transfer to the governance Safe after deploy via
@@ -318,8 +356,9 @@ async function main() {
       { type: "uint256" },
       { type: "address" },
       { type: "address" },
+      { type: "address" },
     ],
-    [usdcAddress, feeBps, feeRecipient, (quoteVerifierAddress || ZERO_ADDRESS) as `0x${string}`],
+    [usdcAddress, feeBps, feeRecipient, (quoteVerifierAddress || ZERO_ADDRESS) as `0x${string}`, vaultAddress],
   );
   const factoryHash = await walletClient.deployContract({
     abi: factory.abi,
@@ -333,7 +372,61 @@ async function main() {
   const factoryAddress = factoryReceipt.contractAddress!;
   console.log(`  ok MarketFactory: ${factoryAddress}`);
 
-  // 5. ReputationOracle(judge)
+  const setVaultFactoryHash = await walletClient.writeContract({
+    address: vaultAddress,
+    abi: liquidityVault.abi,
+    functionName: "setFactory",
+    args: [factoryAddress],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: setVaultFactoryHash });
+  console.log(`  ok LiquidityVault factory set: ${setVaultFactoryHash}`);
+
+  // 6. OrderMatcher
+  console.log("\n> Deploying AdjudexOrderMatcher...");
+  const matcherHash = await walletClient.deployContract({
+    abi: orderMatcher.abi,
+    bytecode: `0x${orderMatcher.evm.bytecode.object}` as Hex,
+  });
+  console.log(`  tx: ${matcherHash}`);
+  const matcherReceipt = await publicClient.waitForTransactionReceipt({ hash: matcherHash });
+  if (matcherReceipt.status !== "success") throw new Error(`AdjudexOrderMatcher reverted: ${matcherHash}`);
+  const matcherAddress = matcherReceipt.contractAddress!;
+  console.log(`  ok AdjudexOrderMatcher: ${matcherAddress}`);
+
+  // 7. ExclusiveOutcomeRegistry
+  console.log("\n> Deploying ExclusiveOutcomeRegistry...");
+  const registryHash = await walletClient.deployContract({
+    abi: exclusiveOutcomeRegistry.abi,
+    bytecode: `0x${exclusiveOutcomeRegistry.evm.bytecode.object}` as Hex,
+  });
+  console.log(`  tx: ${registryHash}`);
+  const registryReceipt = await publicClient.waitForTransactionReceipt({ hash: registryHash });
+  if (registryReceipt.status !== "success") throw new Error(`ExclusiveOutcomeRegistry reverted: ${registryHash}`);
+  const registryAddress = registryReceipt.contractAddress!;
+  console.log(`  ok ExclusiveOutcomeRegistry: ${registryAddress}`);
+
+  let parlayPrototypeAddress: `0x${string}` | "" = "";
+  let parlayPrototypeHash: `0x${string}` | "" = "";
+  if (process.env.PARLAY_PROTOTYPE_ENABLED === "1") {
+    if (chain.id === 1) {
+      throw new Error("ParlayPoolPrototype is testnet-only and cannot be deployed on mainnet.");
+    }
+    console.log("\n> Deploying ParlayPoolPrototype...");
+    const parlayArgs = encodeAbiParameters([{ type: "address" }], [usdcAddress]);
+    parlayPrototypeHash = await walletClient.deployContract({
+      abi: parlayPrototype.abi,
+      bytecode: (`0x${parlayPrototype.evm.bytecode.object}` + parlayArgs.slice(2)) as Hex,
+    });
+    console.log(`  tx: ${parlayPrototypeHash}`);
+    const parlayReceipt = await publicClient.waitForTransactionReceipt({ hash: parlayPrototypeHash });
+    if (parlayReceipt.status !== "success") throw new Error(`ParlayPoolPrototype reverted: ${parlayPrototypeHash}`);
+    parlayPrototypeAddress = parlayReceipt.contractAddress!;
+    console.log(`  ok ParlayPoolPrototype: ${parlayPrototypeAddress}`);
+  } else {
+    console.log("\nskip Skipping ParlayPoolPrototype (PARLAY_PROTOTYPE_ENABLED != 1)");
+  }
+
+  // 8. ReputationOracle(judge)
   console.log("\n> Deploying ReputationOracle...");
   console.log(
     `  judge: ${judgeAddress || `${ZERO_ADDRESS} (use rotateJudge later)`}`,
@@ -402,6 +495,14 @@ async function main() {
     stakeTokenTx: usdcHash,
     marketFactory: factoryAddress,
     marketFactoryTx: factoryHash,
+    liquidityVault: vaultAddress,
+    liquidityVaultTx: vaultHash,
+    orderMatcher: matcherAddress,
+    orderMatcherTx: matcherHash,
+    exclusiveOutcomeRegistry: registryAddress,
+    exclusiveOutcomeRegistryTx: registryHash,
+    parlayPoolPrototype: parlayPrototypeAddress || null,
+    parlayPoolPrototypeTx: parlayPrototypeHash || null,
     reputationOracle: repAddress,
     reputationOracleTx: repHash,
     aiJudgeVerifier: judgeAddress || null,
@@ -460,15 +561,27 @@ async function main() {
   patches[`${publicPrefix}TOKENIZED_STOCK_ADAPTER_ADDRESS`] = stockAddress;
   patches[`${prefix}PROOF_ANCHOR_ADDRESS`] = anchorAddress;
   patches[`${publicPrefix}PROOF_ANCHOR_ADDRESS`] = anchorAddress;
+  patches[`${prefix}LIQUIDITY_VAULT_ADDRESS`] = vaultAddress;
+  patches[`${publicPrefix}LIQUIDITY_VAULT_ADDRESS`] = vaultAddress;
+  patches[`${prefix}ORDER_MATCHER_ADDRESS`] = matcherAddress;
+  patches[`${publicPrefix}ORDER_MATCHER_ADDRESS`] = matcherAddress;
+  patches[`${prefix}EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`] = registryAddress;
+  patches[`${publicPrefix}EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`] = registryAddress;
   if (quoteVerifierAddress) {
     patches[`${prefix}BET_QUOTE_VERIFIER_ADDRESS`] = quoteVerifierAddress;
     patches[`${publicPrefix}BET_QUOTE_VERIFIER_ADDRESS`] = quoteVerifierAddress;
+  }
+  if (parlayPrototypeAddress) {
+    patches[`${prefix}PARLAY_POOL_PROTOTYPE_ADDRESS`] = parlayPrototypeAddress;
+    patches[`${publicPrefix}PARLAY_POOL_PROTOTYPE_ADDRESS`] = parlayPrototypeAddress;
   }
   patchEnvLocal(root, patches);
 
   console.log("\nok Deployment complete");
   console.log(`  TestUSDC:         ${usdcAddress}`);
   console.log(`  MarketFactory:    ${factoryAddress}`);
+  console.log(`  LiquidityVault:   ${vaultAddress}`);
+  console.log(`  OrderMatcher:     ${matcherAddress}`);
   console.log(`  ReputationOracle: ${repAddress}`);
   console.log(`  deployments/${chain.id}.json written`);
   console.log(`  .env.local patched`);

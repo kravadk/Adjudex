@@ -20,8 +20,10 @@ type Props = {
 // On-chain proposal status enum from AIJudgeVerifier.sol
 const STATUS_NONE = 0;
 const STATUS_PENDING = 1;
-const STATUS_DISPUTED = 2;
-const STATUS_FINALIZED = 3;
+const STATUS_CHALLENGED = 2;
+const STATUS_RESET = 3;
+const STATUS_ESCALATED = 4;
+const STATUS_FINALIZED = 5;
 
 export function ResolutionStatus({
   marketId,
@@ -36,14 +38,14 @@ export function ResolutionStatus({
   const [error, setError] = useState<string | null>(null);
   const [confirmedTx, setConfirmedTx] = useState<string | null>(null);
 
-  const numericMarketId = /^\d+$/.test(marketId);
-  const enabled = Boolean(verifierAddress && numericMarketId);
+  const onchainMarketId = parseOnchainMarketId(marketId);
+  const enabled = Boolean(verifierAddress && onchainMarketId !== null);
 
   const { data: proposalRaw, refetch: refetchProposal } = useReadContract({
     address: verifierAddress,
     abi: aiJudgeVerifierAbi,
     functionName: "proposals",
-    args: enabled ? [BigInt(marketId)] : undefined,
+    args: enabled && onchainMarketId !== null ? [onchainMarketId] : undefined,
     chainId,
     query: { enabled, refetchInterval: 15_000 },
   });
@@ -52,7 +54,7 @@ export function ResolutionStatus({
     address: verifierAddress,
     abi: aiJudgeVerifierAbi,
     functionName: "canFinalize",
-    args: enabled ? [BigInt(marketId)] : undefined,
+    args: enabled && onchainMarketId !== null ? [onchainMarketId] : undefined,
     chainId,
     query: { enabled, refetchInterval: 15_000 },
   });
@@ -61,14 +63,14 @@ export function ResolutionStatus({
     address: verifierAddress,
     abi: aiJudgeVerifierAbi,
     functionName: "challengeDeadline",
-    args: enabled ? [BigInt(marketId)] : undefined,
+    args: enabled && onchainMarketId !== null ? [onchainMarketId] : undefined,
     chainId,
     query: { enabled, refetchInterval: 15_000 },
   });
 
-  // proposals(marketId) returns tuple (pool, outcome, evidenceHash, proposedAt, status, challenger)
+  // proposals(marketId) returns tuple (pool, outcome, evidenceHash, proposedAt, status, challenger, challengeCount, bondPosted)
   const tuple = proposalRaw as
-    | readonly [Address, number, `0x${string}`, bigint, number, Address]
+    | readonly [Address, number, `0x${string}`, bigint, number, Address, number, bigint]
     | undefined;
   const status = tuple ? Number(tuple[4]) : STATUS_NONE;
   const proposedOutcome = tuple ? (Number(tuple[1]) === 0 ? "YES" : "NO") : null;
@@ -84,7 +86,7 @@ export function ResolutionStatus({
   const secondsRemaining = Math.max(0, deadline - now);
 
   async function call(fn: "challenge" | "finalize") {
-    if (!verifierAddress || !enabled) return;
+    if (!verifierAddress || !enabled || onchainMarketId === null) return;
     setError(null);
     setBusy(fn);
     try {
@@ -92,7 +94,7 @@ export function ResolutionStatus({
         address: verifierAddress,
         abi: aiJudgeVerifierAbi,
         functionName: fn,
-        args: [BigInt(marketId)],
+        args: [onchainMarketId],
         chainId,
       });
       await waitForTransactionReceipt(wagmiConfig, { hash, chainId });
@@ -167,7 +169,9 @@ export function ResolutionStatus({
       style={{
         background: "var(--card-inner)",
         borderColor:
-          status === STATUS_DISPUTED ? "rgba(245,158,11,0.4)" : "var(--line)",
+          status === STATUS_CHALLENGED || status === STATUS_RESET || status === STATUS_ESCALATED
+            ? "rgba(245,158,11,0.4)"
+            : "var(--line)",
       }}
     >
       <div className="flex items-center gap-2">
@@ -188,7 +192,7 @@ export function ResolutionStatus({
             </span>
           </>
         )}
-        {status === STATUS_DISPUTED && (
+        {(status === STATUS_CHALLENGED || status === STATUS_RESET || status === STATUS_ESCALATED) && (
           <>
             <AlertTriangle
               className="w-4 h-4"
@@ -198,7 +202,11 @@ export function ResolutionStatus({
               className="text-[13px] font-semibold"
               style={{ color: "var(--tx)" }}
             >
-              Disputed · pending owner override
+              {status === STATUS_RESET
+                ? "Reset - new proposal required"
+                : status === STATUS_ESCALATED
+                  ? "Escalated - multisig override required"
+                  : "Challenged"}
             </span>
           </>
         )}
@@ -297,4 +305,10 @@ function formatCountdown(seconds: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s.toString().padStart(2, "0")}s`;
   return `${s}s`;
+}
+
+function parseOnchainMarketId(marketId: string): bigint | null {
+  const raw = marketId.includes(":") ? marketId.split(":").at(-1) : marketId;
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  return BigInt(raw);
 }

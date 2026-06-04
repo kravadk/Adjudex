@@ -40,7 +40,7 @@ ones. Required minimum for Sepolia preview:
 
 | Variable | Example | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_BACKEND` | `api` | `mock` blocked in prod |
+| `NEXT_PUBLIC_BACKEND` | `api` | must be `api` or `onchain` |
 | `NEXT_PUBLIC_API_URL` | `https://api.adjudex.xyz` | your Fastify host |
 | `BACKEND_API_URL` | `https://api.adjudex.xyz` | server-side calls |
 | `NEXT_PUBLIC_SITE_URL` | `https://adjudex.xyz` | for OG, sitemap |
