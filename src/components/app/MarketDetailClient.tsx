@@ -5,7 +5,10 @@ import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 import { BarChart3, ChevronLeft, Share2, Flame, Bot, Star, Copy, ExternalLink, LineChart } from "lucide-react";
 import { keccak256, parseUnits, stringToBytes, zeroAddress, type Address } from "viem";
-import { signTypedData, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { readContract, signTypedData, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import testUsdcAbi from "@/lib/abi/TestUSDC.json";
+import { stakeTokenForChain } from "@/lib/stake-token";
+import { describeTxError } from "@/lib/utils/decode-error";
 import { useAccount } from "wagmi";
 import { BetButton } from "@/components/dashboard/bet-button";
 import { BetForm } from "@/components/dashboard/bet-form";
@@ -1276,36 +1279,75 @@ function AmmExitPanel({
   liquidity: LiquiditySnapshot | null;
   address?: string;
 }) {
+  const [mode, setMode] = useState<"buy" | "sell" | "lp">("buy");
+  const [lpAction, setLpAction] = useState<"add" | "remove">("add");
   const [side, setSide] = useState<"YES" | "NO">("YES");
-  const [shares, setShares] = useState("10");
-  const [quote, setQuote] = useState<{ amountUsd: number; priceBps: number } | null>(null);
+  // USDC for buy / lp-add, shares for sell, LP shares for lp-remove.
+  const [amount, setAmount] = useState("10");
+  const [quote, setQuote] = useState<{ amountUsd: number; priceBps: number; shares?: number } | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   if (market.liquidityMode !== "amm") return null;
 
+  const stakeToken = market.chainId ? stakeTokenForChain(market.chainId) : undefined;
+  const amountLabel = mode === "sell" ? "Shares" : mode === "lp" && lpAction === "remove" ? "LP shares" : "USDC";
+  const showSide = mode !== "lp";
+  const showQuote = mode === "buy" || mode === "sell";
+  const actionLabel = mode === "lp" ? (lpAction === "add" ? "Add" : "Remove") : mode === "buy" ? "Buy" : "Sell";
+
   async function refreshQuote() {
     setStatus(null);
-    const parsedShares = Number(shares);
-    if (!Number.isFinite(parsedShares) || parsedShares <= 0) {
+    const parsed = Number(amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
       setQuote(null);
-      setStatus("Invalid share amount.");
+      setStatus("Invalid amount.");
       return;
     }
+    if (!showQuote) {
+      setQuote(null);
+      return;
+    }
+    const payload =
+      mode === "buy"
+        ? { side, action: "buy", amountUsd: parsed }
+        : { side, action: "sell", shares: parsed };
     const response = await fetch(`/api/markets/${encodeURIComponent(market.id)}/share-quote`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ side, action: "sell", shares: parsedShares }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       setQuote(null);
       setStatus("AMM quote unavailable.");
       return;
     }
-    const body = (await response.json()) as { amountUsd: number; priceBps: number };
-    setQuote({ amountUsd: body.amountUsd, priceBps: body.priceBps });
+    const body = (await response.json()) as { amountUsd: number; priceBps: number; shares?: number };
+    setQuote({ amountUsd: body.amountUsd, priceBps: body.priceBps, shares: body.shares });
   }
 
-  async function sellShares() {
+  async function ensureApproval(units: bigint) {
+    if (!stakeToken || !market.poolAddress || !market.chainId || !address) return;
+    const allowance = (await readContract(wagmiConfig, {
+      address: stakeToken,
+      abi: testUsdcAbi,
+      functionName: "allowance",
+      args: [address as Address, market.poolAddress as Address],
+      chainId: market.chainId,
+    })) as bigint;
+    if (allowance < units) {
+      setStatus("Approving USDC spend.");
+      const approveHash = await writeContract(wagmiConfig, {
+        address: stakeToken,
+        abi: testUsdcAbi,
+        functionName: "approve",
+        args: [market.poolAddress as Address, 2n ** 256n - 1n],
+        chainId: market.chainId,
+      });
+      await waitForTransactionReceipt(wagmiConfig, { hash: approveHash, chainId: market.chainId, timeout: 90_000 });
+    }
+  }
+
+  async function execute() {
     if (!address) {
       setStatus("Connect wallet first.");
       return;
@@ -1314,34 +1356,70 @@ function AmmExitPanel({
       setStatus("Pool address or chain id missing.");
       return;
     }
-    const parsedShares = Number(shares);
-    if (!Number.isFinite(parsedShares) || parsedShares <= 0) {
-      setStatus("Invalid share amount.");
+    const parsed = Number(amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setStatus("Invalid amount.");
       return;
     }
+    const units = parseUnits(amount, 6);
+    const sideIdx = side === "YES" ? 0 : 1;
     setBusy(true);
-    setStatus("Waiting for wallet signature.");
     try {
-      const hash = await writeContract(wagmiConfig, {
-        address: market.poolAddress as Address,
-        abi: outcomeSharePoolAbi,
-        functionName: "sell",
-        args: [side === "YES" ? 0 : 1, parseUnits(shares, 6)],
-        chainId: market.chainId,
-      });
+      let hash: `0x${string}`;
+      if (mode === "buy") {
+        await ensureApproval(units);
+        setStatus("Waiting for wallet signature.");
+        hash = await writeContract(wagmiConfig, {
+          address: market.poolAddress as Address,
+          abi: outcomeSharePoolAbi,
+          functionName: "buy",
+          args: [sideIdx, units],
+          chainId: market.chainId,
+        });
+      } else if (mode === "sell") {
+        setStatus("Waiting for wallet signature.");
+        hash = await writeContract(wagmiConfig, {
+          address: market.poolAddress as Address,
+          abi: outcomeSharePoolAbi,
+          functionName: "sell",
+          args: [sideIdx, units],
+          chainId: market.chainId,
+        });
+      } else if (lpAction === "add") {
+        await ensureApproval(units);
+        setStatus("Waiting for wallet signature.");
+        hash = await writeContract(wagmiConfig, {
+          address: market.poolAddress as Address,
+          abi: outcomeSharePoolAbi,
+          functionName: "addLiquidity",
+          args: [units],
+          chainId: market.chainId,
+        });
+      } else {
+        setStatus("Waiting for wallet signature.");
+        hash = await writeContract(wagmiConfig, {
+          address: market.poolAddress as Address,
+          abi: outcomeSharePoolAbi,
+          functionName: "removeLiquidity",
+          args: [units],
+          chainId: market.chainId,
+        });
+      }
       setStatus("Confirming transaction.");
       await waitForTransactionReceipt(wagmiConfig, { hash, chainId: market.chainId, timeout: 90_000 });
-      setStatus("Syncing indexed share trade.");
-      const response = await fetch("/api/sync/share-transaction", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transactionHash: hash, chainId: market.chainId }),
-      });
-      if (!response.ok) throw new Error("share_sync_failed");
-      setStatus("Sell synced.");
+      if (mode === "buy" || mode === "sell") {
+        setStatus("Syncing indexed share trade.");
+        await fetch("/api/sync/share-transaction", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ transactionHash: hash, chainId: market.chainId }),
+        }).catch(() => undefined);
+      }
+      setStatus(`${actionLabel} confirmed.`);
       await refreshQuote();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Sell failed.");
+      const decoded = describeTxError(error);
+      setStatus(decoded.rejected ? "Request cancelled." : decoded.message);
     } finally {
       setBusy(false);
     }
@@ -1350,7 +1428,7 @@ function AmmExitPanel({
   return (
     <div className="panel p-4 mb-5">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-gray-500">AMM exit liquidity</span>
+        <span className="text-[11px] text-gray-500">AMM · constant product (x*y=k)</span>
         <Pill tone={liquidity?.mode === "amm" ? "accent" : "neutral"}>
           {liquidity?.mode === "amm" ? "indexed" : "awaiting index"}
         </Pill>
@@ -1363,41 +1441,89 @@ function AmmExitPanel({
             <TrustItem label="Vault debt" value={formatUsd(liquidity.vaultDebtUsd)} />
             <TrustItem label="Vault surplus" value={formatUsd(liquidity.vaultSurplusUsd)} />
           </div>
+
+          <div className="mt-3 inline-flex rounded-[7px] border border-[#262626] bg-[#111111] p-0.5">
+            {(["buy", "sell", "lp"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setQuote(null);
+                  setStatus(null);
+                }}
+                className={`rounded-[5px] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] ${
+                  mode === m ? "bg-[#CCE9E7] text-black" : "text-gray-400"
+                }`}
+              >
+                {m === "lp" ? "Liquidity" : m}
+              </button>
+            ))}
+          </div>
+          {mode === "lp" && (
+            <div className="mt-2 inline-flex gap-2 text-[11px]">
+              {(["add", "remove"] as const).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => setLpAction(a)}
+                  className={`rounded-[5px] border px-2.5 py-1 uppercase tracking-[0.1em] ${
+                    lpAction === a ? "border-[#CCE9E7] text-white" : "border-[#262626] text-gray-500"
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[120px_1fr_140px_140px]">
-            <select
-              value={side}
-              onChange={(event) => setSide(event.target.value as "YES" | "NO")}
-              className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
-            >
-              <option value="YES">YES</option>
-              <option value="NO">NO</option>
-            </select>
+            {showSide ? (
+              <select
+                value={side}
+                onChange={(event) => setSide(event.target.value as "YES" | "NO")}
+                className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+              >
+                <option value="YES">YES</option>
+                <option value="NO">NO</option>
+              </select>
+            ) : (
+              <div className="hidden md:block" />
+            )}
             <input
-              value={shares}
-              onChange={(event) => setShares(event.target.value)}
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
               inputMode="decimal"
               className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
-              placeholder="Shares"
+              placeholder={amountLabel}
             />
             <button
               type="button"
+              disabled={!showQuote}
               onClick={() => void refreshQuote()}
-              className="rounded-[6px] border border-[#333] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-200 hover:border-[#CCE9E7]"
+              className="rounded-[6px] border border-[#333] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-200 hover:border-[#CCE9E7] disabled:opacity-30"
             >
               Quote
             </button>
             <button
               type="button"
               disabled={busy}
-              onClick={() => void sellShares()}
+              onClick={() => void execute()}
               className="rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50"
             >
-              Sell
+              {actionLabel}
             </button>
           </div>
           {(quote || status) && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-gray-400">
-              {quote && <span>{formatUsd(quote.amountUsd)} at {(quote.priceBps / 100).toFixed(2)}%</span>}
+              {quote && (
+                <span>
+                  {mode === "buy"
+                    ? `${quote.shares ?? 0} shares`
+                    : formatUsd(quote.amountUsd)}{" "}
+                  at {(quote.priceBps / 100).toFixed(2)}%
+                </span>
+              )}
               {status && <span className="text-gray-500">{status}</span>}
             </div>
           )}
