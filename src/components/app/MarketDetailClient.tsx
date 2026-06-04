@@ -37,6 +37,7 @@ import type { ActivityEvent, Market, MarketTimelinePoint, Opportunity, OrderInte
 import { toMarketView, multiplierFromPct, formatUsd } from "@/lib/market-view";
 import { wagmiConfig } from "@/lib/wagmi";
 import outcomeSharePoolAbi from "@/lib/abi/OutcomeSharePool.json";
+import adjudexOrderMatcherAbi from "@/lib/abi/AdjudexOrderMatcher.json";
 
 export function MarketDetailClient({ id }: { id: string }) {
   const [market, setMarket] = useState<Market | null>(null);
@@ -1553,9 +1554,47 @@ function LimitOrderPanel({
   return (
     <>
       <LimitOrderComposer market={market} address={address} />
-      <OrderbookPanel orders={orders} bestBidBps={bestBidBps} bestAskBps={bestAskBps} />
+      <OrderbookPanel orders={orders} bestBidBps={bestBidBps} bestAskBps={bestAskBps} market={market} address={address} />
     </>
   );
+}
+
+// Reconstruct the exact on-chain OrderIntent struct the maker signed, so the
+// matcher can verify the stored signature. amount is in 6-decimals; side and
+// orderType are the uint8 the contract expects.
+function toOnchainOrder(order: OrderIntent, localMarketId: bigint) {
+  return {
+    marketId: localMarketId,
+    pool: order.pool as Address,
+    side: order.side === "YES" ? 0 : 1,
+    orderType: (order.orderType as string) === "sell" ? 1 : 0,
+    amount: parseUnits(String(order.amountUsd), 6),
+    limitPriceBps: BigInt(order.limitPriceBps),
+    expiresAt: BigInt(Math.floor(new Date(order.expiresAtIso).getTime() / 1000)),
+    nonce: BigInt(order.nonce),
+    maker: order.maker as Address,
+    builder: (order.builder ?? zeroAddress) as Address,
+    metadataHash: order.metadataHash as `0x${string}`,
+  };
+}
+
+// Resolve the ERC-20 a settlement leg moves: cash (USDC) or the side's outcome
+// share token (read off the pool). Used for the taker fill allowance and the
+// maker's approve-settlement step.
+async function resolveSettlementToken(
+  leg: "cash" | "shares",
+  side: "YES" | "NO",
+  pool: Address,
+  chainId: number,
+): Promise<Address> {
+  if (leg === "cash") return stakeTokenForChain(chainId) as Address;
+  const fn = side === "YES" ? "yesToken" : "noToken";
+  const token = await readContract(wagmiConfig, {
+    address: pool,
+    abi: outcomeSharePoolAbi,
+    functionName: fn,
+  });
+  return token as Address;
 }
 
 function LimitOrderComposer({ market, address }: { market: Market; address?: string }) {
@@ -1663,6 +1702,40 @@ function LimitOrderComposer({ market, address }: { market: Market; address?: str
     }
   }
 
+  // A signed order only settles if the matcher can move the maker's leg. Grant
+  // that allowance up front: cash when buying, the outcome share token selling.
+  async function approveSettlement() {
+    if (!address) return setStatus("Connect wallet first.");
+    if (!market.poolAddress || !market.chainId) return setStatus("Pool/chain missing.");
+    if (!matcherAddress || !/^0x[0-9a-fA-F]{40}$/.test(matcherAddress)) return setStatus("Order matcher address missing.");
+    const amount = Number(amountUsd);
+    const price = Number(limitPrice);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(price) || price <= 0 || price > 100) {
+      return setStatus("Invalid amount or price.");
+    }
+    const shares = parseUnits(amountUsd, 6);
+    const cost = (shares * BigInt(Math.round(price * 100))) / 10_000n;
+    setBusy(true);
+    setStatus("Approving settlement allowance…");
+    try {
+      const buys = orderType === "buy";
+      const token = await resolveSettlementToken(buys ? "cash" : "shares", side, market.poolAddress as Address, market.chainId);
+      const allowance = buys ? cost : shares;
+      const approveHash = await writeContract(wagmiConfig, {
+        address: token,
+        abi: testUsdcAbi,
+        functionName: "approve",
+        args: [matcherAddress, allowance],
+      });
+      await waitForTransactionReceipt(wagmiConfig, { hash: approveHash });
+      setStatus("Matcher approved to settle this order.");
+    } catch (error) {
+      setStatus(describeTxError(error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="panel p-4 mb-5">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -1684,12 +1757,18 @@ function LimitOrderComposer({ market, address }: { market: Market; address?: str
           Sign
         </button>
       </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-[10.5px] text-gray-600">Approve the matcher so takers can settle your order on-chain.</span>
+        <button type="button" disabled={busy} onClick={() => void approveSettlement()} className="rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-200 hover:border-[#3a3a3a] hover:text-white disabled:opacity-40">
+          Approve settlement
+        </button>
+      </div>
       {status && <div className="mt-2 text-[11.5px] text-gray-500">{status}</div>}
     </div>
   );
 }
 
-function OrderbookPanel({ orders, bestBidBps, bestAskBps }: { orders: OrderIntent[]; bestBidBps?: number; bestAskBps?: number }) {
+function OrderbookPanel({ orders, bestBidBps, bestAskBps, market, address }: { orders: OrderIntent[]; bestBidBps?: number; bestAskBps?: number; market: Market; address?: string }) {
   const bids = orders.filter((order) => order.side === "YES").sort((a, b) => b.limitPriceBps - a.limitPriceBps).slice(0, 5);
   const asks = orders.filter((order) => order.side === "NO").sort((a, b) => a.limitPriceBps - b.limitPriceBps).slice(0, 5);
   if (orders.length === 0 && bestBidBps === undefined && bestAskBps === undefined) return null;
@@ -1706,14 +1785,14 @@ function OrderbookPanel({ orders, bestBidBps, bestAskBps }: { orders: OrderInten
         <TrustItem label="Depth" value={formatUsd(orders.reduce((sum, order) => sum + order.amountUsd, 0))} />
       </div>
       <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-2">
-        <OrderbookSide title="Bids" orders={bids} />
-        <OrderbookSide title="Asks" orders={asks} />
+        <OrderbookSide title="Bids" orders={bids} market={market} address={address} />
+        <OrderbookSide title="Asks" orders={asks} market={market} address={address} />
       </div>
     </div>
   );
 }
 
-function OrderbookSide({ title, orders }: { title: string; orders: OrderIntent[] }) {
+function OrderbookSide({ title, orders, market, address }: { title: string; orders: OrderIntent[]; market: Market; address?: string }) {
   return (
     <div className="rounded-[6px] border border-[#262626] bg-[#111111] p-3">
       <div className="mb-2 text-[10px] uppercase tracking-[0.12em] text-gray-500">{title}</div>
@@ -1722,14 +1801,120 @@ function OrderbookSide({ title, orders }: { title: string; orders: OrderIntent[]
       ) : (
         <div className="space-y-1.5">
           {orders.map((order) => (
-            <div key={order.hash} className="grid grid-cols-3 gap-2 text-[11px]">
+            <div key={order.hash} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 text-[11px]">
               <span className="font-mono text-gray-300">{(order.limitPriceBps / 100).toFixed(2)}%</span>
               <span className="text-gray-400">{formatUsd(order.amountUsd)}</span>
-              <span className="truncate text-right font-mono text-gray-500">{order.hash}</span>
+              <FillButton order={order} market={market} address={address} />
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Taker-side fill: sign a crossing intent and settle the resting maker order
+// on-chain via matchOrders. The taker approves only their own leg (cash if
+// buying, the outcome share token if selling); the maker must have approved
+// their leg when they posted, or the settlement reverts.
+function FillButton({ order, market, address }: { order: OrderIntent; market: Market; address?: string }) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const matcherAddress = process.env.NEXT_PUBLIC_ORDER_MATCHER_ADDRESS as `0x${string}` | undefined;
+  const fillable = order.status === "open" && !!address && order.maker.toLowerCase() !== address?.toLowerCase();
+
+  async function fill() {
+    if (!address) return setStatus("Connect wallet.");
+    if (!market.poolAddress || !market.chainId) return setStatus("Pool/chain missing.");
+    if (!matcherAddress || !/^0x[0-9a-fA-F]{40}$/.test(matcherAddress)) return setStatus("Matcher address missing.");
+    const localId = (market.id.split(":").pop() ?? market.id);
+    if (!/^\d+$/.test(localId)) return setStatus("Numeric market id required.");
+    const makerIsSell = (order.orderType as string) === "sell";
+    const takerType = makerIsSell ? "buy" : "sell";
+    setBusy(true);
+    setStatus("Preparing fill…");
+    try {
+      const maker = toOnchainOrder(order, BigInt(localId));
+      const amount = maker.amount;
+      const cost = (amount * maker.limitPriceBps) / 10_000n;
+      // Taker intent crosses the maker at the same price, same side, opposite type.
+      const takerStruct = {
+        marketId: BigInt(localId),
+        pool: market.poolAddress as Address,
+        side: order.side === "YES" ? 0 : 1,
+        orderType: takerType === "sell" ? 1 : 0,
+        amount,
+        limitPriceBps: maker.limitPriceBps,
+        expiresAt: BigInt(Math.floor(Date.now() / 1000) + 3600),
+        nonce: BigInt(Date.now()),
+        maker: address as Address,
+        builder: zeroAddress as Address,
+        metadataHash: keccak256(stringToBytes(JSON.stringify({ fill: order.hash }))),
+      };
+      setStatus("Sign your fill order…");
+      const takerSignature = await signTypedData(wagmiConfig, {
+        account: address as Address,
+        domain: { name: "AdjudexOrderMatcher", version: "1", chainId: market.chainId, verifyingContract: matcherAddress },
+        types: {
+          OrderIntent: [
+            { name: "marketId", type: "uint256" },
+            { name: "pool", type: "address" },
+            { name: "side", type: "uint8" },
+            { name: "orderType", type: "uint8" },
+            { name: "amount", type: "uint256" },
+            { name: "limitPriceBps", type: "uint256" },
+            { name: "expiresAt", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "maker", type: "address" },
+            { name: "builder", type: "address" },
+            { name: "metadataHash", type: "bytes32" },
+          ],
+        },
+        primaryType: "OrderIntent",
+        message: takerStruct,
+      });
+      // Approve the taker's leg: cash when buying, shares when selling.
+      const takerBuys = takerType === "buy";
+      const token = await resolveSettlementToken(takerBuys ? "cash" : "shares", order.side, market.poolAddress as Address, market.chainId);
+      const allowanceNeeded = takerBuys ? cost : amount;
+      if (allowanceNeeded > 0n) {
+        setStatus("Approve settlement allowance…");
+        const approveHash = await writeContract(wagmiConfig, {
+          address: token,
+          abi: testUsdcAbi,
+          functionName: "approve",
+          args: [matcherAddress, allowanceNeeded],
+        });
+        await waitForTransactionReceipt(wagmiConfig, { hash: approveHash });
+      }
+      setStatus("Settling on-chain…");
+      const hash = await writeContract(wagmiConfig, {
+        address: matcherAddress,
+        abi: adjudexOrderMatcherAbi,
+        functionName: "matchOrders",
+        args: [takerStruct, takerSignature, [maker], [order.signature as `0x${string}`], 0n, zeroAddress],
+      });
+      await waitForTransactionReceipt(wagmiConfig, { hash });
+      setStatus("Filled. Indexer will mark it settled.");
+    } catch (error) {
+      setStatus(describeTxError(error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <button
+        type="button"
+        disabled={!fillable || busy}
+        onClick={() => void fill()}
+        className="rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-200 hover:border-[#3a3a3a] hover:text-white disabled:opacity-40"
+        title={order.maker.toLowerCase() === address?.toLowerCase() ? "Your own order" : "Settle this order on-chain"}
+      >
+        {busy ? "…" : "Fill"}
+      </button>
+      {status && <span className="max-w-[160px] text-right text-[10px] text-gray-500">{status}</span>}
     </div>
   );
 }

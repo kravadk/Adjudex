@@ -278,6 +278,13 @@ const RULES: Rule[] = [
     format: /^\d+$/,
     description: "block confirmation depth (reorg safety)",
   },
+  {
+    key: "INDEXER_ORDER_MATCHER_ADDRESS",
+    category: "INDEXER",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "AdjudexOrderMatcher address to index OrderFilled settlements",
+  },
 
   // Agents
   {

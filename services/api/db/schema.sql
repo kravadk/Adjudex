@@ -812,6 +812,11 @@ CREATE TABLE IF NOT EXISTS order_intents (
 );
 CREATE INDEX IF NOT EXISTS order_intents_market_status_idx ON order_intents (market_id, status, limit_price_bps);
 CREATE INDEX IF NOT EXISTS order_intents_maker_idx ON order_intents (lower(maker_address), created_at DESC);
+-- The EIP-712 digest the matcher emits as OrderFilled.makerHash. Distinct from
+-- `hash` (a JSON keccak used for the off-chain book). Lets the indexer join an
+-- on-chain fill back to the resting order it settled.
+ALTER TABLE order_intents ADD COLUMN IF NOT EXISTS onchain_hash TEXT;
+CREATE INDEX IF NOT EXISTS order_intents_onchain_hash_idx ON order_intents (onchain_hash);
 
 CREATE TABLE IF NOT EXISTS order_fills (
   id TEXT PRIMARY KEY,

@@ -6,11 +6,14 @@ import {
   createPublicClient,
   encodeAbiParameters,
   getAddress,
+  hashTypedData,
   http,
   keccak256,
   parseEventLogs,
+  parseUnits,
   stringToBytes,
   toBytes,
+  zeroAddress,
   type Address,
   type Hex,
   type TransactionReceipt,
@@ -1255,10 +1258,11 @@ server.post<{ Body: Partial<OrderIntentInput> }>("/api/orders", async (request, 
   if (!parsed.ok) return reply.code(400).send({ error: "order_invalid", details: parsed.errors });
   await query(
     `INSERT INTO order_intents
-       (hash, market_id, pool_address, side, order_type, amount_usd, limit_price_bps, expires_at, nonce, maker_address, builder_address, metadata_hash, signature)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       (hash, market_id, pool_address, side, order_type, amount_usd, limit_price_bps, expires_at, nonce, maker_address, builder_address, metadata_hash, signature, onchain_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      ON CONFLICT (hash) DO UPDATE SET
        status = 'open',
+       onchain_hash = EXCLUDED.onchain_hash,
        updated_at = now()`,
     [
       parsed.value.hash,
@@ -1274,6 +1278,7 @@ server.post<{ Body: Partial<OrderIntentInput> }>("/api/orders", async (request, 
       parsed.value.builder ?? null,
       parsed.value.metadataHash,
       parsed.value.signature,
+      computeOnchainOrderHash(parsed.value),
     ],
   );
   return { order: parsed.value };
@@ -4969,6 +4974,64 @@ function toOrderInputValue(input: {
     metadataHash: input.metadataHash.toLowerCase(),
   });
   return { ...input, hash: keccak256(stringToBytes(canonical)) };
+}
+
+// The matcher this API recognizes; its address is the EIP-712 verifyingContract.
+const ORDER_MATCHER_ADDRESS = process.env.ORDER_MATCHER_ADDRESS?.trim();
+
+// Recompute the EIP-712 digest the on-chain matcher will emit as
+// OrderFilled.makerHash, so the indexer can join an on-chain fill back to this
+// resting order. Mirrors the exact struct the UI signs (amount in 6-decimals,
+// side/orderType as uint8, marketId as the numeric local id). Returns null when
+// the matcher address is unset or the market id is not chain-scoped — the order
+// still stores, it just can't be reconciled with on-chain fills.
+function computeOnchainOrderHash(value: ReturnType<typeof toOrderInputValue>): Hex | null {
+  if (!ORDER_MATCHER_ADDRESS || !/^0x[0-9a-fA-F]{40}$/.test(ORDER_MATCHER_ADDRESS)) return null;
+  const parts = value.marketId.split(":");
+  const localId = parts[parts.length - 1];
+  const chainId = parts.length > 1 ? Number(parts[0]) : NaN;
+  if (!/^\d+$/.test(localId) || !Number.isInteger(chainId) || chainId <= 0) return null;
+  try {
+    return hashTypedData({
+      domain: {
+        name: "AdjudexOrderMatcher",
+        version: "1",
+        chainId,
+        verifyingContract: getAddress(ORDER_MATCHER_ADDRESS),
+      },
+      types: {
+        OrderIntent: [
+          { name: "marketId", type: "uint256" },
+          { name: "pool", type: "address" },
+          { name: "side", type: "uint8" },
+          { name: "orderType", type: "uint8" },
+          { name: "amount", type: "uint256" },
+          { name: "limitPriceBps", type: "uint256" },
+          { name: "expiresAt", type: "uint256" },
+          { name: "nonce", type: "uint256" },
+          { name: "maker", type: "address" },
+          { name: "builder", type: "address" },
+          { name: "metadataHash", type: "bytes32" },
+        ],
+      },
+      primaryType: "OrderIntent",
+      message: {
+        marketId: BigInt(localId),
+        pool: getAddress(value.pool),
+        side: value.side === "YES" ? 0 : 1,
+        orderType: value.orderType === "buy" ? 0 : 1,
+        amount: parseUnits(String(value.amountUsd), 6),
+        limitPriceBps: BigInt(value.limitPriceBps),
+        expiresAt: BigInt(Math.floor(new Date(value.expiresAtIso).getTime() / 1000)),
+        nonce: BigInt(value.nonce),
+        maker: getAddress(value.maker),
+        builder: value.builder ? getAddress(value.builder) : zeroAddress,
+        metadataHash: value.metadataHash as Hex,
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 function toOrderIntent(row: OrderIntentRow) {

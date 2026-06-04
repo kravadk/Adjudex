@@ -119,6 +119,20 @@ const poolEventAbi = [
   },
 ] as const;
 
+const orderMatcherEventAbi = [
+  {
+    type: "event",
+    name: "OrderFilled",
+    inputs: [
+      { indexed: true, name: "makerHash", type: "bytes32" },
+      { indexed: true, name: "buyer", type: "address" },
+      { indexed: true, name: "seller", type: "address" },
+      { indexed: false, name: "shares", type: "uint256" },
+      { indexed: false, name: "cost", type: "uint256" },
+    ],
+  },
+] as const;
+
 const aiJudgeVerifierEventAbi = [
   {
     type: "event",
@@ -244,6 +258,12 @@ async function syncOnce() {
     }
   }
 
+  // The matcher is a single chain-wide contract, so its fills are indexed once
+  // per window rather than per market.
+  if (config.orderMatcherAddress && fromBlock <= toBlock) {
+    await syncOrderFills(fromBlock, toBlock);
+  }
+
   // Record the hash of the new cursor for the next reorg probe. Skip when
   // we did not advance (toBlock === current cursor.lastBlock) to avoid a
   // useless RPC call.
@@ -325,6 +345,9 @@ export async function backfill(fromBlock: bigint, toBlock: bigint) {
   for (const market of markets.rows) {
     await syncMarketState(market);
     await syncMarketEvents(market, fromBlock, toBlock);
+  }
+  if (config.orderMatcherAddress) {
+    await syncOrderFills(fromBlock, toBlock);
   }
   console.log(
     `[indexer] backfill complete: ${markets.rows.length} markets, blocks ${fromBlock}..${toBlock}`,
@@ -747,6 +770,46 @@ async function syncMarketEvents(market: MarketRow, fromBlock: bigint, toBlock: b
   }
 }
 
+// Index on-chain settlement from the matcher. Each OrderFilled fully settles a
+// resting maker order (the matcher fills the whole maker amount), so we flip the
+// matched order to 'filled' and record the fill. The join is by the EIP-712
+// digest the API persisted as onchain_hash; fills for orders placed outside our
+// book have no row to reconcile and are skipped.
+async function syncOrderFills(fromBlock: bigint, toBlock: bigint) {
+  const matcher = config.orderMatcherAddress;
+  if (!matcher) return;
+  const logs = await client.getLogs({ address: matcher, fromBlock, toBlock });
+  if (logs.length === 0) return;
+  const fills = parseEventLogs({ abi: orderMatcherEventAbi, eventName: "OrderFilled", logs });
+  for (const event of fills) {
+    const args = event.args as { makerHash: Hex; buyer: Address; seller: Address; shares: bigint; cost: bigint };
+    const logIndex = logIndexNumber(event.logIndex);
+    const amountUsd = Number(args.cost) / 1_000_000;
+    const priceBps = args.shares > 0n ? Number((args.cost * 10_000n) / args.shares) : 0;
+    const updated = await query<{ hash: string }>(
+      `UPDATE order_intents SET status = 'filled', updated_at = now()
+       WHERE lower(onchain_hash) = lower($1)
+       RETURNING hash`,
+      [args.makerHash],
+    );
+    const row = updated.rows[0];
+    if (!row) continue;
+    await query(
+      `INSERT INTO order_fills (id, order_hash, counterparty_hash, amount_usd, price_bps, transaction_hash, chain_id)
+       VALUES ($1, $2, NULL, $3, $4, $5, $6)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "order-fill", String(logIndex)),
+        row.hash,
+        amountUsd,
+        priceBps,
+        event.transactionHash,
+        config.chainId,
+      ],
+    );
+  }
+}
+
 async function insertTimelinePoint(marketId: string, eventKind: string, transactionHash: Hex, blockNumber: bigint, blockHash: Hex, logIndex: number) {
   const market = await query<{ pool_address: string }>("SELECT pool_address FROM markets WHERE id = $1", [marketId]);
   const pool = market.rows[0]?.pool_address as Address | undefined;
@@ -912,7 +975,17 @@ function readIndexerConfig() {
     intervalMs: readRequiredPositiveIntegerEnv("INDEXER_INTERVAL_MS"),
     // Defaults: 3 blocks (Arb Sepolia ~3s finality buffer).
     confirmations: readOptionalPositiveBigIntEnv("INDEXER_CONFIRMATIONS", 3n),
+    // Optional: the AdjudexOrderMatcher whose OrderFilled events settle the
+    // signed-order book. Unset -> on-chain fills are simply not indexed.
+    orderMatcherAddress: readOptionalAddressEnv("INDEXER_ORDER_MATCHER_ADDRESS"),
   };
+}
+
+function readOptionalAddressEnv(name: string): Address | null {
+  const value = process.env[name]?.trim();
+  if (!value) return null;
+  if (!/^0x[0-9a-fA-F]{40}$/.test(value)) throw new Error(`${name} must be a 20-byte hex address.`);
+  return value as Address;
 }
 
 function readOptionalPositiveBigIntEnv(name: string, fallback: bigint) {
