@@ -109,6 +109,7 @@ function compile(root: string): SolcOutput {
     },
     settings: {
       optimizer: { enabled: true, runs: 200 },
+      viaIR: true,
       outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
     },
   };

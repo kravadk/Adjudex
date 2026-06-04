@@ -43,6 +43,7 @@ function compileContracts(): CompileOutput {
     },
     settings: {
       optimizer: { enabled: true, runs: 200 },
+      viaIR: true,
       outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
     },
   };
@@ -55,7 +56,7 @@ describe("contracts", () => {
     const output = compileContracts();
     const errors = output.errors?.filter((e) => e.severity === "error") ?? [];
     expect(errors.map((e) => e.formattedMessage)).toEqual([]);
-  }, 20_000);
+  }, 90_000);
 
   it("ParimutuelPool exposes USDC-aware ABI", () => {
     const output = compileContracts();
@@ -206,6 +207,7 @@ describe("contracts", () => {
         "cancelOrder",
         "cancelUpTo",
         "OrdersMatched",
+        "OrderFilled",
         "OrderCancelled",
         "FeeCharged",
       ]),
