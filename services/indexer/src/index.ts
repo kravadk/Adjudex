@@ -133,6 +133,117 @@ const orderMatcherEventAbi = [
   },
 ] as const;
 
+const optimisticOracleEventAbi = [
+  {
+    type: "event",
+    name: "OutcomeAsserted",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "asserter", type: "address" },
+      { indexed: false, name: "outcome", type: "uint8" },
+      { indexed: false, name: "evidenceHash", type: "bytes32" },
+      { indexed: false, name: "bond", type: "uint256" },
+      { indexed: false, name: "liveness", type: "uint64" },
+    ],
+  },
+  {
+    type: "event",
+    name: "OutcomeDisputed",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "disputer", type: "address" },
+      { indexed: false, name: "bond", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "OutcomeSettled",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: false, name: "outcome", type: "uint8" },
+      { indexed: true, name: "asserter", type: "address" },
+    ],
+  },
+  {
+    type: "event",
+    name: "DisputeArbitrated",
+    inputs: [
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: false, name: "finalOutcome", type: "uint8" },
+      { indexed: true, name: "winner", type: "address" },
+      { indexed: false, name: "payout", type: "uint256" },
+    ],
+  },
+] as const;
+
+const registryEventAbi = [
+  {
+    type: "event",
+    name: "OutcomeGroupCreated",
+    inputs: [
+      { indexed: true, name: "groupId", type: "uint256" },
+      { indexed: false, name: "title", type: "string" },
+    ],
+  },
+  {
+    type: "event",
+    name: "GroupOutcomeLinked",
+    inputs: [
+      { indexed: true, name: "groupId", type: "uint256" },
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: false, name: "label", type: "string" },
+    ],
+  },
+  {
+    type: "event",
+    name: "GroupResolved",
+    inputs: [
+      { indexed: true, name: "groupId", type: "uint256" },
+      { indexed: true, name: "winningMarketId", type: "uint256" },
+    ],
+  },
+] as const;
+
+const vaultEventAbi = [
+  {
+    type: "event",
+    name: "MarketRegistered",
+    inputs: [
+      { indexed: true, name: "market", type: "address" },
+      { indexed: false, name: "seedAmount", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "DebtRepaid",
+    inputs: [
+      { indexed: true, name: "market", type: "address" },
+      { indexed: false, name: "repaid", type: "uint256" },
+      { indexed: false, name: "surplus", type: "uint256" },
+    ],
+  },
+  {
+    type: "event",
+    name: "SurplusClaimed",
+    inputs: [
+      { indexed: true, name: "market", type: "address" },
+      { indexed: true, name: "recipient", type: "address" },
+      { indexed: false, name: "amount", type: "uint256" },
+    ],
+  },
+] as const;
+
+// Per-market vault accounting is read straight off the vault's public mappings
+// after any event, so the indexed debt/surplus can't drift from the chain.
+const vaultReadAbi = [
+  { type: "function", name: "marketDebt", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "marketSurplus", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] },
+] as const;
+
 const aiJudgeVerifierEventAbi = [
   {
     type: "event",
@@ -258,10 +369,11 @@ async function syncOnce() {
     }
   }
 
-  // The matcher is a single chain-wide contract, so its fills are indexed once
-  // per window rather than per market.
-  if (config.orderMatcherAddress && fromBlock <= toBlock) {
-    await syncOrderFills(fromBlock, toBlock);
+  // Chain-wide singletons are indexed once per window rather than per market.
+  if (fromBlock <= toBlock) {
+    if (config.orderMatcherAddress) await syncOrderFills(fromBlock, toBlock);
+    if (config.exclusiveOutcomeRegistryAddress) await syncOutcomeGroups(fromBlock, toBlock);
+    if (config.liquidityVaultAddress) await syncVault(fromBlock, toBlock);
   }
 
   // Record the hash of the new cursor for the next reorg probe. Skip when
@@ -346,9 +458,9 @@ export async function backfill(fromBlock: bigint, toBlock: bigint) {
     await syncMarketState(market);
     await syncMarketEvents(market, fromBlock, toBlock);
   }
-  if (config.orderMatcherAddress) {
-    await syncOrderFills(fromBlock, toBlock);
-  }
+  if (config.orderMatcherAddress) await syncOrderFills(fromBlock, toBlock);
+  if (config.exclusiveOutcomeRegistryAddress) await syncOutcomeGroups(fromBlock, toBlock);
+  if (config.liquidityVaultAddress) await syncVault(fromBlock, toBlock);
   console.log(
     `[indexer] backfill complete: ${markets.rows.length} markets, blocks ${fromBlock}..${toBlock}`,
   );
@@ -582,6 +694,106 @@ async function syncMarketEvents(market: MarketRow, fromBlock: bigint, toBlock: b
     );
   }
 
+  // Optimistic-oracle resolution. A market whose resolver is an
+  // OptimisticOracleResolver emits these on the same resolver_address we
+  // already fetched as verifierLogs. The pool.resolve() the oracle triggers
+  // also emits MarketResolved (handled below), so here we only record the
+  // assertion/dispute audit trail plus the proposer + evidence on the market.
+  const assertedEvents = parseEventLogs({ abi: optimisticOracleEventAbi, eventName: "OutcomeAsserted", logs: verifierLogs });
+  for (const event of assertedEvents) {
+    const args = event.args as { pool: Address; marketId: bigint; asserter: Address; outcome: number; evidenceHash: Hex; bond: bigint };
+    if (args.pool.toLowerCase() !== market.pool_address.toLowerCase()) continue;
+    const block = await client.getBlock({ blockNumber: event.blockNumber });
+    await query(
+      `UPDATE markets SET
+         status = CASE WHEN status = 'resolved' THEN status ELSE 'resolving' END,
+         resolution_evidence_hash = $2,
+         resolution_proposer = $3,
+         resolution_proposed_at = to_timestamp($4),
+         resolution_proof_tx_hash = $5,
+         updated_at = now()
+       WHERE id = $1`,
+      [market.id, args.evidenceHash, args.asserter, Number(block.timestamp), event.transactionHash],
+    );
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, outcome, evidence_hash, bond_amount, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'asserted',$4,$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "oo-asserted", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        Number(args.outcome) === 0 ? "YES" : "NO",
+        args.evidenceHash,
+        args.bond.toString(),
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+  }
+
+  const disputedEvents = parseEventLogs({ abi: optimisticOracleEventAbi, eventName: "OutcomeDisputed", logs: verifierLogs });
+  for (const event of disputedEvents) {
+    const args = event.args as { pool: Address; marketId: bigint; disputer: Address; bond: bigint };
+    if (args.pool.toLowerCase() !== market.pool_address.toLowerCase()) continue;
+    await query("UPDATE markets SET status = 'resolving', updated_at = now() WHERE id = $1 AND status <> 'resolved'", [market.id]);
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, challenger_address, bond_amount, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,'disputed',$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, "oo-disputed", String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        args.disputer,
+        args.bond.toString(),
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+  }
+
+  const ooSettledEvents = [
+    ...parseEventLogs({ abi: optimisticOracleEventAbi, eventName: "OutcomeSettled", logs: verifierLogs }).map((e) => ({ e, kind: "settled" as const })),
+    ...parseEventLogs({ abi: optimisticOracleEventAbi, eventName: "DisputeArbitrated", logs: verifierLogs }).map((e) => ({ e, kind: "arbitrated" as const })),
+  ];
+  for (const { e: event, kind } of ooSettledEvents) {
+    const args = event.args as { pool: Address; marketId: bigint; outcome?: number; finalOutcome?: number };
+    if (args.pool.toLowerCase() !== market.pool_address.toLowerCase()) continue;
+    const outcomeNum = kind === "settled" ? Number(args.outcome) : Number(args.finalOutcome);
+    const outcome = outcomeNum === 0 ? "YES" : "NO";
+    await query(
+      `UPDATE markets SET status = 'resolved', resolved_outcome = $2, resolution_tx_hash = COALESCE(resolution_tx_hash, $3), updated_at = now() WHERE id = $1`,
+      [market.id, outcome, event.transactionHash],
+    );
+    await query(
+      `INSERT INTO resolution_disputes
+         (id, market_id, pool_address, status, outcome, transaction_hash, chain_id, block_hash, block_number, log_index)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        eventScopedId(event.transactionHash, `oo-${kind}`, String(logIndexNumber(event.logIndex))),
+        market.id,
+        args.pool,
+        kind,
+        outcome,
+        event.transactionHash,
+        config.chainId,
+        event.blockHash,
+        Number(event.blockNumber),
+        logIndexNumber(event.logIndex),
+      ],
+    );
+  }
+
   const betEvents = parseEventLogs({ abi: poolEventAbi, eventName: "BetPlaced", logs });
   for (const event of betEvents) {
     const args = event.args as { bettor: Address; side: number; amount: bigint; positionId: bigint };
@@ -810,6 +1022,97 @@ async function syncOrderFills(fromBlock: bigint, toBlock: bigint) {
   }
 }
 
+// Index the on-chain ExclusiveOutcomeRegistry (a chain-wide singleton) into the
+// off-chain group tables, namespacing its numeric ids so they can't collide
+// with API-created groups. Group rows are written before their links each
+// window, and links to markets we haven't indexed yet are skipped (the FK
+// would fail) — they reconcile on a later pass once the market lands.
+async function syncOutcomeGroups(fromBlock: bigint, toBlock: bigint) {
+  const registry = config.exclusiveOutcomeRegistryAddress;
+  if (!registry) return;
+  const logs = await client.getLogs({ address: registry, fromBlock, toBlock });
+  if (logs.length === 0) return;
+
+  const created = parseEventLogs({ abi: registryEventAbi, eventName: "OutcomeGroupCreated", logs });
+  for (const event of created) {
+    const args = event.args as { groupId: bigint; title: string };
+    await query(
+      `INSERT INTO market_groups (id, title, status) VALUES ($1, $2, 'open')
+       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, updated_at = now()`,
+      [groupDbId(args.groupId), args.title],
+    );
+  }
+
+  const linked = parseEventLogs({ abi: registryEventAbi, eventName: "GroupOutcomeLinked", logs });
+  for (const event of linked) {
+    const args = event.args as { groupId: bigint; marketId: bigint; label: string };
+    const groupId = groupDbId(args.groupId);
+    const marketDbId = `${config.chainId}:${args.marketId.toString()}`;
+    const group = await query("SELECT 1 FROM market_groups WHERE id = $1", [groupId]);
+    const marketExists = await query("SELECT 1 FROM markets WHERE id = $1", [marketDbId]);
+    if (group.rowCount === 0 || marketExists.rowCount === 0) continue;
+    await query(
+      `INSERT INTO market_group_outcomes (id, group_id, market_id, label)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (group_id, market_id) DO UPDATE SET label = EXCLUDED.label`,
+      [`${groupId}:${marketDbId}`, groupId, marketDbId, args.label],
+    );
+  }
+
+  const resolved = parseEventLogs({ abi: registryEventAbi, eventName: "GroupResolved", logs });
+  for (const event of resolved) {
+    const args = event.args as { groupId: bigint; winningMarketId: bigint };
+    await query(
+      `UPDATE market_groups SET status = 'resolved', winning_market_id = $2, updated_at = now() WHERE id = $1`,
+      [groupDbId(args.groupId), `${config.chainId}:${args.winningMarketId.toString()}`],
+    );
+  }
+}
+
+// Index LiquidityVault seed-liquidity accounting. Rather than replay the deltas
+// in MarketRegistered/DebtRepaid/SurplusClaimed, we read the vault's per-market
+// debt/surplus mappings after any event so the indexed values track the chain.
+async function syncVault(fromBlock: bigint, toBlock: bigint) {
+  const vault = config.liquidityVaultAddress;
+  if (!vault) return;
+  const logs = await client.getLogs({ address: vault, fromBlock, toBlock });
+  if (logs.length === 0) return;
+  const events = [
+    ...parseEventLogs({ abi: vaultEventAbi, eventName: "MarketRegistered", logs }),
+    ...parseEventLogs({ abi: vaultEventAbi, eventName: "DebtRepaid", logs }),
+    ...parseEventLogs({ abi: vaultEventAbi, eventName: "SurplusClaimed", logs }),
+  ];
+  const pools = new Set<string>();
+  for (const event of events) {
+    pools.add((event.args as { market: Address }).market.toLowerCase());
+  }
+  for (const poolLower of pools) {
+    const found = await query<{ id: string }>(
+      "SELECT id FROM markets WHERE lower(pool_address) = $1 AND chain_id = $2",
+      [poolLower, config.chainId],
+    );
+    const marketId = found.rows[0]?.id;
+    if (!marketId) continue;
+    const [debt, surplus] = await Promise.all([
+      client.readContract({ address: vault, abi: vaultReadAbi, functionName: "marketDebt", args: [poolLower as Address] }),
+      client.readContract({ address: vault, abi: vaultReadAbi, functionName: "marketSurplus", args: [poolLower as Address] }),
+    ]);
+    await query(
+      `INSERT INTO market_liquidity (market_id, vault_debt, vault_surplus, updated_at)
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT (market_id) DO UPDATE SET
+         vault_debt = EXCLUDED.vault_debt,
+         vault_surplus = EXCLUDED.vault_surplus,
+         updated_at = now()`,
+      [marketId, Number(debt) / 1_000_000, Number(surplus) / 1_000_000],
+    );
+  }
+}
+
+function groupDbId(groupId: bigint) {
+  return `${config.chainId}:group:${groupId.toString()}`;
+}
+
 async function insertTimelinePoint(marketId: string, eventKind: string, transactionHash: Hex, blockNumber: bigint, blockHash: Hex, logIndex: number) {
   const market = await query<{ pool_address: string }>("SELECT pool_address FROM markets WHERE id = $1", [marketId]);
   const pool = market.rows[0]?.pool_address as Address | undefined;
@@ -978,6 +1281,9 @@ function readIndexerConfig() {
     // Optional: the AdjudexOrderMatcher whose OrderFilled events settle the
     // signed-order book. Unset -> on-chain fills are simply not indexed.
     orderMatcherAddress: readOptionalAddressEnv("INDEXER_ORDER_MATCHER_ADDRESS"),
+    // Optional chain-wide singletons. Unset -> their events are not indexed.
+    exclusiveOutcomeRegistryAddress: readOptionalAddressEnv("INDEXER_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS"),
+    liquidityVaultAddress: readOptionalAddressEnv("INDEXER_LIQUIDITY_VAULT_ADDRESS"),
   };
 }
 

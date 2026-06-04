@@ -118,6 +118,13 @@ const RULES: Rule[] = [
     description: "LiquidityVault deployment address",
   },
   {
+    key: "NEXT_PUBLIC_OPTIMISTIC_ORACLE_RESOLVER_ADDRESS",
+    category: "FRONTEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "OptimisticOracleResolver deployment address",
+  },
+  {
     key: "NEXT_PUBLIC_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS",
     category: "FRONTEND",
     required: [],
@@ -194,6 +201,13 @@ const RULES: Rule[] = [
     required: [],
     format: /^0x[0-9a-fA-F]{40}$/,
     description: "ExclusiveOutcomeRegistry deployment address",
+  },
+  {
+    key: "OPTIMISTIC_ORACLE_RESOLVER_ADDRESS",
+    category: "BACKEND",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "OptimisticOracleResolver deployment address",
   },
   {
     key: "PARLAY_PROTOTYPE_ENABLED",
@@ -284,6 +298,20 @@ const RULES: Rule[] = [
     required: [],
     format: /^0x[0-9a-fA-F]{40}$/,
     description: "AdjudexOrderMatcher address to index OrderFilled settlements",
+  },
+  {
+    key: "INDEXER_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS",
+    category: "INDEXER",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "ExclusiveOutcomeRegistry address to index outcome groups",
+  },
+  {
+    key: "INDEXER_LIQUIDITY_VAULT_ADDRESS",
+    category: "INDEXER",
+    required: [],
+    format: /^0x[0-9a-fA-F]{40}$/,
+    description: "LiquidityVault address to index seed-liquidity debt/surplus",
   },
 
   // Agents

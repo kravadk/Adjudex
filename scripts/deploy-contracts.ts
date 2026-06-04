@@ -236,6 +236,7 @@ async function main() {
   const liquidityVault = compiled.contracts["LiquidityVault.sol"].LiquidityVault;
   const orderMatcher = compiled.contracts["AdjudexOrderMatcher.sol"].AdjudexOrderMatcher;
   const exclusiveOutcomeRegistry = compiled.contracts["ExclusiveOutcomeRegistry.sol"].ExclusiveOutcomeRegistry;
+  const optimisticOracleResolver = compiled.contracts["OptimisticOracleResolver.sol"].OptimisticOracleResolver;
   const parlayPrototype = compiled.contracts["ParlayPoolPrototype.sol"].ParlayPoolPrototype;
   const reputation = compiled.contracts["ReputationOracle.sol"].ReputationOracle;
   const pool = compiled.contracts["ParimutuelPool.sol"].ParimutuelPool;
@@ -252,6 +253,7 @@ async function main() {
   writeAbi(root, "LiquidityVault", liquidityVault.abi);
   writeAbi(root, "AdjudexOrderMatcher", orderMatcher.abi);
   writeAbi(root, "ExclusiveOutcomeRegistry", exclusiveOutcomeRegistry.abi);
+  writeAbi(root, "OptimisticOracleResolver", optimisticOracleResolver.abi);
   writeAbi(root, "ParlayPoolPrototype", parlayPrototype.abi);
   writeAbi(root, "ReputationOracle", reputation.abi);
   writeAbi(root, "ParimutuelPool", pool.abi);
@@ -408,6 +410,26 @@ async function main() {
   const registryAddress = registryReceipt.contractAddress!;
   console.log(`  ok ExclusiveOutcomeRegistry: ${registryAddress}`);
 
+  // 7b. OptimisticOracleResolver(bondToken, defaultBond, defaultLiveness) — a
+  // permissionless UMA-style resolver. Pools opt in by passing it as their
+  // `resolver` to createAmmMarket, or (parimutuel) via transferResolver.
+  console.log("\n> Deploying OptimisticOracleResolver...");
+  const oracleBond = BigInt(process.env.OPTIMISTIC_ORACLE_BOND ?? "10000000"); // 10 USDC (6dp)
+  const oracleLiveness = BigInt(process.env.OPTIMISTIC_ORACLE_LIVENESS ?? "7200"); // 2h, within [10m, 7d]
+  const oracleArgs = encodeAbiParameters(
+    [{ type: "address" }, { type: "uint256" }, { type: "uint64" }],
+    [usdcAddress, oracleBond, oracleLiveness],
+  );
+  const oracleHash = await walletClient.deployContract({
+    abi: optimisticOracleResolver.abi,
+    bytecode: (`0x${optimisticOracleResolver.evm.bytecode.object}` + oracleArgs.slice(2)) as Hex,
+  });
+  console.log(`  tx: ${oracleHash}`);
+  const oracleReceipt = await publicClient.waitForTransactionReceipt({ hash: oracleHash });
+  if (oracleReceipt.status !== "success") throw new Error(`OptimisticOracleResolver reverted: ${oracleHash}`);
+  const oracleResolverAddress = oracleReceipt.contractAddress!;
+  console.log(`  ok OptimisticOracleResolver: ${oracleResolverAddress}`);
+
   let parlayPrototypeAddress: `0x${string}` | "" = "";
   let parlayPrototypeHash: `0x${string}` | "" = "";
   if (process.env.PARLAY_PROTOTYPE_ENABLED === "1") {
@@ -504,6 +526,8 @@ async function main() {
     orderMatcherTx: matcherHash,
     exclusiveOutcomeRegistry: registryAddress,
     exclusiveOutcomeRegistryTx: registryHash,
+    optimisticOracleResolver: oracleResolverAddress,
+    optimisticOracleResolverTx: oracleHash,
     parlayPoolPrototype: parlayPrototypeAddress || null,
     parlayPoolPrototypeTx: parlayPrototypeHash || null,
     reputationOracle: repAddress,
@@ -570,6 +594,14 @@ async function main() {
   patches[`${publicPrefix}ORDER_MATCHER_ADDRESS`] = matcherAddress;
   patches[`${prefix}EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`] = registryAddress;
   patches[`${publicPrefix}EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`] = registryAddress;
+  patches[`${prefix}OPTIMISTIC_ORACLE_RESOLVER_ADDRESS`] = oracleResolverAddress;
+  patches[`${publicPrefix}OPTIMISTIC_ORACLE_RESOLVER_ADDRESS`] = oracleResolverAddress;
+  // Indexer singletons: let the indexer surface group + vault state without
+  // separate wiring. Only for the primary (non-RHC) chain's indexer config.
+  if (target.env !== "rhc") {
+    patches.INDEXER_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS = registryAddress;
+    patches.INDEXER_LIQUIDITY_VAULT_ADDRESS = vaultAddress;
+  }
   if (quoteVerifierAddress) {
     patches[`${prefix}BET_QUOTE_VERIFIER_ADDRESS`] = quoteVerifierAddress;
     patches[`${publicPrefix}BET_QUOTE_VERIFIER_ADDRESS`] = quoteVerifierAddress;
@@ -585,6 +617,7 @@ async function main() {
   console.log(`  MarketFactory:    ${factoryAddress}`);
   console.log(`  LiquidityVault:   ${vaultAddress}`);
   console.log(`  OrderMatcher:     ${matcherAddress}`);
+  console.log(`  OptimisticOracle: ${oracleResolverAddress}`);
   console.log(`  ReputationOracle: ${repAddress}`);
   console.log(`  deployments/${chain.id}.json written`);
   console.log(`  .env.local patched`);
