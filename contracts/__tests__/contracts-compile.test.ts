@@ -135,6 +135,10 @@ describe("contracts", () => {
         "quoteBuy",
         "quoteSell",
         "addLiquidity",
+        "removeLiquidity",
+        "invariant",
+        "lpBalanceOf",
+        "totalLpShares",
         "resolve",
         "yesShares",
         "noShares",
@@ -507,33 +511,83 @@ describe("v2 invariants", () => {
   });
 });
 
-function quoteBuy(amount: bigint, reserve: bigint, oppositeReserve: bigint): bigint {
+// Pure-JS mirror of OutcomeSharePool's constant-product (x*y=k, Gnosis FPMM)
+// math. Guards the invariants the Solidity contract must enforce.
+function isqrt(n: bigint): bigint {
+  if (n < 0n) throw new Error("neg");
+  if (n < 2n) return n;
+  let x = n;
+  let y = (x + 1n) / 2n;
+  while (y < x) {
+    x = y;
+    y = (x + n / x) / 2n;
+  }
+  return x;
+}
+
+// Shares out for net collateral `amount` on side with (reserve, opposite).
+function quoteBuy(amount: bigint, reserve: bigint, opposite: bigint): bigint {
   if (amount === 0n) throw new Error("zero amount");
-  if (reserve === 0n || oppositeReserve === 0n) return amount;
-  return (amount * oppositeReserve) / (reserve + amount);
+  if (reserve === 0n || opposite === 0n) return amount; // bootstrap 1:1
+  const k = reserve * opposite;
+  const denom = opposite + amount;
+  const endingReserve = (k + denom - 1n) / denom; // ceil → pool-safe
+  return reserve + amount - endingReserve;
 }
 
-function quoteSell(shares: bigint, reserve: bigint, oppositeReserve: bigint): bigint {
+// Pre-fee collateral for selling `shares` on side with (reserve, opposite).
+function quoteSell(shares: bigint, reserve: bigint, opposite: bigint): bigint {
   if (shares === 0n) throw new Error("zero shares");
-  if (oppositeReserve === 0n) return 0n;
-  return (shares * reserve) / (oppositeReserve + shares);
+  if (reserve === 0n || opposite === 0n) return 0n;
+  const b = reserve + shares + opposite;
+  const disc = b * b - 4n * shares * opposite;
+  let r = (b - isqrt(disc)) / 2n;
+  if (r >= opposite) r = opposite - 1n;
+  return r;
 }
 
-describe("OutcomeSharePool AMM quote invariants", () => {
+describe("OutcomeSharePool constant-product invariants", () => {
   it("buy quotes are monotonic with input amount", () => {
-    const small = quoteBuy(10n, 100n, 100n);
-    const large = quoteBuy(20n, 100n, 100n);
+    const small = quoteBuy(10n, 1000n, 1000n);
+    const large = quoteBuy(20n, 1000n, 1000n);
     expect(large).toBeGreaterThan(small);
   });
 
-  it("sell quotes never exceed available side reserve", () => {
-    const reserve = 100n;
-    const amountOut = quoteSell(1_000_000n, reserve, 100n);
-    expect(amountOut).toBeLessThanOrEqual(reserve);
+  it("marginal price rises as you buy one side (slippage)", () => {
+    // First 100 in: shares per unit. Then buy again on the moved pool.
+    const first = quoteBuy(100n, 1000n, 1000n); // 191
+    const reserveAfter = 1000n + 100n - first; // ending side reserve
+    const oppositeAfter = 1000n + 100n;
+    const second = quoteBuy(100n, reserveAfter, oppositeAfter);
+    expect(second).toBeLessThan(first); // fewer shares for the same spend
   });
 
-  it("empty AMM bootstrap quotes one share per unit", () => {
+  it("round-trip is never profitable (no free money)", () => {
+    const reserve = 1000n;
+    const opposite = 1000n;
+    const shares = quoteBuy(100n, reserve, opposite); // buy YES with 100
+    const reserveAfter = reserve + 100n - shares;
+    const oppositeAfter = opposite + 100n;
+    const back = quoteSell(shares, reserveAfter, oppositeAfter); // sell them back
+    expect(back).toBeLessThanOrEqual(100n);
+  });
+
+  it("constant product is preserved (>= k) on a buy", () => {
+    const reserve = 1000n;
+    const opposite = 1000n;
+    const k = reserve * opposite;
+    const shares = quoteBuy(100n, reserve, opposite);
+    const product = (reserve + 100n - shares) * (opposite + 100n);
+    expect(product).toBeGreaterThanOrEqual(k);
+  });
+
+  it("sell never drains the opposite reserve", () => {
+    const out = quoteSell(1_000_000n, 1000n, 1000n);
+    expect(out).toBeLessThan(1000n);
+  });
+
+  it("empty AMM bootstraps one share per unit", () => {
     expect(quoteBuy(25n, 0n, 0n)).toBe(25n);
-    expect(quoteSell(25n, 100n, 0n)).toBe(0n);
+    expect(quoteSell(25n, 1000n, 0n)).toBe(0n);
   });
 });
