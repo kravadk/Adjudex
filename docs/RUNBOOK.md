@@ -154,6 +154,8 @@ on Arbiscan: `https://sepolia.arbiscan.io/address/{address}`
 | Symptom | First check |
 |---|---|
 | `/api/status` `database.ok=false` | `DATABASE_URL`, Postgres connectivity |
+| `/api/markets` from frontend returns 503 | `BACKEND_API_URL` / `NEXT_PUBLIC_API_URL` must point to the running Fastify API |
+| Auto markets do not appear | `/status` -> Auto markets. Check `MATCH_INGEST_ENABLED=1`, at least one feed token, `MARKET_CREATOR_PRIVATE_KEY`, factory/verifier addresses, DB, and `auto_markets.last_error` |
 | `indexer.lastStatus='reorg'` repeating | bump `INDEXER_CONFIRMATIONS` |
 | `indexer.lagBlocks` growing | RPC throughput; raise interval or split chains |
 | Reclaim anchor missing tx | `PROOF_ANCHOR_DEPLOYER_KEY` unset; re-anchor manually |

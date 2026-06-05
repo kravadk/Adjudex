@@ -147,6 +147,83 @@ createMarket -> approve -> bet -> indexer picks up event ->
   `market.resolved` / `market.created`) and an MCP server
   (`services/mcp-server`) wrapping the read API as agent tools.
 
+## Competitive gap implementation
+
+This repository now includes the core production-gap primitives from the
+9lives / Polymarket / Forkast / parlay backlog, with staged rollout instead
+of replacing the stable parimutuel v1 pool.
+
+**Liquidity and exits**
+- `OutcomeSharePool` is the opt-in binary AMM/share pool. It supports
+  `buy`, `sell`, `quoteBuy`, `quoteSell`, `claim`, and vault-seeded initial
+  reserves.
+- `LiquidityVault` registers factory-created AMM pools, sends seed
+  liquidity, calls the pool seed hook, tracks market debt/surplus, and
+  exposes repayment / surplus claiming.
+- `MarketFactory.createAmmMarket` deploys AMM markets beside existing
+  parimutuel markets and emits both `MarketCreated` and `AmmMarketCreated`.
+- Backend and indexer parse AMM events (`SharesBought`, `SharesSold`,
+  `LiquidityAdded`, `VaultSeeded`) into `market_liquidity`,
+  `share_trades`, and `vault_exposure`.
+- Market detail exposes an AMM Exit/Sell panel only when
+  `market.liquidityMode === "amm"`. The sell action is a real wallet
+  transaction, then `/api/sync/share-transaction` reconciles trusted receipt
+  logs. It no longer trusts client-supplied amount/share numbers.
+
+**Signed order intents**
+- `AdjudexOrderMatcher` implements EIP-712 order hashing/verification,
+  EOA + EIP-1271 signature support, cancellation, nonce invalidation, fee cap,
+  and guarded beta matching.
+- Backend orderbook APIs store signed intents only:
+  `POST /api/orders`, `GET /api/orders?marketId=`, `DELETE /api/orders/:hash`,
+  and `POST /api/orders/match-preview`.
+- Market detail includes a `Market / Limit` segmented control. Limit mode
+  signs a real EIP-712 intent in the browser and submits it to the backend;
+  settlement still requires an on-chain matcher transaction.
+
+**Exclusive outcomes and negative-risk metadata**
+- `ExclusiveOutcomeRegistry` creates exclusive outcome groups, links child
+  binary markets, rejects duplicate child links, and enforces exactly one YES
+  group resolution.
+- Backend stores `market_groups`, `market_group_outcomes`,
+  `market_group_positions`, and `neg_risk_conversions`.
+- UI reads real group data and shows total implied probability plus
+  incoherence warnings. Conversions are recorded as proof/accounting records;
+  full production settlement is intentionally staged.
+
+**Resolution hardening**
+- `AIJudgeVerifier` now tracks `Pending`, `Challenged`, `Reset`,
+  `Escalated`, and `Finalized` lifecycle states.
+- First valid challenge resets the proposal and requires fresh evidence.
+  Second challenge escalates to owner/multisig override.
+- Optional challenge bonds are emitted and indexed into the dispute timeline.
+
+**Creator, parlays, and opportunities**
+- `/creator` provides SIWE-backed creator profiles and market attribution.
+  Market cards/details surface `creatorHandle` and `streamUrl` only when they
+  come from backend state.
+- `/parlays` and the parlay APIs provide a non-executable correlated-risk
+  preview/draft flow by default.
+- `ParlayPoolPrototype` is a testnet-only escrow prototype and deploys only
+  when `PARLAY_PROTOTYPE_ENABLED=1`.
+- `/feed` and market detail read opportunity cards from
+  `market_opportunities`. `POST /api/opportunities/rebuild` uses the internal
+  secret and rebuilds opportunities from real exclusive-outcome probability
+  gaps. No automatic execution or custody is included.
+
+**Real data rule**
+- Runtime UI/API surfaces use backend rows, indexed chain events, contract
+  reads, SIWE-authenticated persistence, or explicit empty states.
+- Test fixtures remain allowed inside tests. Runtime sample/fallback match
+  fixture paths were removed instead of being displayed as real market data.
+
+**Still staged / not claimed as production-complete**
+- Matching orders on-chain from the UI, richer cancel/open-order management,
+  full negative-risk settlement, GMX-derived opportunity scanning, and deeper
+  audit-level contract tests are still staged work.
+- AMM/order/parlay primitives are beta protocol surfaces. They are opt-in and
+  do not change existing deployed parimutuel market behavior.
+
 ## What is on chain today
 
 | Contract                | Purpose |
@@ -222,8 +299,40 @@ pnpm dev:api
 pnpm dev:indexer
 pnpm dev
 
-# 4. open http://localhost:3000 and visit /api/status
+# 4. open http://localhost:3000 and visit /status
 ```
+
+The frontend does not create or resolve markets by itself. `BACKEND_API_URL`
+or `NEXT_PUBLIC_API_URL` must point at the Fastify API, normally
+`http://127.0.0.1:8787` locally. If only `pnpm dev` is running, `/api/markets`
+will proxy to nothing and the UI will show no fresh backend state.
+
+### Automatic market creation
+
+Auto-created markets come from the backend auto-ingest workers, not from the
+browser. The API starts them only when `MATCH_INGEST_ENABLED=1`.
+
+Required runtime pieces:
+
+- Postgres with `pnpm api:migrate` applied (`DATABASE_URL`).
+- At least one real match feed token: `PANDASCORE_TOKEN` for CS2/Dota2 or
+  `FOOTBALL_DATA_TOKEN` for football.
+- On-chain deploy config: `ARBITRUM_SEPOLIA_RPC_URL`,
+  `MARKET_FACTORY_ADDRESS`, `AI_JUDGE_VERIFIER_ADDRESS`.
+- A gas-only hot wallet in `MARKET_CREATOR_PRIVATE_KEY` to call
+  `createSoftMarket`.
+- `JUDGE_PRIVATE_KEY` so the resolve worker can sign verdict evidence and
+  call propose/finalize.
+
+New auto markets are inserted into `markets`, `auto_markets`, and
+`market_stats` after a successful on-chain `MarketCreated` receipt. They open
+at 50/50 because odds are parimutuel: the YES/NO pool ratio changes only from
+real indexed bets or AMM share trades. Feeds schedule and settle matches; they
+do not supply odds.
+
+Use `/status` to see whether the auto-market pipeline is ready. The
+`Auto markets` block shows the worker flag, active sources, deployer/resolver
+config, lifecycle counts, and recent `auto_markets.last_error` rows.
 
 See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for the full bring-up matrix,
 incident triage, and live verification flow.
@@ -598,8 +707,19 @@ These run inside Next.js and are what the browser actually hits:
 
 - `GET /api/status` — proxies the Fastify status payload
 - `GET /api/markets`, `GET /api/markets/:id`, `GET /api/markets/:id/activity`,
-  `/timeline`
+  `/timeline`, `/liquidity`, `/resolution`, `/opportunities`, `/share-quote`
 - `POST /api/markets/validate`, `/generate`
+- `GET/POST /api/orders`, `DELETE /api/orders/:hash`,
+  `POST /api/orders/match-preview`
+- `GET/POST /api/market-groups`, `GET /api/market-groups/:id`,
+  `POST /api/market-groups/:id/convert`,
+  `GET /api/market-groups/:id/arbitrage`
+- `GET/POST /api/creators`, `GET /api/creators/:handle`,
+  `POST /api/creators/:handle/markets`
+- `POST /api/parlays/preview`, `POST /api/parlays`,
+  `GET /api/parlays/:id`
+- `GET /api/opportunities`, `POST /api/opportunities/rebuild`
+- `POST /api/sync/share-transaction`
 - `GET /api/portfolio/:address/positions`, `/history`
 - `GET /api/agents`, `GET /api/agents/ecosystem`,
   `GET /api/agents/:id`, `/:id/moves`, `/:id/reputation`
@@ -968,7 +1088,7 @@ and importer `validateImportCandidate`)
   decoding + chain-mismatch rejection
 - `user-preferences.test.ts` — settings patch validator
 
-Run everything with `pnpm test` (current count: **170 passing**).
+Run everything with `pnpm test` (current count: **205 passing**).
 
 ### Scripts catalog (`scripts/`)
 
@@ -1004,6 +1124,7 @@ Run everything with `pnpm test` (current count: **170 passing**).
 `NEXT_PUBLIC_ORDER_MATCHER_ADDRESS`,
 `NEXT_PUBLIC_LIQUIDITY_VAULT_ADDRESS`,
 `NEXT_PUBLIC_EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`,
+`NEXT_PUBLIC_PARLAY_POOL_PROTOTYPE_ADDRESS`,
 `NEXT_PUBLIC_TOKENIZED_STOCK_ADAPTER_ADDRESS`,
 `NEXT_PUBLIC_PRICE_ORACLE_ADDRESS`,
 `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_APP_URL`,
@@ -1021,6 +1142,7 @@ Run everything with `pnpm test` (current count: **170 passing**).
 `RHC_RPC_URL`, `RHC_CHAIN_ID`, `SIWE_DOMAIN`,
 `ORDER_MATCHER_ADDRESS`, `LIQUIDITY_VAULT_ADDRESS`,
 `EXCLUSIVE_OUTCOME_REGISTRY_ADDRESS`, `PARLAY_PROTOTYPE_ENABLED`,
+`PARLAY_POOL_PROTOTYPE_ADDRESS`,
 `CREATOR_MARKETS_ENABLED`, `OPPORTUNITIES_ENABLED`,
 `JUDGE_PRIVATE_KEY`, `JUDGE_REMOTE_URL`, `JUDGE_REMOTE_SECRET`,
 `QUOTE_SIGNER_PRIVATE_KEY`, `BET_QUOTE_VERIFIER_ADDRESS`,
@@ -1030,6 +1152,10 @@ Run everything with `pnpm test` (current count: **170 passing**).
 `TRANSACTION_SYNC_MIN_CONFIRMATIONS`,
 `MARKET_FACTORY_ADDRESS`, `STAKE_TOKEN_ADDRESS`,
 `RHC_MARKET_FACTORY_ADDRESS`, `RHC_STAKE_TOKEN_ADDRESS`,
+`MATCH_INGEST_ENABLED`, `PANDASCORE_TOKEN`, `PANDASCORE_GAMES`,
+`FOOTBALL_DATA_TOKEN`, `MARKET_CREATOR_PRIVATE_KEY`,
+`MATCH_INGEST_INTERVAL_MS`, `MATCH_RESOLVE_INTERVAL_MS`,
+`RESULT_BUFFER_SEC`,
 `REPUTATION_ORACLE_ADDRESS`, `BACKEND_API_URL`, `PUBLIC_APP_URL`,
 `DUNE_API_KEY`, `DUNE_ADJUDEX_SUMMARY_QUERY_ID`, `DUNE_API_BASE_URL`,
 `DUNE_QUERY_PERFORMANCE`, `GMX_CHAIN_ID`, `GMX_API_URL`,

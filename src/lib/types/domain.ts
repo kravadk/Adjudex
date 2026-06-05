@@ -377,6 +377,34 @@ export type SystemStatus = {
     rhc: ChainSystemStatus;
   };
   indexer: IndexerStatus | null;
+  autoMarkets?: AutoMarketPipelineStatus;
+};
+
+export type AutoMarketPipelineStatus = {
+  enabled: boolean;
+  ready: boolean;
+  blockers: string[];
+  activeSources: string[];
+  feedConfigured: {
+    pandascore: boolean;
+    footballData: boolean;
+  };
+  deployer: {
+    ready: boolean;
+    error: string | null;
+  };
+  resolver: {
+    ready: boolean;
+    error: string | null;
+  };
+  lifecycles: Record<string, number>;
+  recentErrors: Array<{
+    marketId: string;
+    sourceKind: string;
+    lifecycle: string;
+    lastError: string;
+    updatedAtIso: string;
+  }>;
 };
 
 export type MarketTimelinePoint = {

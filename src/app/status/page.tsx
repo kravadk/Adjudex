@@ -31,6 +31,22 @@ type StatusPayload = {
       };
     }
   >;
+  autoMarkets?: {
+    enabled: boolean;
+    ready: boolean;
+    blockers: string[];
+    activeSources: string[];
+    deployer: { ready: boolean; error: string | null };
+    resolver: { ready: boolean; error: string | null };
+    lifecycles: Record<string, number>;
+    recentErrors: Array<{
+      marketId: string;
+      sourceKind: string;
+      lifecycle: string;
+      lastError: string;
+      updatedAtIso: string;
+    }>;
+  };
 };
 
 async function loadStatus(): Promise<StatusPayload | null> {
@@ -126,6 +142,36 @@ export default async function StatusPage() {
         </div>
       )}
 
+      {status.autoMarkets && (
+        <div className="mt-4">
+          <h2
+            className="text-[14px] font-semibold tracking-tight mb-2"
+            style={{ color: "var(--tx)" }}
+          >
+            Auto markets
+          </h2>
+          <Card
+            label="Ingest + resolution worker"
+            ok={status.autoMarkets.ready}
+            detail={autoMarketDetail(status.autoMarkets)}
+          />
+          {status.autoMarkets.recentErrors.length > 0 && (
+            <div className="panel p-4 mb-2" style={{ borderColor: "var(--line)" }}>
+              <div className="text-[13.5px] font-semibold" style={{ color: "var(--tx)" }}>
+                Recent auto-market errors
+              </div>
+              <div className="mt-2 grid gap-1 text-[12px] font-mono" style={{ color: "var(--t3)" }}>
+                {status.autoMarkets.recentErrors.map((item) => (
+                  <div key={`${item.marketId}:${item.updatedAtIso}`}>
+                    {item.marketId} / {item.lifecycle} / {item.lastError}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <p
         className="text-[10.5px] font-mono mt-6"
         style={{ color: "var(--t3)" }}
@@ -136,6 +182,15 @@ export default async function StatusPage() {
       </p>
     </div>
   );
+}
+
+function autoMarketDetail(status: NonNullable<StatusPayload["autoMarkets"]>) {
+  const lifecycles = Object.entries(status.lifecycles)
+    .map(([name, count]) => `${name}: ${count}`)
+    .join(", ");
+  if (!status.enabled) return `Disabled. Blockers: ${status.blockers.join("; ") || "MATCH_INGEST_ENABLED is not 1"}`;
+  if (!status.ready) return `Blocked: ${status.blockers.join("; ")}`;
+  return `Sources: ${status.activeSources.join(", ")}. Lifecycles: ${lifecycles || "none yet"}`;
 }
 
 function Heading() {

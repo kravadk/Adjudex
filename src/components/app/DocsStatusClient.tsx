@@ -67,6 +67,7 @@ export function DocsStatusClient() {
               <ChainStatus title="Arbitrum Sepolia" chain={status.chains.arbitrumSepolia} />
               <ChainStatus title="Robinhood Chain" chain={status.chains.rhc} />
             </div>
+            {status.autoMarkets && <AutoMarketStatus status={status.autoMarkets} />}
           </div>
         ) : (
           <div className="rounded-[6px] border border-[color:var(--line)] px-3 py-2 text-[12px] text-[color:var(--t2)]">
@@ -75,6 +76,47 @@ export function DocsStatusClient() {
         )}
       </div>
     </section>
+  );
+}
+
+function AutoMarketStatus({ status }: { status: NonNullable<SystemStatus["autoMarkets"]> }) {
+  const lifecycleText = Object.entries(status.lifecycles)
+    .map(([name, count]) => `${name}: ${count}`)
+    .join(", ");
+  return (
+    <div className="rounded-[8px] border border-[color:var(--line)] bg-[color:var(--card-inner)] p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="text-[13px] font-semibold text-[color:var(--tx)]">Auto markets</div>
+        <span className={`rounded-[4px] px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] ${status.ready ? "bg-[#10241d] text-[#7ef4c8]" : "bg-[#2a1f12] text-[#fbbf24]"}`}>
+          {status.ready ? "ready" : status.enabled ? "blocked" : "disabled"}
+        </span>
+      </div>
+      <div className="grid gap-1.5 text-[12px]">
+        <StatusLine label="Worker flag" value={status.enabled ? "MATCH_INGEST_ENABLED=1" : "off"} ok={status.enabled} />
+        <StatusLine
+          label="Sources"
+          value={status.activeSources.length > 0 ? status.activeSources.join(", ") : "none configured"}
+          ok={status.activeSources.length > 0}
+        />
+        <StatusLine label="Deployer" value={status.deployer.error ?? "configured"} ok={status.deployer.ready} />
+        <StatusLine label="Resolver" value={status.resolver.error ?? "configured"} ok={status.resolver.ready} />
+        <StatusLine label="Lifecycle" value={lifecycleText || "no auto markets indexed"} ok={Object.keys(status.lifecycles).length > 0} />
+      </div>
+      {status.blockers.length > 0 && (
+        <div className="mt-2 rounded-[6px] border border-[#4a3719] bg-[#241d13] px-2.5 py-2 text-[11.5px] text-[#fbbf24]">
+          Blockers: {status.blockers.join("; ")}
+        </div>
+      )}
+      {status.recentErrors.length > 0 && (
+        <div className="mt-2 grid gap-1 text-[11.5px] text-[color:var(--t3)]">
+          {status.recentErrors.map((item) => (
+            <div key={`${item.marketId}:${item.updatedAtIso}`} className="truncate">
+              {item.marketId} / {item.lifecycle} / {item.lastError}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

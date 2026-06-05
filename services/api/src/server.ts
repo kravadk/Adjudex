@@ -23,6 +23,8 @@ import { verifyMessage } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { buildSiweMessage, configuredSiweDomain, createToken, expiredSessionCookie, isNonceExpired, nonceTtlMs, parseCookie, sessionCookie, sessionCookieName, sessionTtlMs } from "./auth";
 import { query, transaction, type QueryExecutor } from "./db";
+import { getActiveMatchSources } from "./feeds";
+import { autoPipelineConfigError } from "./feeds/chain";
 import { asNumber, toIso, walletShort } from "./format";
 import { configuredImportSources, scanImportSource, validateImportCandidate, type ImportCandidateDraft, type ImportSource } from "./importer";
 import { validateMarketDraft } from "./market-validation";
@@ -198,6 +200,7 @@ server.get("/api/status", async () => {
   };
   const readyChains = Object.values(chains).filter((chain) => chain.ready);
   const ready = database.ok && readyChains.length > 0;
+  const autoMarkets = await autoMarketPipelineStatus(database.ok);
 
   return {
     ok: ready,
@@ -207,6 +210,7 @@ server.get("/api/status", async () => {
     rpc,
     chains,
     indexer: toIndexerStatus(latestIndexer, rpc.blockNumber),
+    autoMarkets,
   };
 });
 
@@ -2906,6 +2910,19 @@ type IndexerRow = {
   last_reorg_at?: Date | null;
 };
 
+type AutoMarketLifecycleRow = {
+  lifecycle: string;
+  count: string;
+};
+
+type AutoMarketErrorRow = {
+  market_id: string;
+  source_kind: string;
+  lifecycle: string;
+  last_error: string | null;
+  updated_at: Date | string;
+};
+
 async function checkDatabase(): Promise<DatabaseStatus> {
   if (!process.env.DATABASE_URL) {
     return { ok: false, configured: false, latencyMs: 0, error: "database_not_configured" };
@@ -2917,6 +2934,87 @@ async function checkDatabase(): Promise<DatabaseStatus> {
   } catch {
     return { ok: false, configured: true, latencyMs: Date.now() - startedAt, error: "database_probe_failed" };
   }
+}
+
+async function autoMarketPipelineStatus(databaseOk: boolean) {
+  const enabled = process.env.MATCH_INGEST_ENABLED === "1";
+  const activeSources = getActiveMatchSources().map((source) => source.kind);
+  const feedConfigured = {
+    pandascore: Boolean(process.env.PANDASCORE_TOKEN?.trim()),
+    footballData: Boolean(process.env.FOOTBALL_DATA_TOKEN?.trim()),
+  };
+  const deployerError = autoPipelineConfigError();
+  const resolverError = deployerError ?? (process.env.JUDGE_PRIVATE_KEY?.trim() ? null : "JUDGE_PRIVATE_KEY missing");
+  const blockers = Array.from(
+    new Set(
+      [
+        enabled ? null : "MATCH_INGEST_ENABLED is not 1",
+        activeSources.length > 0 ? null : "no match feed token configured",
+        deployerError,
+        resolverError,
+        databaseOk ? null : "database_unavailable",
+      ].filter((item): item is string => Boolean(item)),
+    ),
+  );
+
+  let lifecycles: Record<string, number> = {};
+  let recentErrors: Array<{
+    marketId: string;
+    sourceKind: string;
+    lifecycle: string;
+    lastError: string;
+    updatedAtIso: string;
+  }> = [];
+
+  if (databaseOk) {
+    const lifecycleResult = await Promise.resolve(
+      query<AutoMarketLifecycleRow>(
+        "SELECT lifecycle, count(*)::text AS count FROM auto_markets GROUP BY lifecycle ORDER BY lifecycle ASC",
+      ),
+    ).catch(() => ({ rows: [] }));
+    const lifecycleRows = lifecycleResult?.rows ?? [];
+    lifecycles = Object.fromEntries(
+      lifecycleRows.map((row) => [row.lifecycle, Number(row.count)]),
+    );
+
+    const errorResult = await Promise.resolve(
+      query<AutoMarketErrorRow>(
+        `SELECT market_id, source_kind, lifecycle, last_error, updated_at
+           FROM auto_markets
+          WHERE last_error IS NOT NULL
+          ORDER BY updated_at DESC
+          LIMIT 5`,
+      ),
+    ).catch(() => ({ rows: [] }));
+    const errorRows = errorResult?.rows ?? [];
+    recentErrors = errorRows
+      .filter((row) => row.last_error)
+      .map((row) => ({
+        marketId: row.market_id,
+        sourceKind: row.source_kind,
+        lifecycle: row.lifecycle,
+        lastError: row.last_error ?? "",
+        updatedAtIso: toIso(row.updated_at),
+      }));
+  }
+
+  return {
+    enabled,
+    ready: blockers.length === 0,
+    blockers,
+    activeSources,
+    feedConfigured,
+    deployer: {
+      ready: !deployerError,
+      error: deployerError,
+    },
+    resolver: {
+      ready: !resolverError,
+      error: resolverError,
+    },
+    lifecycles,
+    recentErrors,
+  };
 }
 
 async function checkRpc(rpcUrl: string | undefined, chainId: number): Promise<RpcStatus> {

@@ -60,7 +60,7 @@ skills-lock.json
 .next-start.*.log
 .next-start.err.log
 .next-start.out.log
+.next-dev-local-*.log
 
 # scratch / session artifacts
 chat-history/
-
