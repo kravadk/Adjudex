@@ -5342,8 +5342,12 @@ function toMarket(row: MarketRow) {
     status: row.status,
     asset: row.asset,
     volumeUsd: asNumber(row.volume_usd),
-    yesProbability: asNumber(row.yes_probability),
-    yesProbabilityChange1h: asNumber(row.yes_probability_change_1h),
+    // market_stats stores these on a 0..100 scale; the Market contract is a
+    // 0..1 fraction (matches the onchain service + every frontend consumer:
+    // market-view yesPct, multiplierFromPct, probability bars). Without this
+    // the UI rendered "5000%" and a negative NO price.
+    yesProbability: asNumber(row.yes_probability) / 100,
+    yesProbabilityChange1h: asNumber(row.yes_probability_change_1h) / 100,
     bettors: row.bettors,
     aiLpCount: row.ai_lp_count,
     isHot: row.is_hot,
