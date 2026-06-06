@@ -61,6 +61,31 @@ Each signer holds their key in a hardware wallet (Ledger / Trezor).
 | **PriceOracle** | [0xf41055a507e42aa142fe7943aa8a742d9ffcdb9c](https://sepolia.arbiscan.io/address/0xf41055a507e42aa142fe7943aa8a742d9ffcdb9c) | `owner` WITHOUT `transferOwnership` | no (requires contract change) |
 | **TokenizedStockAdapter** | [0x1c90df5f08c87655ee79e6f925d003094708d88e](https://sepolia.arbiscan.io/address/0x1c90df5f08c87655ee79e6f925d003094708d88e) | OpenZeppelin `Ownable` + `transferOwnership` | yes |
 
+## Timelock (hardened resolution)
+
+`AdjudexTimelock` (`contracts/src/AdjudexTimelock.sol`, an OpenZeppelin
+`TimelockController`) is the recommended owner for every `transferOwnership`
+contract above — instead of pointing `transferOwnership` at a bare multisig,
+point it at the timelock so privileged owner calls (notably
+`AIJudgeVerifier.overrideAndFinalize` and `MarketFactory.pause`) are queued for
+a mandatory `minDelay` and emit `CallScheduled` before they can execute. A
+compromised or rushed owner key can no longer instantly override a disputed
+market; challengers get the delay window to react.
+
+Deploy + wire:
+
+```bash
+ADJUDEX_TESTNET_ONLY=1 TIMELOCK_MIN_DELAY=172800 \
+  TIMELOCK_PROPOSERS=<safe> TIMELOCK_EXECUTORS=<safe> \
+  pnpm tsx scripts/deploy-timelock.ts
+SAFE_ADDRESS=<timelock> pnpm tsx scripts/transfer-ownership.ts
+```
+
+Use a real multisig for proposers/executors and renounce the deployer's
+`TIMELOCK_ADMIN_ROLE` once wired. Pair with `JUDGE_MODE=phala` so the verdict
+signing key lives in a TEE rather than on the host — the two together remove
+both single-key trust points in resolution.
+
 ## Pre-mainnet contract changes
 
 This is a **gate** for S2 (Public Release on Arbitrum One). Do not deploy
