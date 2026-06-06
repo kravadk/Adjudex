@@ -71,7 +71,7 @@ Each service in production pulls its subset:
    - `QUOTE`: `BetQuoteVerifier.rotateSigner(newAddr)` via multisig
    - `PROOF`: `ProofAnchor.setAuthorized(newAddr, true)` via multisig
 3. **Update Doppler** — write the new private key to the production config
-4. **Restart services** (Vercel auto-pulls; Fly/Railway: trigger redeploy)
+4. **Restart services** (Vercel auto-pulls; Render: trigger redeploy)
 5. **Verify** — run `pnpm e2e:live --chain=421614` → new key signs successfully
 6. **Revoke the old**: `setAuthorized(oldAddr, false)` via multisig
 7. **Inspect Doppler audit log** to confirm the old key is no longer read

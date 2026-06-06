@@ -1,8 +1,10 @@
 # Vercel Deploy — Adjudex
 
 This is the **Next.js frontend** of the Adjudex stack. Vercel hosts only
-this surface. Backend (`services/api`), indexer, AI judge, and the
-Solidity contracts run on different infrastructure (Fly / Railway /
+this surface. The backend (`services/api`) runs on **Render**
+(`https://adjudex-api.onrender.com`) — see
+[DEPLOY-RENDER.md](DEPLOY-RENDER.md). The indexer, AI judge, and the
+Solidity contracts run on their own infrastructure (Render worker /
 Phala / Arbitrum).
 
 ## What ships to Vercel
@@ -41,8 +43,8 @@ ones. Required minimum for Sepolia preview:
 | Variable | Example | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_BACKEND` | `api` | must be `api` or `onchain` |
-| `NEXT_PUBLIC_API_URL` | `https://api.adjudex.xyz` | your Fastify host |
-| `BACKEND_API_URL` | `https://api.adjudex.xyz` | server-side calls |
+| `NEXT_PUBLIC_API_URL` | `https://adjudex-api.onrender.com` | Render backend host |
+| `BACKEND_API_URL` | `https://adjudex-api.onrender.com` | server-side calls (same host) |
 | `NEXT_PUBLIC_SITE_URL` | `https://adjudex.xyz` | for OG, sitemap |
 | `NEXT_PUBLIC_ARBITRUM_SEPOLIA_RPC_URL` | `https://arb-sepolia.g.alchemy.com/v2/...` | dedicated RPC |
 | `NEXT_PUBLIC_ONCHAIN_CHAIN_ID` | `421614` | Sepolia |
@@ -149,6 +151,8 @@ runs `pnpm install --frozen-lockfile` + `pnpm build`. To override:
 
 ## Links
 
+- [DEPLOY-RENDER.md](DEPLOY-RENDER.md) — the Fastify backend that
+  `NEXT_PUBLIC_API_URL` / `BACKEND_API_URL` point at
 - [Vercel Next.js docs](https://vercel.com/docs/frameworks/nextjs)
 - [Vercel pnpm workspaces guide](https://vercel.com/docs/projects/project-configuration/build-settings#install-command)
 - [docs/MAINNET.md](docs/MAINNET.md) — when to switch from Sepolia preview to Arbitrum One production

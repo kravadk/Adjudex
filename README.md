@@ -280,6 +280,12 @@ Direct on-chain mode can read configured contracts, but portfolio,
 activity, agents, notifications, settings, importer, and proof surfaces
 still require backend/indexer state.
 
+**Deployment:** the Next.js frontend ships to **Vercel**
+([DEPLOY-VERCEL.md](DEPLOY-VERCEL.md)); the Fastify backend
+(`services/api`) runs on **Render** at `https://adjudex-api.onrender.com`
+([DEPLOY-RENDER.md](DEPLOY-RENDER.md)). Vercel's `NEXT_PUBLIC_API_URL` /
+`BACKEND_API_URL` point at the Render host.
+
 ---
 
 ## Quick start (local)
