@@ -6,6 +6,7 @@ import {
   resultBufferSec,
 } from "../feeds/match-question";
 import type { IngestMatch } from "../feeds/types";
+import { isSupported } from "../match-ingest-worker";
 
 function esportsMatch(overrides: Partial<IngestMatch> = {}): IngestMatch {
   return {
@@ -101,5 +102,23 @@ describe("deadline inference", () => {
 
   it("returns null for an unparseable kickoff", () => {
     expect(deadlineForMatch(esportsMatch({ matchStartsAtIso: "not-a-date" }))).toBeNull();
+  });
+});
+
+describe("isSupported", () => {
+  it("accepts Polymarket mirror markets (category 'external')", () => {
+    expect(isSupported(esportsMatch({ category: "external", game: undefined }))).toBe(true);
+  });
+
+  it("accepts the extended esports games", () => {
+    for (const game of ["cs2", "dota2", "lol", "valorant", "r6"] as const) {
+      expect(isSupported(esportsMatch({ game }))).toBe(true);
+    }
+    expect(isSupported(esportsMatch({ game: "other" }))).toBe(false);
+  });
+
+  it("accepts football and rejects unknown sports", () => {
+    expect(isSupported(esportsMatch({ category: "sports", sport: "football", game: undefined }))).toBe(true);
+    expect(isSupported(esportsMatch({ category: "sports", sport: "tennis", game: undefined }))).toBe(false);
   });
 });

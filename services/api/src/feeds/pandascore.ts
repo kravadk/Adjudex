@@ -16,6 +16,11 @@ const BASE = "https://api.pandascore.co";
 const GAME_PATH: Partial<Record<EsportsGame, string>> = {
   cs2: "csgo",
   dota2: "dota2",
+  lol: "lol",
+  valorant: "valorant",
+  r6: "r6siege",
+  overwatch: "ow",
+  "rocket-league": "rl",
 };
 
 type PandaOpponent = { opponent?: { id?: number; name?: string; acronym?: string } };

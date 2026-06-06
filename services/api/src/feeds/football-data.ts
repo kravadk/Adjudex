@@ -90,7 +90,7 @@ export function createFootballDataSource(): MatchSource {
       const data = (await getJson("/matches", {
         status: "SCHEDULED",
         dateFrom: isoDate(0),
-        dateTo: isoDate(7),
+        dateTo: isoDate(30),
       })) as { matches?: FdMatch[] };
       const rows = Array.isArray(data.matches) ? data.matches : [];
       return rows.map(toIngestMatch).filter((m): m is IngestMatch => m !== null);

@@ -16,8 +16,11 @@ let running = false;
 let configWarned = false;
 
 // Only these verticals become markets, even if a feed returns more.
-function isSupported(match: IngestMatch): boolean {
-  if (match.category === "esports") return match.game === "cs2" || match.game === "dota2";
+export function isSupported(match: IngestMatch): boolean {
+  // Generic mirror sources (Polymarket) carry their own verbatim question and a
+  // mapped marketCategory; accept them as-is.
+  if (match.category === "external") return true;
+  if (match.category === "esports") return match.game !== undefined && match.game !== "other";
   if (match.category === "sports") return match.sport === "football";
   return false;
 }

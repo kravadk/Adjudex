@@ -16,7 +16,7 @@ import type { MatchSource, MatchSourceKind } from "./types";
 function pandaGames(): EsportsGame[] {
   const raw = process.env.PANDASCORE_GAMES?.trim();
   if (!raw) return ["cs2", "dota2"];
-  const allowed: EsportsGame[] = ["cs2", "dota2"];
+  const allowed: EsportsGame[] = ["cs2", "dota2", "lol", "valorant", "r6", "overwatch", "rocket-league"];
   return raw
     .split(/[,\s]+/)
     .map((s) => s.trim().toLowerCase())
