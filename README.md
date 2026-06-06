@@ -22,6 +22,10 @@ Postgres-backed API, SIWE-authenticated backend persistence, or confirmed
 chain reads. If a service is missing, the UI returns explicit empty
 states — never fabricates records.
 
+> **Reference:** every contract function, HTTP endpoint, and CLI script is
+> indexed in [FUNCTIONS.md](FUNCTIONS.md). Deploy: [DEPLOY-RENDER.md](DEPLOY-RENDER.md)
+> (backend) · [DEPLOY-VERCEL.md](DEPLOY-VERCEL.md) (frontend).
+
 ---
 
 ## Product flow
@@ -67,6 +71,13 @@ createMarket -> approve -> bet -> indexer picks up event ->
 - Reclaim zkTLS proof pinned to IPFS and anchored on-chain via
   `ProofAnchor.anchor()` — every resolved market can be traced back to
   the exact proof bytes.
+- **Hybrid resolution** for mirror markets (Polymarket): the resolve worker
+  cross-checks the mirrored outcome with an independent AI verdict before
+  proposing; a clear discrepancy escalates instead of auto-finalizing. Escalated
+  markets surface in the admin review queue at `/admin/escalated` (approve the
+  mirror or skip → refund). Toggle with `POLYMARKET_HYBRID_RESOLUTION`.
+- **Exclusive-group settlement**: `ExclusiveGroupSettler.settle(groupId)` resolves
+  every child market of a resolved group atomically on-chain (winner YES, rest NO).
 
 **Markets**
 - Create flow: AI spec generator (Claude) + manual editor.
@@ -254,6 +265,8 @@ of replacing the stable parimutuel v1 pool.
 | `LiquidityVault`        | Operator vault for registered AMM seed liquidity, debt repayment, and surplus accounting. |
 | `AdjudexOrderMatcher`   | EIP-712 signed order-intent matcher with cancellation, nonce replay protection, and EIP-1271 support. |
 | `ExclusiveOutcomeRegistry` | Protocol metadata for exclusive multi-outcome groups and exactly-one-YES finalization. |
+| `ExclusiveGroupSettler`    | Atomic on-chain settlement of a resolved group (winner YES, others NO); permissionless, idempotent, no cross-pool collateral. |
+| `AdjudexTimelock`          | OpenZeppelin `TimelockController` — recommended owner so `overrideAndFinalize`/`pause` run through a `minDelay` + multisig (hardened resolution). |
 | `ParlayPoolPrototype`   | Testnet-only parlay draft escrow prototype, deployed only with `PARLAY_PROTOTYPE_ENABLED=1`. |
 | `AIJudgeVerifier` (V2)  | Optimistic resolution: `propose` → 2h challenge window → `finalize`. Owner can `overrideAndFinalize` if disputed. Backwards-compatible `verifyAndResolve` gated by `fastTrackUntil`. |
 | `ProofAnchor`           | Public registry mapping a Reclaim sessionId → (`proofHash`, IPFS `cid`). Emits `ProofAnchored`. |
@@ -818,10 +831,25 @@ docs/                       ARCHITECTURE.md, RUNBOOK.md
 ```bash
 pnpm contracts:compile         # vitest + solc compile + invariant tests
 pnpm contracts:abi             # write ABI JSONs to src/lib/abi/
-pnpm contracts:deploy          # deploy to ARBITRUM_SEPOLIA_RPC_URL
+pnpm contracts:deploy          # deploy + wire the full stack (DRY_RUN=1 to preview)
 pnpm contracts:deploy:rhc      # deploy the same stack to Robinhood Chain testnet
 pnpm contracts:register-feeds  # register Chainlink-shape PriceOracle feeds
 ```
+
+Bytecode-level tests use **Foundry** (deploy + call + assert against the
+compiled contracts — coverage the solc/ABI harness can't give):
+
+```bash
+forge install foundry-rs/forge-std   # one-time
+forge test -vvv                      # test/Adjudex.t.sol
+```
+
+`pnpm contracts:deploy` deploys **and wires** the entire stack
+(`AIJudgeVerifier`, `MarketFactory`, `LiquidityVault`, `OutcomeSharePool` via
+`createAmmMarket`, `AdjudexOrderMatcher`, `ExclusiveOutcomeRegistry`,
+`OptimisticOracleResolver`, `ProofAnchor`, oracles), writes
+`deployments/{chainId}.json`, and patches `.env.local`. Deploy the governance
+timelock separately with `pnpm tsx scripts/deploy-timelock.ts`.
 
 `contracts:deploy` writes `deployments/{chainId}.json` and patches
 `.env.local` with every new address (regular + `NEXT_PUBLIC_*` pair).
