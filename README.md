@@ -217,10 +217,21 @@ of replacing the stable parimutuel v1 pool.
 - Test fixtures remain allowed inside tests. Runtime sample/fallback match
   fixture paths were removed instead of being displayed as real market data.
 
+**Implemented (beta, unaudited)**
+- On-chain order matching from the UI: a resting signed intent is settled by a
+  taker via `AdjudexOrderMatcher.matchOrders` (sign crossing intent → approve
+  own leg → settle), with the maker's settlement allowance granted on placement
+  (`Approve settlement`). Backed by the deployed matcher.
+- AMM exit/sell: a real on-chain `OutcomeSharePool.sell`, reconciled via
+  `/api/sync/share-transaction`.
+
 **Still staged / not claimed as production-complete**
-- Matching orders on-chain from the UI, richer cancel/open-order management,
-  full negative-risk settlement, GMX-derived opportunity scanning, and deeper
-  audit-level contract tests are still staged work.
+- Full negative-risk settlement: `ExclusiveOutcomeRegistry` tracks groups and
+  `/api/market-groups/:id/convert` records conversions, but on-chain complete-set
+  conversion (a NegRisk-adapter-style settlement contract) is not built.
+- Richer cancel / open-order management, GMX-derived opportunity scanning, and
+  on-chain/Foundry contract E2E in CI (unit + fuzzed economic invariants exist;
+  bytecode-level execution tests do not).
 - AMM/order/parlay primitives are beta protocol surfaces. They are opt-in and
   do not change existing deployed parimutuel market behavior.
 
