@@ -22,10 +22,33 @@ interface ILiquidityVault {
 // product is the invariant k, preserved by every buy/sell and only re-based by
 // add/remove liquidity. yesShares/noShares track outstanding USER-held shares
 // for redemption solvency.
+//
+// Reverts use custom errors (cheaper deployed bytecode than revert strings,
+// which matters because MarketFactory embeds this contract's creation code).
 contract OutcomeSharePool is ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     enum Side { YES, NO }
+
+    error Zero();
+    error BadSide();
+    error NotResolver();
+    error AlreadyResolved();
+    error NotResolved();
+    error DeadlinePassed();
+    error DeadlineInPast();
+    error FeeTooHigh();
+    error FeeRecipientZero();
+    error StakeZero();
+    error ResolverZero();
+    error VaultZero();
+    error NotVault();
+    error NoLpMinted();
+    error InsufficientLp();
+    error NoLiquidity();
+    error LosingSide();
+    error ExceedsSurplus();
+    error BadAmount();
 
     IERC20 public immutable stake;
     bytes32 public immutable specHash;
@@ -65,11 +88,11 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
         address _feeRecipient,
         address _liquidityVault
     ) {
-        require(stakeToken != address(0), "stake=0");
-        require(_resolver != address(0), "resolver=0");
-        require(_deadline > block.timestamp, "deadline in past");
-        require(_feeBps <= 500, "fee too high");
-        require(_feeBps == 0 || _feeRecipient != address(0), "feeRecipient=0");
+        if (stakeToken == address(0)) revert StakeZero();
+        if (_resolver == address(0)) revert ResolverZero();
+        if (_deadline <= block.timestamp) revert DeadlineInPast();
+        if (_feeBps > 500) revert FeeTooHigh();
+        if (_feeBps != 0 && _feeRecipient == address(0)) revert FeeRecipientZero();
         stake = IERC20(stakeToken);
         specHash = _specHash;
         resolver = _resolver;
@@ -112,7 +135,7 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // x*y=k: buying side S with net `a` pushes a into both reserves, then the
     // trader takes the side-S excess so the product is preserved.
     function quoteBuy(uint8 side, uint256 amount) public view returns (uint256 sharesOut) {
-        require(side <= uint8(Side.NO), "bad side");
+        if (side > uint8(Side.NO)) revert BadSide();
         if (amount == 0) return 0;
         uint256 net = _netOfFee(amount);
         (uint256 reserve, uint256 opposite) = side == uint8(Side.YES)
@@ -131,7 +154,7 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // Collateral returned (fee already deducted) for selling `shares` of `side`.
     // Solves (reserve+shares-R)(opposite-R)=k for R via the quadratic root.
     function quoteSell(uint8 side, uint256 shares) public view returns (uint256 amountOut) {
-        require(side <= uint8(Side.NO), "bad side");
+        if (side > uint8(Side.NO)) revert BadSide();
         if (shares == 0) return 0;
         (uint256 reserve, uint256 opposite) = side == uint8(Side.YES)
             ? (yesReserve, noReserve)
@@ -147,9 +170,9 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // Vault-seeded liquidity (no LP shares minted to the vault; the vault
     // reclaims via repayVault after resolution). Defines the opening line.
     function seedFromVault(uint256 yesAmount, uint256 noAmount) external nonReentrant {
-        require(msg.sender == liquidityVault, "not vault");
-        require(!resolved, "resolved");
-        require(yesAmount > 0 && noAmount > 0, "zero");
+        if (msg.sender != liquidityVault) revert NotVault();
+        if (resolved) revert AlreadyResolved();
+        if (yesAmount == 0 || noAmount == 0) revert Zero();
         yesReserve += yesAmount;
         noReserve += noAmount;
         emit VaultSeeded(yesAmount, noAmount);
@@ -160,8 +183,8 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // Mints LP shares pro-rata; any over-supplied side is returned to the
     // provider as tradeable outcome shares (Gnosis addFunding semantics).
     function addLiquidity(uint256 amount) external nonReentrant whenNotPaused returns (uint256 minted) {
-        require(!resolved, "resolved");
-        require(amount > 0, "zero");
+        if (resolved) revert AlreadyResolved();
+        if (amount == 0) revert Zero();
         stake.safeTransferFrom(msg.sender, address(this), amount);
 
         if (totalLpShares == 0 || yesReserve == 0 || noReserve == 0) {
@@ -184,7 +207,7 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
                 noToken.mint(msg.sender, sendNo);
             }
         }
-        require(minted > 0, "no lp minted");
+        if (minted == 0) revert NoLpMinted();
         totalLpShares += minted;
         lpBalanceOf[msg.sender] += minted;
         emit LiquidityAdded(msg.sender, amount, amount);
@@ -193,8 +216,8 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // Burn LP shares: receive the merged complete set as collateral plus the
     // residual outcome shares of the heavier side.
     function removeLiquidity(uint256 lpAmount) external nonReentrant returns (uint256 collateralOut) {
-        require(lpAmount > 0, "zero");
-        require(lpBalanceOf[msg.sender] >= lpAmount, "insufficient lp");
+        if (lpAmount == 0) revert Zero();
+        if (lpBalanceOf[msg.sender] < lpAmount) revert InsufficientLp();
         uint256 supply = totalLpShares;
         uint256 sendYes = (yesReserve * lpAmount) / supply;
         uint256 sendNo = (noReserve * lpAmount) / supply;
@@ -214,11 +237,11 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     }
 
     function buy(uint8 side, uint256 amount) external nonReentrant whenNotPaused returns (uint256 sharesOut) {
-        require(!resolved, "resolved");
-        require(block.timestamp < deadline, "deadline passed");
-        require(amount > 0, "zero amount");
+        if (resolved) revert AlreadyResolved();
+        if (block.timestamp >= deadline) revert DeadlinePassed();
+        if (amount == 0) revert Zero();
         sharesOut = quoteBuy(side, amount);
-        require(sharesOut > 0, "zero shares");
+        if (sharesOut == 0) revert Zero();
         uint256 net = _netOfFee(amount);
 
         if (side == uint8(Side.YES)) {
@@ -238,19 +261,19 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     }
 
     function sell(uint8 side, uint256 shares) external nonReentrant whenNotPaused returns (uint256 amountOut) {
-        require(!resolved, "resolved");
-        require(block.timestamp < deadline, "deadline passed");
-        require(shares > 0, "zero shares");
+        if (resolved) revert AlreadyResolved();
+        if (block.timestamp >= deadline) revert DeadlinePassed();
+        if (shares == 0) revert Zero();
         // Recompute the pre-fee collateral R so reserve bookkeeping matches.
         (uint256 reserve, uint256 opposite) = side == uint8(Side.YES)
             ? (yesReserve, noReserve)
             : (noReserve, yesReserve);
-        require(reserve > 0 && opposite > 0, "no liquidity");
+        if (reserve == 0 || opposite == 0) revert NoLiquidity();
         uint256 b = reserve + shares + opposite;
         uint256 r = (b - Math.sqrt(b * b - 4 * shares * opposite)) / 2;
         if (r >= opposite) r = opposite - 1;
         amountOut = _netOfFee(r);
-        require(amountOut > 0, "zero amount");
+        if (amountOut == 0) revert Zero();
 
         if (side == uint8(Side.YES)) {
             yesToken.burn(msg.sender, shares); // reverts if balance < shares
@@ -269,9 +292,9 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     }
 
     function resolve(uint8 side) external nonReentrant {
-        require(msg.sender == resolver, "not resolver");
-        require(!resolved, "resolved");
-        require(side <= uint8(Side.NO), "bad side");
+        if (msg.sender != resolver) revert NotResolver();
+        if (resolved) revert AlreadyResolved();
+        if (side > uint8(Side.NO)) revert BadSide();
         resolved = true;
         resolvedSide = Side(side);
         emit MarketResolved(side);
@@ -280,9 +303,9 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // Winning shares redeem 1:1 for collateral (complete-set backing). The
     // trading fee was already taken on buy/sell, so redemption is fee-free.
     function claim(uint8 side, uint256 shares) external nonReentrant returns (uint256 payout) {
-        require(resolved, "not resolved");
-        require(side == uint8(resolvedSide), "losing side");
-        require(shares > 0, "zero shares");
+        if (!resolved) revert NotResolved();
+        if (side != uint8(resolvedSide)) revert LosingSide();
+        if (shares == 0) revert Zero();
 
         if (side == uint8(Side.YES)) {
             yesToken.burn(msg.sender, shares);
@@ -297,15 +320,15 @@ contract OutcomeSharePool is ReentrancyGuard, Pausable {
     // After resolution the losing-side reserve is surplus collateral the vault
     // seeded; return it so vault accounting closes.
     function repayVault(uint256 amount) external nonReentrant {
-        require(msg.sender == resolver, "not resolver");
-        require(resolved, "not resolved");
-        require(liquidityVault != address(0), "vault=0");
-        require(amount > 0, "bad amount");
+        if (msg.sender != resolver) revert NotResolver();
+        if (!resolved) revert NotResolved();
+        if (liquidityVault == address(0)) revert VaultZero();
+        if (amount == 0) revert BadAmount();
         if (resolvedSide == Side.YES) {
-            require(amount <= noReserve, "exceeds surplus");
+            if (amount > noReserve) revert ExceedsSurplus();
             noReserve -= amount;
         } else {
-            require(amount <= yesReserve, "exceeds surplus");
+            if (amount > yesReserve) revert ExceedsSurplus();
             yesReserve -= amount;
         }
         stake.forceApprove(liquidityVault, amount);

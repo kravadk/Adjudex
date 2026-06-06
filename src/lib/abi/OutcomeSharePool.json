@@ -42,7 +42,37 @@
   },
   {
     "inputs": [],
+    "name": "AlreadyResolved",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "BadAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "BadSide",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DeadlineInPast",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DeadlinePassed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "EnforcedPause",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExceedsSurplus",
     "type": "error"
   },
   {
@@ -52,7 +82,57 @@
   },
   {
     "inputs": [],
+    "name": "FeeRecipientZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "FeeTooHigh",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientLp",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "LosingSide",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NoLiquidity",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NoLpMinted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotResolved",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotResolver",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotVault",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "ReentrancyGuardReentrantCall",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ResolverZero",
     "type": "error"
   },
   {
@@ -64,6 +144,21 @@
       }
     ],
     "name": "SafeERC20FailedOperation",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "StakeZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VaultZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Zero",
     "type": "error"
   },
   {

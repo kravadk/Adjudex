@@ -44,6 +44,13 @@ contract MarketFactory is Ownable2Step, Pausable {
     event AmmMarketCreated(uint256 indexed marketId, address indexed pool, uint256 seedAmount);
     event MarketResolved(uint256 indexed marketId, uint8 outcome);
 
+    error StakeZero();
+    error FeeRecipientZero();
+    error VerifierZero();
+    error VaultZero();
+    error ResolverZero();
+    error NotFound();
+
     constructor(
         address _stakeToken,
         uint256 _feeBps,
@@ -51,11 +58,8 @@ contract MarketFactory is Ownable2Step, Pausable {
         address _quoteVerifier,
         address _liquidityVault
     ) Ownable(msg.sender) {
-        require(_stakeToken != address(0), "stake=0");
-        require(
-            _feeBps == 0 || _feeRecipient != address(0),
-            "feeRecipient=0"
-        );
+        if (_stakeToken == address(0)) revert StakeZero();
+        if (_feeBps != 0 && _feeRecipient == address(0)) revert FeeRecipientZero();
         stakeToken = _stakeToken;
         feeBps = _feeBps;
         feeRecipient = _feeRecipient;
@@ -90,7 +94,7 @@ contract MarketFactory is Ownable2Step, Pausable {
         address verifier,
         string calldata specUri
     ) external returns (uint256 marketId) {
-        require(verifier != address(0), "verifier=0");
+        if (verifier == address(0)) revert VerifierZero();
         return _create(specHash, deadline, verifier, specUri);
     }
 
@@ -101,8 +105,8 @@ contract MarketFactory is Ownable2Step, Pausable {
         string calldata specUri,
         uint256 seedAmount
     ) external whenNotPaused returns (uint256 marketId) {
-        require(liquidityVault != address(0), "vault=0");
-        require(resolver != address(0), "resolver=0");
+        if (liquidityVault == address(0)) revert VaultZero();
+        if (resolver == address(0)) revert ResolverZero();
         marketId = nextMarketId++;
         OutcomeSharePool pool = new OutcomeSharePool(
             stakeToken,
@@ -155,7 +159,7 @@ contract MarketFactory is Ownable2Step, Pausable {
 
     function getMarket(uint256 marketId) external view returns (address pool) {
         pool = pools[marketId];
-        require(pool != address(0), "not found");
+        if (pool == address(0)) revert NotFound();
     }
 }
 

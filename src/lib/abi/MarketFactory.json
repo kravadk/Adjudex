@@ -41,6 +41,16 @@
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "FeeRecipientZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotFound",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -60,6 +70,26 @@
       }
     ],
     "name": "OwnableUnauthorizedAccount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ResolverZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "StakeZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VaultZero",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "VerifierZero",
     "type": "error"
   },
   {
