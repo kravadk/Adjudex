@@ -4,7 +4,7 @@
 
 import type { EsportsGame } from "../importer";
 
-export type MatchSourceKind = "pandascore" | "football-data" | "polymarket";
+export type MatchSourceKind = "pandascore" | "football-data" | "polymarket" | "gmx" | "rwa";
 
 export type SportKind = "football" | "basketball" | "tennis" | "other";
 

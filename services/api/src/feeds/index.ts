@@ -9,8 +9,10 @@
 
 import type { EsportsGame } from "../importer";
 import { createFootballDataSource } from "./football-data";
+import { createGmxMatchSource } from "./gmx";
 import { createPandaScoreSource } from "./pandascore";
 import { createPolymarketSource } from "./polymarket";
+import { createRwaMatchSource } from "./rwa";
 import type { MatchSource, MatchSourceKind } from "./types";
 
 function pandaGames(): EsportsGame[] {
@@ -35,12 +37,22 @@ function hasPolymarket(): boolean {
   return process.env.POLYMARKET_INGEST_ENABLED === "1";
 }
 
+function hasGmx(): boolean {
+  return process.env.GMX_INGEST_ENABLED === "1";
+}
+
+function hasRwa(): boolean {
+  return process.env.RWA_INGEST_ENABLED === "1";
+}
+
 // Active sources for the ingest worker to scan this tick.
 export function getActiveMatchSources(): MatchSource[] {
   const sources: MatchSource[] = [];
   if (hasPanda()) sources.push(createPandaScoreSource(pandaGames()));
   if (hasFootball()) sources.push(createFootballDataSource());
   if (hasPolymarket()) sources.push(createPolymarketSource());
+  if (hasGmx()) sources.push(createGmxMatchSource());
+  if (hasRwa()) sources.push(createRwaMatchSource());
   return sources;
 }
 
@@ -55,6 +67,10 @@ export function getMatchSourceByKind(kind: MatchSourceKind): MatchSource | null 
       // Result lookup is stateless (no token), so resolve mirrored markets
       // even if new Polymarket ingest was later disabled.
       return createPolymarketSource();
+    case "gmx":
+      return createGmxMatchSource();
+    case "rwa":
+      return createRwaMatchSource();
     default:
       return null;
   }
