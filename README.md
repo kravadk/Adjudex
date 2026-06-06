@@ -159,11 +159,23 @@ createMarket -> approve -> bet -> indexer picks up event ->
   `market.resolved` / `market.created`) and an MCP server
   (`services/mcp-server`) wrapping the read API as agent tools.
 
-## Competitive gap implementation
+## Protocol surfaces
 
-This repository now includes the core production-gap primitives from the
-9lives / Polymarket / Forkast / parlay backlog, with staged rollout instead
-of replacing the stable parimutuel v1 pool.
+Beyond the stable parimutuel v1 pool, Adjudex ships opt-in protocol surfaces.
+They never change deployed parimutuel behavior. Status at a glance:
+
+| Surface | Status |
+|---|---|
+| Parimutuel pool + optimistic AI-judge resolution | **Shipped** |
+| AMM share pool (`OutcomeSharePool`) + on-chain exit/sell | Beta |
+| Signed-order CLOB (`AdjudexOrderMatcher`, on-chain `matchOrders`) | Beta |
+| Exclusive groups + atomic settlement (`ExclusiveGroupSettler`) | Beta |
+| Reclaim zkTLS → IPFS → `ProofAnchor` anchor | Beta (needs ProofAnchor deployed) |
+| EIP-712 bet quotes (`BetQuoteVerifier`) | Staged (verifier undeployed) |
+| Creator markets / opportunities | Beta (flag-gated) |
+| Parlays (`ParlayPoolPrototype`) | Staged (testnet-only, off by default) |
+| Negative-risk conversion (cross-pool merge) | Not built (needs shared-collateral / CTF) |
+| Fhenix sealed markets | Prototype (not deployed) |
 
 **Liquidity and exits**
 - `OutcomeSharePool` is the opt-in binary AMM/share pool. It supports
@@ -200,8 +212,8 @@ of replacing the stable parimutuel v1 pool.
 - Backend stores `market_groups`, `market_group_outcomes`,
   `market_group_positions`, and `neg_risk_conversions`.
 - UI reads real group data and shows total implied probability plus
-  incoherence warnings. Conversions are recorded as proof/accounting records;
-  full production settlement is intentionally staged.
+  incoherence warnings. Conversions are recorded as proof/accounting records
+  (cross-pool settlement needs shared collateral — see status table).
 
 **Resolution hardening**
 - `AIJudgeVerifier` now tracks `Pending`, `Challenged`, `Reset`,
@@ -229,32 +241,22 @@ of replacing the stable parimutuel v1 pool.
 - Test fixtures remain allowed inside tests. Runtime sample/fallback match
   fixture paths were removed instead of being displayed as real market data.
 
-**Implemented (beta, unaudited)**
-- On-chain order matching from the UI: a resting signed intent is settled by a
-  taker via `AdjudexOrderMatcher.matchOrders` (sign crossing intent → approve
-  own leg → settle), with the maker's settlement allowance granted on placement
-  (`Approve settlement`). Backed by the deployed matcher.
-- AMM exit/sell: a real on-chain `OutcomeSharePool.sell`, reconciled via
+**Settlement notes** (statuses in the table above)
+- **On-chain order matching** settles a resting signed intent via
+  `AdjudexOrderMatcher.matchOrders` (sign crossing intent → approve own leg →
+  settle); the maker grants the matcher its allowance on placement.
+- **AMM exit** is a real `OutcomeSharePool.sell`, reconciled via
   `/api/sync/share-transaction`.
-
-**Exclusive-outcome settlement (implemented, beta)**
-- `ExclusiveGroupSettler.settle(groupId)` resolves every child market of a
-  resolved exclusive group atomically on-chain (winner → YES, others → NO).
-  Permissionless and idempotent; child pools must use it as their resolver. It
-  never moves collateral between pools — each binary pool pays its own winners.
-
-**Still staged / not claimed as production-complete**
-- Capital-efficient negative-risk CONVERSION (merging NO shares across outcomes
-  into collateral *before* resolution) is intentionally out of scope: the
-  independent per-pool reserves cannot back a cross-pool merge without
-  insolvency risk. It needs a shared collateral framework (CTF-style) — see
-  [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md). `/api/market-groups/:id/convert`
-  remains an accounting/preview record only.
-- Richer cancel / open-order management, GMX-derived opportunity scanning, and
-  on-chain/Foundry contract E2E in CI (unit + fuzzed economic invariants exist;
-  bytecode-level execution tests do not).
-- AMM/order/parlay primitives are beta protocol surfaces. They are opt-in and
-  do not change existing deployed parimutuel market behavior.
+- **Group settlement** — `ExclusiveGroupSettler.settle(groupId)` resolves a
+  group's child markets atomically (winner YES / others NO); never moves
+  cross-pool collateral, so each binary pool pays its own winners.
+- **Negative-risk conversion is not built** — merging NO shares across pools into
+  collateral before resolution would need a shared-collateral (CTF-style)
+  framework (per-pool reserves can't back a cross-pool merge safely);
+  `/api/market-groups/:id/convert` is an accounting/preview record only. See
+  [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md).
+- Still open: richer cancel / open-order management, GMX-derived opportunity
+  scanning, on-chain/Foundry E2E in CI (unit + fuzzed invariants exist).
 
 ## What is on chain today
 
