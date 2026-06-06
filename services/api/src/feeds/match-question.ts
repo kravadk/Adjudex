@@ -48,6 +48,25 @@ export type MatchMarketSpec = {
 };
 
 export function matchQuestion(match: IngestMatch): MatchMarketSpec {
+  // Generic mirror sources (e.g. Polymarket) carry verbatim copy. Use it
+  // instead of synthesizing a "teamA beats teamB" question. The deadline is
+  // supplied separately via closeAtIsoOverride (the deployer reads it).
+  if (match.questionOverride) {
+    return {
+      title: match.titleOverride ?? match.questionOverride,
+      question: match.questionOverride,
+      description:
+        match.descriptionOverride ??
+        `${match.questionOverride} Auto-ingested by Adjudex from ${match.sourceKind}.`,
+      resolutionCriteria:
+        match.resolutionCriteriaOverride ??
+        `Resolves per the official outcome reported by ${match.sourceKind}. ` +
+          `If voided or canceled without an official result, positions are ` +
+          `refunded after the grace window. Source: ${match.sourceUrl}`,
+      deadlineIso: match.closeAtIsoOverride ?? null,
+    };
+  }
+
   const context = match.tournament || match.league;
   const venue = context ? ` in ${context}` : "";
   const seriesFormat =

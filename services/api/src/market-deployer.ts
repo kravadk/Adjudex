@@ -26,6 +26,7 @@ const EMOJI: Record<string, string> = {
 };
 
 function emojiFor(match: IngestMatch): string {
+  if (match.emoji) return match.emoji;
   if (match.game && EMOJI[match.game]) return EMOJI[match.game];
   if (match.sport && EMOJI[match.sport]) return EMOJI[match.sport];
   return EMOJI[match.category] ?? "🎯";
@@ -50,6 +51,9 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
   }
 
   const spec = matchQuestion(match);
+  // Generic mirror sources carry an explicit DB category; sports/esports
+  // fall back to the source-side category discriminator.
+  const dbCategory = match.marketCategory ?? match.category;
   const deadlineIso = match.closeAtIsoOverride ?? spec.deadlineIso;
   if (!deadlineIso) return { status: "skipped", reason: "no_deadline" };
   const deadlineMs = new Date(deadlineIso).getTime();
@@ -63,7 +67,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
   const specPayload = {
     title: spec.title,
     description: spec.description,
-    category: match.category,
+    category: dbCategory,
     oracleType: "zktls-ai-oracle" as const,
     asset: "USDC" as const,
     deadlineIso,
@@ -133,7 +137,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
       account.address,
       spec.title,
       spec.description,
-      match.category,
+      dbCategory,
       emojiFor(match),
       match.sourceUrl,
       spec.resolutionCriteria,
@@ -174,7 +178,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
       chainId,
       match.sourceKind,
       match.externalMatchId,
-      match.category,
+      dbCategory,
       match.teamA,
       match.teamB,
       new Date(deadlineMs).toISOString(),
