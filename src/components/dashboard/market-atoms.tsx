@@ -29,8 +29,8 @@ export function Pill({
   const tones: Record<string, string> = {
     neutral: "bg-[#232323] border-[#2a2a2a] text-gray-300",
     accent: "bg-[#CCE9E7]/8 border-[#CCE9E7]/25 text-[#CCE9E7]",
-    yes: "bg-[#10b981]/8 border-[#10b981]/25 text-[#10b981]",
-    no: "bg-[#ef4444]/8 border-[#ef4444]/25 text-[#ef4444]",
+    yes: "bg-[#d9ff00]/10 border-[#d9ff00]/30 text-[#d9ff00]",
+    no: "bg-[#3b6ffa]/12 border-[#3b6ffa]/30 text-[#3b6ffa]",
   };
   return (
     <span
@@ -143,7 +143,7 @@ export function ActivityFeedItem({ item }: { item: Activity }) {
           <div className="text-xs">
             <span
               className={`font-mono font-bold text-[10px] uppercase tracking-wider mr-1.5 ${
-                item.side === "yes" ? "text-[#10b981]" : "text-[#ef4444]"
+                item.side === "yes" ? "text-[#d9ff00]" : "text-[#3b6ffa]"
               }`}
             >
               {item.side}
@@ -190,8 +190,8 @@ export function ActivityFeedItem({ item }: { item: Activity }) {
             <span
               className={`font-mono font-bold text-[9.5px] uppercase tracking-wider px-1.5 rounded ${
                 item.side === "yes"
-                  ? "bg-[#10b981]/15 text-[#10b981]"
-                  : "bg-[#ef4444]/15 text-[#ef4444]"
+                  ? "bg-[#d9ff00]/15 text-[#d9ff00]"
+                  : "bg-[#3b6ffa]/15 text-[#3b6ffa]"
               }`}
             >
               {item.side}

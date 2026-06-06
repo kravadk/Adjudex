@@ -99,7 +99,7 @@ export function HomeNav({
                 {isActive && (
                   <span
                     className="absolute inset-x-3 -bottom-px h-[2px]"
-                    style={{ background: "var(--tx)" }}
+                    style={{ background: "#d9ff00" }}
                     aria-hidden
                   />
                 )}
@@ -137,24 +137,25 @@ function HeroPill({
   glow?: string;
   onClick: () => void;
 }) {
-  const background = active ? "var(--accent-bright)" : glow ? "rgba(255,122,0,0.04)" : "var(--card-inner)";
-  const color = active ? "#ffffff" : "var(--tx)";
-  const borderColor = active
-    ? "var(--accent-bright)"
-    : glow
-      ? glow
-      : "var(--line-soft)";
+  // Active = lime brand pill (black text); inactive keeps the optional glow tint.
+  const background = active ? "#d9ff00" : glow ? "rgba(255,122,0,0.04)" : "var(--card-inner)";
+  const color = active ? "#0a0a0a" : "var(--tx)";
+  const borderColor = active ? "#d9ff00" : glow ? glow : "var(--line-soft)";
   return (
     <button
       type="button"
       onClick={onClick}
-      className="h-[46px] px-6 rounded-full text-[15px] transition-all"
+      className="h-[46px] px-6 rounded-full text-[15px] transition-all duration-150 hover:-translate-y-px active:scale-95"
       style={{
         background,
         color,
         border: `1.5px solid ${borderColor}`,
-        boxShadow: glow && !active ? `0 0 22px -4px ${glow}` : undefined,
-        fontWeight: 700,
+        boxShadow: active
+          ? "0 0 22px -2px rgba(217,255,0,0.45)"
+          : glow
+            ? `0 0 22px -4px ${glow}`
+            : undefined,
+        fontWeight: active ? 800 : 700,
         letterSpacing: "-0.005em",
       }}
     >

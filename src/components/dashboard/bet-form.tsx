@@ -47,7 +47,7 @@ export function BetForm({ market, side, onClose, onConfirm, gaslessAvailable = f
   const [celebrate, setCelebrate] = useState(false);
   const [gasless, setGasless] = useState(true);
 
-  const sideColor = side === "yes" ? "#10b981" : "#ef4444";
+  const sideColor = side === "yes" ? "#d9ff00" : "#3b6ffa";
   const sideLabel = side.toUpperCase() as "YES" | "NO";
   const maxStake = Math.max(1, Math.floor(walletBalance > 0 ? walletBalance : 1000));
   const overBalance = !balanceLoading && !notConnected && stake > Math.floor(walletBalance);
@@ -333,8 +333,8 @@ export function BetForm({ market, side, onClose, onConfirm, gaslessAvailable = f
             disabled={notConnected || balanceLoading || overBalance || hardCutoff || !quote || quoteLoading || submitting}
             className={`inline-flex h-11 w-full items-center justify-between gap-2 rounded-[5px] px-4 text-[12.5px] font-bold uppercase tracking-wider shadow-[inset_0_1px_0_rgba(255,255,255,0.10)] transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 ${
               side === "yes"
-                ? "bg-[#10b981] text-black hover:bg-[#0ea674]"
-                : "bg-[#ef4444] text-white hover:bg-[#dc2626]"
+                ? "bg-[#d9ff00] text-black hover:bg-[#c7eb00]"
+                : "bg-[#3b6ffa] text-white hover:bg-[#2f5fe0]"
             }`}
           >
             <span>{confirmLabel({ submitting, notConnected, balanceLoading, hardCutoff, stake })}</span>

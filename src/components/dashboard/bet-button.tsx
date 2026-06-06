@@ -28,9 +28,10 @@ export function BetButton({
   } as const;
   const padding = { md: "px-2.5", lg: "px-3", xl: "px-4" } as const;
 
+  // Brand palette: YES = lime accent, NO = electric blue (not generic green/red).
   const colors = isYes
-    ? "bg-[#10b981] text-black hover:bg-[#0ea674] hover:shadow-[0_0_14px_rgba(16,185,129,0.30),inset_0_1px_0_rgba(255,255,255,0.18)]"
-    : "bg-[#ef4444] text-white hover:bg-[#dc2626] hover:shadow-[0_0_14px_rgba(239,68,68,0.30),inset_0_1px_0_rgba(255,255,255,0.16)]";
+    ? "bg-[#d9ff00] text-black hover:bg-[#c7eb00] hover:shadow-[0_0_16px_rgba(217,255,0,0.35),inset_0_1px_0_rgba(255,255,255,0.25)]"
+    : "bg-[#3b6ffa] text-white hover:bg-[#2f5fe0] hover:shadow-[0_0_16px_rgba(59,111,250,0.40),inset_0_1px_0_rgba(255,255,255,0.18)]";
 
   const cls = `
     ${heights[size]} ${padding[size]} ${fonts[size]}

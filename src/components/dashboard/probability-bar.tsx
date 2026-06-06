@@ -20,7 +20,7 @@ export function ProbabilityBar({
     <div className="w-full">
       {showLabels && (
         <div className="flex items-center justify-between mb-1 font-mono text-[10.5px]">
-          <span className="text-[#10b981] font-semibold tabular-nums">
+          <span className="text-[#d9ff00] font-semibold tabular-nums">
             YES {Math.round(yes * 100)}%
           </span>
           {typeof changePct === "number" && (
@@ -32,7 +32,7 @@ export function ProbabilityBar({
               {changePct.toFixed(1)}%
             </span>
           )}
-          <span className="text-[#ef4444] font-semibold tabular-nums">
+          <span className="text-[#3b6ffa] font-semibold tabular-nums">
             NO {Math.round(no * 100)}%
           </span>
         </div>
@@ -42,12 +42,12 @@ export function ProbabilityBar({
         style={{ height: h }}
       >
         <div
-          className="absolute inset-y-0 left-0 bg-[#10b981]"
+          className="absolute inset-y-0 left-0 bg-[#d9ff00]"
           style={{ width: `${yes * 100}%` }}
         />
         <div
-          className="absolute inset-y-0 right-0 bg-[#ef4444]"
-          style={{ width: `${no * 100}%`, opacity: 0.88 }}
+          className="absolute inset-y-0 right-0 bg-[#3b6ffa]"
+          style={{ width: `${no * 100}%`, opacity: 0.92 }}
         />
         <div
           className="absolute inset-y-0 w-px bg-[#0a0a0a]"

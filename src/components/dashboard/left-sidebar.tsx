@@ -12,6 +12,7 @@ import {
   Layers,
   Send,
   Settings,
+  Sparkles,
   Target,
   User,
   X as XIcon,
@@ -28,17 +29,34 @@ type Item = {
   Icon: typeof Compass;
 };
 
-const NAV: Item[] = [
-  { href: "/", match: "/", label: "News Feed", Icon: Compass },
-  { href: "/leaderboard", match: "/leaderboard", label: "Campaign", Icon: Crown },
-  { href: "/feed", match: "/feed", label: "For You", Icon: Compass },
-  { href: "/referrals", match: "/referrals", label: "Referrals", Icon: Gift },
-  { href: "/quests", match: "/quests", label: "Quests", Icon: Target },
-  { href: "/portfolio", match: "/portfolio", label: "Profile", Icon: User },
-  { href: "/rhc", match: "/rhc", label: "Robinhood Chain", Icon: Layers },
-  { href: "/analytics/sponsors", match: "/analytics/sponsors", label: "Traction", Icon: BarChart3 },
-  { href: "/integrations", match: "/integrations", label: "Integrations", Icon: Boxes },
-  { href: "/settings", match: "/settings", label: "Settings", Icon: Settings },
+// Grouped so the core trading loop reads first and partner/data surfaces sit
+// under "More" instead of competing with it. All routes are kept.
+const NAV_SECTIONS: { title?: string; items: Item[] }[] = [
+  {
+    title: "Trade",
+    items: [
+      { href: "/", match: "/", label: "News Feed", Icon: Compass },
+      { href: "/leaderboard", match: "/leaderboard", label: "Campaign", Icon: Crown },
+      { href: "/portfolio", match: "/portfolio", label: "Profile", Icon: User },
+    ],
+  },
+  {
+    title: "Grow",
+    items: [
+      { href: "/feed", match: "/feed", label: "For You", Icon: Sparkles },
+      { href: "/referrals", match: "/referrals", label: "Referrals", Icon: Gift },
+      { href: "/quests", match: "/quests", label: "Quests", Icon: Target },
+    ],
+  },
+  {
+    title: "More",
+    items: [
+      { href: "/rhc", match: "/rhc", label: "Robinhood Chain", Icon: Layers },
+      { href: "/analytics/sponsors", match: "/analytics/sponsors", label: "Traction", Icon: BarChart3 },
+      { href: "/integrations", match: "/integrations", label: "Integrations", Icon: Boxes },
+      { href: "/settings", match: "/settings", label: "Settings", Icon: Settings },
+    ],
+  },
 ];
 
 const SOCIAL: { href: string; label: string; Icon: typeof XIcon }[] = [
@@ -89,37 +107,56 @@ export function LeftSidebar() {
         </span>
       </Link>
 
-      {/* Nav rows */}
-      <nav className="flex flex-col gap-1 flex-1">
-        {NAV.map(({ href, match, label, Icon }) => {
-          const active = isActive(pathname, match);
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-label={label}
-              className="flex items-center gap-3 h-11 rounded-[10px] px-3 transition-colors"
-              style={{
-                background: active ? "var(--card-inner, #161616)" : "transparent",
-                color: active ? "var(--tx, #fafafa)" : "var(--t2, #a3a3a3)",
-              }}
-            >
-              <Icon
-                className="w-[18px] h-[18px] flex-shrink-0"
-                strokeWidth={active ? 2.6 : 2}
-              />
+      {/* Nav rows, grouped */}
+      <nav className="flex flex-col gap-3 flex-1">
+        {NAV_SECTIONS.map((section, si) => (
+          <div key={section.title ?? si} className="flex flex-col gap-1">
+            {section.title && (
               <span
-                className="text-[15px]"
-                style={{
-                  fontWeight: active ? 700 : 600,
-                  letterSpacing: "-0.005em",
-                }}
+                className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
+                style={{ color: "var(--t4, #5f5a55)" }}
               >
-                {label}
+                {section.title}
               </span>
-            </Link>
-          );
-        })}
+            )}
+            {section.items.map(({ href, match, label, Icon }) => {
+              const active = isActive(pathname, match);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-label={label}
+                  className="relative flex items-center gap-3 h-11 rounded-[10px] px-3 transition-colors"
+                  style={{
+                    background: active ? "var(--card-inner, #161616)" : "transparent",
+                    color: active ? "var(--tx, #fafafa)" : "var(--t2, #a3a3a3)",
+                  }}
+                >
+                  {active && (
+                    <span
+                      aria-hidden
+                      className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full"
+                      style={{ background: "#d9ff00" }}
+                    />
+                  )}
+                  <Icon
+                    className="w-[18px] h-[18px] flex-shrink-0"
+                    strokeWidth={active ? 2.6 : 2}
+                  />
+                  <span
+                    className="text-[15px]"
+                    style={{
+                      fontWeight: active ? 700 : 600,
+                      letterSpacing: "-0.005em",
+                    }}
+                  >
+                    {label}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Social footer */}

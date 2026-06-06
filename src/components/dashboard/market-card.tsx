@@ -182,12 +182,21 @@ export function MarketCard({ market, variant = "default" }: Props) {
   // default variant
   return (
     <div
-      className="group relative rounded-[16px] p-5 transition-colors"
+      className="group relative overflow-hidden rounded-[16px] p-5 transition-all duration-200 hover:-translate-y-px hover:shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
       style={{
         background: "var(--panel-bg)",
         border: "1px solid var(--line-soft)",
       }}
     >
+      {/* Probability accent: lime (YES) over blue (NO), split at the live yesPct. */}
+      <span
+        aria-hidden
+        className="absolute left-0 top-0 bottom-0 w-[3px]"
+        style={{
+          background: `linear-gradient(180deg, #d9ff00 ${Math.round(market.yesPct * 100)}%, #3b6ffa ${Math.round(market.yesPct * 100)}%)`,
+          boxShadow: market.isHot ? "0 0 12px rgba(217,255,0,0.5)" : undefined,
+        }}
+      />
       <Link href={marketHref} className="block">
         <div className="flex items-start gap-3 mb-3">
           <AssetLogo
@@ -225,7 +234,7 @@ export function MarketCard({ market, variant = "default" }: Props) {
                 </span>
               )}
             </div>
-            <h3 className="text-white text-[14px] font-semibold leading-snug">
+            <h3 className="text-white text-[15.5px] font-bold leading-tight tracking-[-0.01em]">
               {market.title}
             </h3>
             {market.game && (market.teamA || market.teamB) && (
@@ -253,7 +262,7 @@ export function MarketCard({ market, variant = "default" }: Props) {
 
       <div className="mb-3">
         <div className="flex items-baseline justify-between mb-1.5">
-          <span className="text-[#10b981] font-mono tabular-nums text-[13px] font-semibold">
+          <span className="text-[#d9ff00] font-mono tabular-nums text-[13px] font-semibold">
             YES {Math.round(market.yesPct * 100)}%
           </span>
           <span
