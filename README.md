@@ -7,6 +7,7 @@
     <img src="https://img.shields.io/badge/Solidity-0.8.26-363636?logo=solidity" alt="Solidity 0.8.26" />
     <img src="https://img.shields.io/badge/chain-Arbitrum%20Sepolia-28a0f0?logo=arbitrum" alt="Arbitrum Sepolia" />
     <img src="https://img.shields.io/badge/license-MIT-d9ff00" alt="MIT License" />
+    <a href="FUNCTIONS.md"><img src="https://img.shields.io/badge/reference-FUNCTIONS.md-3b6ffa" alt="Function reference" /></a>
   </p>
 </div>
 
@@ -678,126 +679,7 @@ them.
 
 ## API map
 
-Adjudex runs two HTTP layers:
-- **Fastify backend** (`services/api/`) — owns Postgres, SIWE sessions,
-  importer, EIP-712 quote signer, transaction recovery.
-- **Next API routes** (`src/app/api/**/route.ts`) — thin proxies +
-  edge-friendly helpers (Reclaim session/callback, judge signer, public
-  GET surfaces). Frontend hits these first; many proxy through to
-  Fastify.
-
-### Fastify backend (`services/api/src/server.ts`)
-
-**Health & sync**
-- `GET /health`, `GET /api/status` — DB / RPC / factory / indexer per chain
-- `POST /api/sync/transaction` — verify receipt + reconcile DB
-
-**Markets**
-- `GET /api/markets`, `GET /api/markets/:id`
-- `GET /api/markets/:id/activity`, `/timeline`
-- `POST /api/markets/validate`, `/generate`, `/api/markets`
-
-**Trading**
-- `POST /api/bets/preview` — quote derived from pool snapshot
-- `POST /api/bets/quote` — EIP-712 signed quote (`BetQuoteVerifier`)
-- `POST /api/bets` — confirm a placed bet against a tx receipt
-- `POST /api/claim`
-- `GET /api/markets/:id/liquidity`, `POST /api/markets/:id/share-quote`
-- `POST /api/sync/share-transaction`
-- `GET/POST /api/orders`, `DELETE /api/orders/:hash`, `POST /api/orders/match-preview`
-
-**Competitive surfaces**
-- `POST /api/market-groups`, `GET /api/market-groups/:id`, `/api/market-groups/:id/arbitrage`, `/convert`
-- `GET /api/markets/:id/resolution`
-- `GET/POST /api/creators`, `POST /api/creators/:handle/markets`
-- `POST /api/parlays/preview`, `POST /api/parlays`, `GET /api/parlays/:id`
-- `GET /api/opportunities`, `GET /api/markets/:id/opportunities`
-- `POST /api/opportunities/rebuild` - internal-secret rebuild from real exclusive-outcome probability gaps
-
-**Portfolio & agents**
-- `GET /api/portfolio/:address/positions`, `/history`
-- `GET /api/agents`, `/ecosystem`, `/:id`, `/:id/moves`, `/:id/reputation`
-- `POST /api/agents/register`
-- `GET /api/leaderboard`
-- `GET /api/activity` — global activity feed
-- `GET /api/oracle/:marketId` — oracle resolution state for a market
-- `GET /api/liquidity/incentives` - active incentive eligibility from indexed positions
-
-**SIWE / user**
-- `POST /api/auth/nonce`, `/verify`
-- `GET/PUT /api/settings`
-- `GET/POST /api/watchlist`, `DELETE /api/watchlist/:marketId`
-- `GET /api/notifications`, `POST /api/notifications/read`,
-  `PATCH /api/notifications/:id/read`
-- `POST /api/analytics/events` records allowlisted authenticated product
-  events.
-- `GET /api/analytics/retention` returns admin-only D1/D7/D30 cohorts from
-  `user_activity_events`.
-
-**Importer (SIWE + admin allowlist)**
-- `GET /api/import/sources`
-- `POST /api/import/scan`
-- `GET /api/import/candidates`
-- `POST /api/import/candidates/:id/validate`
-- `POST /api/import/candidates/:id/deploy`
-- `POST /api/liquidity/programs`
-- `POST /api/liquidity/payouts`
-
-**Resolution & proof**
-- `POST /api/reclaim/proofs`, `GET /api/reclaim/proofs/:sessionId`
-  — server-to-server proof store keyed by `RECLAIM_PROOF_WRITE_SECRET`
-- `POST /api/resolve`
-
-### Next API routes (`src/app/api/**/route.ts`)
-
-These run inside Next.js and are what the browser actually hits:
-
-- `GET /api/status` — proxies the Fastify status payload
-- `GET /api/markets`, `GET /api/markets/:id`, `GET /api/markets/:id/activity`,
-  `/timeline`, `/liquidity`, `/resolution`, `/opportunities`, `/share-quote`
-- `POST /api/markets/validate`, `/generate`
-- `GET/POST /api/orders`, `DELETE /api/orders/:hash`,
-  `POST /api/orders/match-preview`
-- `GET/POST /api/market-groups`, `GET /api/market-groups/:id`,
-  `POST /api/market-groups/:id/convert`,
-  `GET /api/market-groups/:id/arbitrage`
-- `GET/POST /api/creators`, `GET /api/creators/:handle`,
-  `POST /api/creators/:handle/markets`
-- `POST /api/parlays/preview`, `POST /api/parlays`,
-  `GET /api/parlays/:id`
-- `GET /api/opportunities`, `POST /api/opportunities/rebuild`
-- `POST /api/sync/share-transaction`
-- `GET /api/portfolio/:address/positions`, `/history`
-- `GET /api/agents`, `GET /api/agents/ecosystem`,
-  `GET /api/agents/:id`, `/:id/moves`, `/:id/reputation`
-- `POST /api/agents/register`
-- `GET /api/leaderboard`
-- `GET /api/activity`
-- `GET /api/liquidity/incentives`
-- `POST /api/bets/preview`, `POST /api/bets`
-- `POST /api/claim`
-- `GET /api/oracle/:marketId`
-- `POST /api/sync/transaction`
-- `POST /api/auth/nonce`, `POST /api/auth/verify`
-- `GET/PUT /api/settings`
-- `GET/POST /api/watchlist`, `DELETE /api/watchlist/:marketId`
-- `GET/POST /api/notifications`, `POST /api/notifications/read`,
-  `PATCH /api/notifications/:id/read`
-- `POST /api/analytics/events`
-- `GET /api/analytics/retention`
-- `GET /api/import/sources`, `POST /api/import/scan`,
-  `GET /api/import/candidates`,
-  `POST /api/import/candidates/:id/validate`, `/deploy`
-- `POST /api/liquidity/programs`, `POST /api/liquidity/payouts`
-- `POST /api/wallet/connect`, `POST /api/wallet/disconnect`,
-  `GET /api/wallet` — wallet session state
-- `POST /api/reclaim/session` — Reclaim app session bootstrap
-- `POST /api/reclaim/callback` — Reclaim attestor callback;
-  verifies → `putProof()` → IPFS pin → `ProofAnchor.anchor()`
-- `GET /api/reclaim/get` — fetch verified proof by sessionId
-- `POST /api/resolve` — server-side resolution helper
-- `POST /api/judge/resolve` — sign AI judge verdict
-  (Claude → EIP-191 → ECDSA signature) for `AIJudgeVerifier.propose`
+Every HTTP endpoint (Fastify backend + Next route proxies) is indexed in [FUNCTIONS.md](FUNCTIONS.md) (§2 HTTP API).
 
 ---
 
@@ -1152,20 +1034,9 @@ and importer `validateImportCandidate`)
 
 Run everything with `pnpm test` (current count: **205 passing**).
 
-### Scripts catalog (`scripts/`)
+### Scripts catalog
 
-| Script | npm alias | Purpose |
-|---|---|---|
-| `check-env.ts` | `pnpm env:check [--profile=full]` | Env validation by category |
-| `compile-abis.ts` | `pnpm contracts:abi` | Solidity → ABI JSON for `src/lib/abi/` |
-| `deploy-contracts.ts` | `pnpm contracts:deploy` / `pnpm contracts:deploy:rhc` | Arbitrum Sepolia or Robinhood Chain testnet deploy + `.env.local` patcher |
-| `register-feed.ts` | `pnpm contracts:register-feeds` | Wire Chainlink-shape feeds into `PriceOracle` |
-| `e2e-live.ts` | `pnpm e2e:live [--dry]` | Live create → bet → propose → finalize → claim |
-| `seed-market.ts` | manual | Seed a hard market (Chainlink-resolved) |
-| `seed-soft-market.ts` | manual | Seed a soft market (AI-judge-resolved) |
-| `generate-judge-key.ts` | manual | Mint a fresh ECDSA keypair for the AI judge |
-| `bootstrap-mm-agent.ts` | manual | Initialise the MM agent account + reputation |
-| `verify-onchain.ts` | manual | Sanity-check deployed contract state |
+Every pnpm / CLI script is indexed in [FUNCTIONS.md](FUNCTIONS.md) (§3 CLI / pnpm scripts).
 
 ### Env key catalog
 
