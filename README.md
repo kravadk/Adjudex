@@ -225,10 +225,19 @@ of replacing the stable parimutuel v1 pool.
 - AMM exit/sell: a real on-chain `OutcomeSharePool.sell`, reconciled via
   `/api/sync/share-transaction`.
 
+**Exclusive-outcome settlement (implemented, beta)**
+- `ExclusiveGroupSettler.settle(groupId)` resolves every child market of a
+  resolved exclusive group atomically on-chain (winner → YES, others → NO).
+  Permissionless and idempotent; child pools must use it as their resolver. It
+  never moves collateral between pools — each binary pool pays its own winners.
+
 **Still staged / not claimed as production-complete**
-- Full negative-risk settlement: `ExclusiveOutcomeRegistry` tracks groups and
-  `/api/market-groups/:id/convert` records conversions, but on-chain complete-set
-  conversion (a NegRisk-adapter-style settlement contract) is not built.
+- Capital-efficient negative-risk CONVERSION (merging NO shares across outcomes
+  into collateral *before* resolution) is intentionally out of scope: the
+  independent per-pool reserves cannot back a cross-pool merge without
+  insolvency risk. It needs a shared collateral framework (CTF-style) — see
+  [`docs/GOVERNANCE.md`](docs/GOVERNANCE.md). `/api/market-groups/:id/convert`
+  remains an accounting/preview record only.
 - Richer cancel / open-order management, GMX-derived opportunity scanning, and
   on-chain/Foundry contract E2E in CI (unit + fuzzed economic invariants exist;
   bytecode-level execution tests do not).

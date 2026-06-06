@@ -41,6 +41,7 @@ function compileContracts(): CompileOutput {
       "BetQuoteVerifier.sol": { content: readFileSync(join(root, "BetQuoteVerifier.sol"), "utf8") },
       "OptimisticOracleResolver.sol": { content: readFileSync(join(root, "OptimisticOracleResolver.sol"), "utf8") },
       "AdjudexTimelock.sol": { content: readFileSync(join(root, "AdjudexTimelock.sol"), "utf8") },
+      "ExclusiveGroupSettler.sol": { content: readFileSync(join(root, "ExclusiveGroupSettler.sol"), "utf8") },
     },
     settings: {
       optimizer: { enabled: true, runs: 200 },
@@ -380,6 +381,16 @@ describe("contracts", () => {
         "CallScheduled",
         "CallExecuted",
       ]),
+    );
+  });
+
+  it("ExclusiveGroupSettler exposes atomic group settlement", () => {
+    const output = compileContracts();
+    const v = output.contracts["ExclusiveGroupSettler.sol"].ExclusiveGroupSettler;
+    const names = v.abi.map((item) => item.name).filter(Boolean);
+    expect(v.evm.bytecode.object.length).toBeGreaterThan(0);
+    expect(names).toEqual(
+      expect.arrayContaining(["settle", "registry", "factory", "GroupSettled"]),
     );
   });
 

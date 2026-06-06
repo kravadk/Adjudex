@@ -8,6 +8,8 @@ import {ParimutuelPool} from "../contracts/src/ParimutuelPool.sol";
 import {OutcomeSharePool} from "../contracts/src/OutcomeSharePool.sol";
 import {AdjudexOrderMatcher} from "../contracts/src/AdjudexOrderMatcher.sol";
 import {AdjudexTimelock} from "../contracts/src/AdjudexTimelock.sol";
+import {ExclusiveOutcomeRegistry} from "../contracts/src/ExclusiveOutcomeRegistry.sol";
+import {ExclusiveGroupSettler} from "../contracts/src/ExclusiveGroupSettler.sol";
 
 // Bytecode-level tests for the core money paths. Run: `forge test -vvv`
 // (one-time: `forge install foundry-rs/forge-std`).
@@ -183,6 +185,57 @@ contract OrderMatcherTest is Test {
         assertEq(sellerYesBefore - yes.balanceOf(seller), shares, "seller delivered shares");
         assertEq(usdc.balanceOf(seller), cost, "seller received cash");
         assertEq(usdc.balanceOf(buyer), 0, "buyer paid cash");
+    }
+}
+
+contract MockFactory {
+    mapping(uint256 => address) public pools;
+    function set(uint256 id, address pool) external { pools[id] = pool; }
+    function getMarket(uint256 id) external view returns (address) { return pools[id]; }
+}
+
+contract GroupSettlerTest is Test {
+    TestUSDC usdc;
+    ExclusiveOutcomeRegistry registry;
+    MockFactory factory;
+    ExclusiveGroupSettler settler;
+    OutcomeSharePool poolA;
+    OutcomeSharePool poolB;
+    uint256 constant ID_A = 101;
+    uint256 constant ID_B = 102;
+
+    function setUp() public {
+        usdc = new TestUSDC();
+        registry = new ExclusiveOutcomeRegistry(); // owner = this
+        factory = new MockFactory();
+        settler = new ExclusiveGroupSettler(address(registry), address(factory));
+        // Child pools resolve through the settler.
+        poolA = new OutcomeSharePool(address(usdc), bytes32("A"), address(settler), block.timestamp + 1 days, 0, address(0), address(this));
+        poolB = new OutcomeSharePool(address(usdc), bytes32("B"), address(settler), block.timestamp + 1 days, 0, address(0), address(this));
+        factory.set(ID_A, address(poolA));
+        factory.set(ID_B, address(poolB));
+    }
+
+    function test_group_resolution_settles_all_children_atomically() public {
+        uint256 g = registry.createGroup("Who wins?");
+        registry.linkOutcome(g, ID_A, "A");
+        registry.linkOutcome(g, ID_B, "B");
+        registry.resolveGroup(g, ID_A); // A wins
+
+        settler.settle(g);
+
+        assertTrue(poolA.resolved(), "winner resolved");
+        assertEq(uint8(poolA.resolvedSide()), 0, "winner = YES");
+        assertTrue(poolB.resolved(), "loser resolved");
+        assertEq(uint8(poolB.resolvedSide()), 1, "loser = NO");
+    }
+
+    function test_settle_reverts_before_group_resolved() public {
+        uint256 g = registry.createGroup("Pending");
+        registry.linkOutcome(g, ID_A, "A");
+        registry.linkOutcome(g, ID_B, "B");
+        vm.expectRevert(ExclusiveGroupSettler.GroupNotResolved.selector);
+        settler.settle(g);
     }
 }
 
