@@ -23,6 +23,7 @@ import { RepriceFeed } from "@/components/dashboard/reprice-feed";
 import { WatchStream } from "@/components/dashboard/watch-stream";
 import { LiveStatusBadge } from "@/components/dashboard/live-status-badge";
 import { MarketComments } from "@/components/dashboard/market-comments";
+import { TabBar, type TabItem } from "@/components/dashboard/tab-bar";
 import {
   ActivityFeedItem,
   CapsLabel,
@@ -53,6 +54,7 @@ export function MarketDetailClient({ id }: { id: string }) {
   const [groupArbitrage, setGroupArbitrage] = useState<GroupArbitrageSnapshot | null>(null);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [tradeMode, setTradeMode] = useState<"market" | "limit">("market");
+  const [tab, setTab] = useState<"overview" | "rules" | "activity" | "discussion">("overview");
   const [activityError, setActivityError] = useState<string | null>(null);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [watchlisted, setWatchlisted] = useState(false);
@@ -500,308 +502,285 @@ export function MarketDetailClient({ id }: { id: string }) {
           ))}
         </div>
 
-        <div className="mb-5">
-          <ResolutionStatus
-            marketId={view.id}
-            verifierAddress={
-              process.env.NEXT_PUBLIC_AI_JUDGE_VERIFIER_ADDRESS as
-                | `0x${string}`
-                | undefined
-            }
-            chainId={view.chainId}
-            poolResolved={market.status === "resolved"}
-            resolvedOutcome={market.resolvedOutcome}
-          />
-        </div>
-
-        <GmxSignalCards market={market} />
-
-        <TradeModePanel mode={tradeMode} onModeChange={setTradeMode} />
-        {tradeMode === "market" ? (
-          <AmmExitPanel market={market} liquidity={liquidity} address={address} />
-        ) : (
-          <LimitOrderPanel market={market} orders={orders} bestBidBps={market.bestBidBps} bestAskBps={market.bestAskBps} address={address} />
-        )}
-        <MarketGroupPanel group={marketGroup} arbitrage={groupArbitrage} />
-        <ResolutionTimelinePanel disputes={resolutionDisputes} explorerBase={explorerBase} />
-        <OpportunityPanel opportunities={opportunities} />
-
-        {/* Trading surface — peer-pool primitives beside the trade form.
-            Pool depth + reprice triggers replace CLOB liquidity + tape.
-            Decision sidebar mirrors "Use this page to make a trading
-            decision" pattern. Desktop = right-rail; mobile = stacked. */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 mb-5">
-          <div className="space-y-4 min-w-0">
-            <PoolPanel
-              yesPoolUsd={view.volume * view.yesPct}
-              noPoolUsd={view.volume * (1 - view.yesPct)}
-              draftStakeUsd={undefined}
-              draftSide={undefined}
-            />
-            <RepriceFeed timeline={timeline} explorerBase={`${explorerBase}/tx/`} />
-          </div>
-          <div className="space-y-4 min-w-0">
-            <DecisionSidebar
-              category={view.category}
-              poolDepthUsd={view.volume}
-              resolvesInMs={view.resolvesInMs}
-              oracleType={market.oracleType}
-              isResolved={market.status === "resolved"}
-            />
-            <PositionsFeed events={marketEvents} explorerBase={`${explorerBase}/tx/`} />
-          </div>
-        </div>
-
-        <div className="panel p-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] text-gray-500">Trust layer</span>
-            <span className="caps">indexed proof</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <TrustItem label="Pool" value={market.poolAddress} mono missingLabel="missing pool address" />
-            <TrustItem label="Factory" value={market.factoryAddress} mono missingLabel="missing factory address" />
-            <TrustItem label="Creation tx" value={market.creationTxHash} mono missingLabel="missing creation tx" />
-            <TrustItem label="Resolver" value={market.resolverAddress ?? market.oracleType} mono missingLabel="missing resolver" />
-            <TrustItem label="Source" value={market.sourceUrl} link missingLabel="missing source URL" />
-            <TrustItem label="Source proof" value={market.proofUrl} link missingLabel="no source proof indexed" optional />
-            <TrustItem label="Evidence hash" value={market.resolutionEvidenceHash} mono missingLabel="no evidence hash yet" optional />
-            <TrustItem label="Evidence tx" value={resolutionProofTxUrl} link missingLabel="no evidence tx yet" optional />
-            <TrustItem label="Proposer" value={market.resolutionProposer} mono missingLabel="no proposer yet" optional />
-            <TrustItem label="Proposed at" value={resolutionProposedAt} missingLabel="not proposed yet" optional />
-            <TrustItem label="Imported" value={market.importCandidateId ? "public source" : undefined} missingLabel="not imported" optional />
-            <TrustItem label="Chain" value={market.chainId ? String(market.chainId) : undefined} mono missingLabel="missing chain id" />
-          </div>
-          {market.resolutionCriteria && (
-            <div className="mt-3 rounded-[8px] border border-[#34312e] bg-[#211f1e] p-3">
-              <span className="caps">Resolution rules</span>
-              <p className="mt-1.5 text-[12.5px] leading-relaxed text-gray-400">
-                {market.resolutionCriteria}
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="panel p-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] text-gray-500">Share proof</span>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => void shareMarketLink()}
-                className="inline-flex items-center gap-1.5 rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2.5 py-1.5 text-[11px] text-gray-300 hover:border-[#3a3a3a] hover:text-white"
-              >
-                <Share2 className="h-3 w-3" /> Share
-              </button>
-              <button
-                onClick={() => void copyProofSummary()}
-                className="inline-flex items-center gap-1.5 rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2.5 py-1.5 text-[11px] text-gray-300 hover:border-[#3a3a3a] hover:text-white"
-              >
-                <Copy className="h-3 w-3" /> Copy proof
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
-            <ProofLink label="Market link" value={marketUrl} href={marketUrl} onCopy={() => void copyText(marketUrl, "Market link")} />
-            <ProofLink
-              label="OG card"
-              value={ogCardPath}
-              href={ogCardPath}
-              onCopy={() => void copyText(`${window.location.origin}${ogCardPath}`, "OG card link")}
-            />
-            <ProofLink label="Pool contract" value={market.poolAddress} href={poolUrl} />
-            <ProofLink label="Factory contract" value={market.factoryAddress} href={factoryUrl} />
-            <ProofLink label="Creation tx" value={market.creationTxHash} href={creationTxUrl} />
-            <ProofLink label="Resolution tx" value={market.resolutionTxHash} href={resolutionTxUrl} />
-            <ProofLink label="Evidence hash" value={market.resolutionEvidenceHash} />
-            <ProofLink label="Evidence tx" value={market.resolutionProofTxHash} href={resolutionProofTxUrl} />
-            <ProofLink label="Proposer" value={market.resolutionProposer} href={addressUrl(explorerBase, market.resolutionProposer)} />
-            <ProofLink label="Source" value={market.sourceUrl} href={market.sourceUrl} />
-            <ProofLink label="Source proof" value={market.proofUrl} href={market.proofUrl} />
-          </div>
-        </div>
-
-        <div className="panel p-4 mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] text-gray-500">Current probability</span>
-            <span className="text-[11px] font-mono tabular-nums" style={{ color: changeColor }}>
-              {positive ? "+" : ""}
-              {view.changePct.toFixed(1)}% 24h
-            </span>
-          </div>
-          <ProbabilityBar yesPct={view.yesPct} size="lg" showLabels changePct={view.changePct} />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-          <div className="panel p-4 hover:border-[#10b981]/40 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] text-gray-500">Bet YES</span>
-              <Pill tone="yes">YES</Pill>
-            </div>
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-white font-mono tabular-nums text-[32px] font-semibold tracking-tight">
-                ${yesPrice.toFixed(2)}
-              </span>
-              <span className="text-gray-500 text-[11px]">/ share</span>
-            </div>
-            <div className="text-[11px] text-gray-500 mb-4">
-              Pays{" "}
-              <span className="text-[#10b981] font-mono tabular-nums font-semibold">
-                {yesMult.toFixed(2)}x
-              </span>{" "}
-              if YES - implied{" "}
-              <span className="font-mono tabular-nums">{Math.round(yesPrice * 100)}%</span>
-            </div>
-            <BetButton
-              variant="yes"
-              size="xl"
-              price={yesPrice}
-              multiplier={yesMult}
-              onClick={() => setBetSide("yes")}
-            />
-          </div>
-          <div className="panel p-4 hover:border-[#ef4444]/40 transition-colors">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] text-gray-500">Bet NO</span>
-              <Pill tone="no">NO</Pill>
-            </div>
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-white font-mono tabular-nums text-[32px] font-semibold tracking-tight">
-                ${noPrice.toFixed(2)}
-              </span>
-              <span className="text-gray-500 text-[11px]">/ share</span>
-            </div>
-            <div className="text-[11px] text-gray-500 mb-4">
-              Pays{" "}
-              <span className="text-[#ef4444] font-mono tabular-nums font-semibold">
-                {noMult.toFixed(2)}x
-              </span>{" "}
-              if NO - implied{" "}
-              <span className="font-mono tabular-nums">{Math.round(noPrice * 100)}%</span>
-            </div>
-            <BetButton
-              variant="no"
-              size="xl"
-              price={noPrice}
-              multiplier={noMult}
-              onClick={() => setBetSide("no")}
-            />
-          </div>
-        </div>
-
-        <div className="panel p-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] text-gray-500">Probability - 7 days</span>
-            <div className="flex items-center gap-3 text-[10.5px]">
-              <span className="flex items-center gap-1.5 text-gray-400">
-                <span className="w-3 h-0.5 bg-[#10b981]" /> YES
-              </span>
-              <span className="flex items-center gap-1.5 text-gray-400">
-                <span className="w-3 h-0.5 border-t border-dashed border-[#ef4444]" /> NO
-              </span>
-            </div>
-          </div>
-          {timelineError ? (
-            <div className="h-[180px] grid place-items-center rounded-[6px] border border-[#7f1d1d] bg-[#2a1717] px-4 text-center text-[11px] text-[#fca5a5]">
-              Indexed timeline unavailable: {timelineError}
-            </div>
-          ) : hasHistory ? (
-            <>
-              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[180px]">
-                <defs>
-                  <linearGradient id="yesFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                {[0, 0.25, 0.5, 0.75, 1].map((g) => (
-                  <line
-                    key={g}
-                    x1={0}
-                    x2={W}
-                    y1={g * H}
-                    y2={g * H}
-                    stroke="#262626"
-                    strokeWidth={1}
-                    strokeDasharray="2 4"
-                  />
-                ))}
-                <path d={areaPath} fill="url(#yesFill)" />
-                <polyline fill="none" stroke="#10b981" strokeWidth={2} vectorEffect="non-scaling-stroke" points={yesLine} />
-                <polyline fill="none" stroke="#ef4444" strokeWidth={1.5} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" points={noLine} />
-              </svg>
-              <div className="flex justify-between text-[10px] text-gray-500 mt-1 font-mono tabular-nums">
-                {["7d", "6d", "5d", "4d", "3d", "2d", "1d"].map((d) => (
-                  <span key={d}>{d}</span>
-                ))}
+        {/* Polymarket-style: hero (price + chart) in the main column, a sticky
+            bet box on the right, and everything else behind tabs. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5">
+          <div className="min-w-0 space-y-5">
+            <div className="panel p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] text-gray-500">Current probability</span>
+                <span className="text-[11px] font-mono tabular-nums" style={{ color: changeColor }}>
+                  {positive ? "+" : ""}
+                  {view.changePct.toFixed(1)}% 24h
+                </span>
               </div>
-              <TimelineMarkers points={timeline} explorerBase={explorerBase} />
-            </>
-          ) : (
-            <div className="h-[180px] grid place-items-center text-[11px] text-gray-500">
-              No indexed probability timeline yet
+              <ProbabilityBar yesPct={view.yesPct} size="lg" showLabels changePct={view.changePct} />
             </div>
-          )}
-        </div>
 
-        <div className="panel p-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-gray-500">AI Market-Makers</span>
-              <Pill tone={view.aiLpCount > 0 ? "accent" : "neutral"}>
-                {view.aiLpCount > 0 ? "indexed agent activity" : "no indexed activity"}
-              </Pill>
-            </div>
-            <span className="text-[11px] text-gray-500 font-mono tabular-nums">
-              {view.aiLpCount} active
-            </span>
-          </div>
-          {aiLpActivity.length > 0 ? (
-            <div className="space-y-2">
-              {aiLpActivity.slice(0, 5).map((item, index) => (
-                <ActivityFeedItem key={`${item.transactionHash ?? item.ago}:${index}`} item={item} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              icon={Bot}
-              title="No AI LPs yet"
-              description="No indexed AI liquidity-provider activity is available for this market."
-            />
-          )}
-        </div>
-
-        <div className="panel p-4">
-          <div className="flex items-center justify-between mb-2">
-            <CapsLabel>Activity on this market</CapsLabel>
-            <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse" />
-              live
-            </span>
-          </div>
-          <div>
-            {activityError ? (
-              <div className="rounded-[6px] border border-[#7f1d1d] bg-[#2a1717] px-3 py-3 text-center text-[11px] text-[#fca5a5]">
-                Indexed activity unavailable: {activityError}
+            <div className="panel p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] text-gray-500">Probability - 7 days</span>
+                <div className="flex items-center gap-3 text-[10.5px]">
+                  <span className="flex items-center gap-1.5 text-gray-400">
+                    <span className="w-3 h-0.5 bg-[#d9ff00]" /> YES
+                  </span>
+                  <span className="flex items-center gap-1.5 text-gray-400">
+                    <span className="w-3 h-0.5 border-t border-dashed border-[#3b6ffa]" /> NO
+                  </span>
+                </div>
               </div>
-            ) : marketEvents.length === 0 ? (
-              <div className="text-[11px] text-gray-500 py-3 text-center">
-                No indexed activity for this market yet.
-              </div>
-            ) : (
-              marketEvents.map((e, i) => {
-                const item = toActivity(e);
-                return item ? (
-                  <ActivityFeedItem key={e.id ?? i} item={item} />
-                ) : (
-                  <div key={e.id ?? i} className="rounded-[6px] border border-[#78350f] bg-[#2a1f12] px-3 py-2 text-[11px] text-[#fbbf24]">
-                    Malformed indexed event: {e.id}
+              {timelineError ? (
+                <div className="h-[180px] grid place-items-center rounded-[6px] border border-[#7f1d1d] bg-[#2a1717] px-4 text-center text-[11px] text-[#fca5a5]">
+                  Indexed timeline unavailable: {timelineError}
+                </div>
+              ) : hasHistory ? (
+                <>
+                  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[180px]">
+                    <defs>
+                      <linearGradient id="yesFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#d9ff00" stopOpacity="0.18" />
+                        <stop offset="100%" stopColor="#d9ff00" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {[0, 0.25, 0.5, 0.75, 1].map((g) => (
+                      <line
+                        key={g}
+                        x1={0}
+                        x2={W}
+                        y1={g * H}
+                        y2={g * H}
+                        stroke="#262626"
+                        strokeWidth={1}
+                        strokeDasharray="2 4"
+                      />
+                    ))}
+                    <path d={areaPath} fill="url(#yesFill)" />
+                    <polyline fill="none" stroke="#d9ff00" strokeWidth={2} vectorEffect="non-scaling-stroke" points={yesLine} />
+                    <polyline fill="none" stroke="#3b6ffa" strokeWidth={1.5} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" points={noLine} />
+                  </svg>
+                  <div className="flex justify-between text-[10px] text-gray-500 mt-1 font-mono tabular-nums">
+                    {["7d", "6d", "5d", "4d", "3d", "2d", "1d"].map((d) => (
+                      <span key={d}>{d}</span>
+                    ))}
                   </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+                  <TimelineMarkers points={timeline} explorerBase={explorerBase} />
+                </>
+              ) : (
+                <div className="h-[180px] grid place-items-center text-[11px] text-gray-500">
+                  No indexed probability timeline yet
+                </div>
+              )}
+            </div>
 
-        <MarketComments marketId={id} />
+            {/* Mobile-only bet entry (sticky aside is desktop). */}
+            <div className="grid grid-cols-2 gap-2 lg:hidden">
+              <BetButton variant="yes" size="xl" price={yesPrice} multiplier={yesMult} onClick={() => setBetSide("yes")} />
+              <BetButton variant="no" size="xl" price={noPrice} multiplier={noMult} onClick={() => setBetSide("no")} />
+            </div>
+
+            <TabBar
+              tabs={[
+                { id: "overview", label: "Overview" },
+                { id: "rules", label: "Rules & on-chain" },
+                { id: "activity", label: "Activity", count: marketEvents.length },
+                { id: "discussion", label: "Discussion" },
+              ] as TabItem<typeof tab>[]}
+              active={tab}
+              onChange={setTab}
+            />
+
+            {tab === "overview" && (
+              <div className="space-y-4">
+                <MarketGroupPanel group={marketGroup} arbitrage={groupArbitrage} />
+                <OpportunityPanel opportunities={opportunities} />
+                <PoolPanel
+                  yesPoolUsd={view.volume * view.yesPct}
+                  noPoolUsd={view.volume * (1 - view.yesPct)}
+                  draftStakeUsd={undefined}
+                  draftSide={undefined}
+                />
+                <RepriceFeed timeline={timeline} explorerBase={`${explorerBase}/tx/`} />
+                <DecisionSidebar
+                  category={view.category}
+                  poolDepthUsd={view.volume}
+                  resolvesInMs={view.resolvesInMs}
+                  oracleType={market.oracleType}
+                  isResolved={market.status === "resolved"}
+                />
+              </div>
+            )}
+
+            {tab === "rules" && (
+              <div className="space-y-4">
+                <ResolutionStatus
+                  marketId={view.id}
+                  verifierAddress={
+                    process.env.NEXT_PUBLIC_AI_JUDGE_VERIFIER_ADDRESS as
+                      | `0x${string}`
+                      | undefined
+                  }
+                  chainId={view.chainId}
+                  poolResolved={market.status === "resolved"}
+                  resolvedOutcome={market.resolvedOutcome}
+                />
+                <GmxSignalCards market={market} />
+                <ResolutionTimelinePanel disputes={resolutionDisputes} explorerBase={explorerBase} />
+                <div className="panel p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[11px] text-gray-500">Trust layer</span>
+                    <span className="caps">indexed proof</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    <TrustItem label="Pool" value={market.poolAddress} mono missingLabel="missing pool address" />
+                    <TrustItem label="Factory" value={market.factoryAddress} mono missingLabel="missing factory address" />
+                    <TrustItem label="Creation tx" value={market.creationTxHash} mono missingLabel="missing creation tx" />
+                    <TrustItem label="Resolver" value={market.resolverAddress ?? market.oracleType} mono missingLabel="missing resolver" />
+                    <TrustItem label="Source" value={market.sourceUrl} link missingLabel="missing source URL" />
+                    <TrustItem label="Source proof" value={market.proofUrl} link missingLabel="no source proof indexed" optional />
+                    <TrustItem label="Evidence hash" value={market.resolutionEvidenceHash} mono missingLabel="no evidence hash yet" optional />
+                    <TrustItem label="Evidence tx" value={resolutionProofTxUrl} link missingLabel="no evidence tx yet" optional />
+                    <TrustItem label="Proposer" value={market.resolutionProposer} mono missingLabel="no proposer yet" optional />
+                    <TrustItem label="Proposed at" value={resolutionProposedAt} missingLabel="not proposed yet" optional />
+                    <TrustItem label="Imported" value={market.importCandidateId ? "public source" : undefined} missingLabel="not imported" optional />
+                    <TrustItem label="Chain" value={market.chainId ? String(market.chainId) : undefined} mono missingLabel="missing chain id" />
+                  </div>
+                  {market.resolutionCriteria && (
+                    <div className="mt-3 rounded-[8px] border border-[#34312e] bg-[#211f1e] p-3">
+                      <span className="caps">Resolution rules</span>
+                      <p className="mt-1.5 text-[12.5px] leading-relaxed text-gray-400">
+                        {market.resolutionCriteria}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <div className="panel p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[11px] text-gray-500">Share proof</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => void shareMarketLink()}
+                        className="inline-flex items-center gap-1.5 rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2.5 py-1.5 text-[11px] text-gray-300 hover:border-[#3a3a3a] hover:text-white"
+                      >
+                        <Share2 className="h-3 w-3" /> Share
+                      </button>
+                      <button
+                        onClick={() => void copyProofSummary()}
+                        className="inline-flex items-center gap-1.5 rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2.5 py-1.5 text-[11px] text-gray-300 hover:border-[#3a3a3a] hover:text-white"
+                      >
+                        <Copy className="h-3 w-3" /> Copy proof
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    <ProofLink label="Market link" value={marketUrl} href={marketUrl} onCopy={() => void copyText(marketUrl, "Market link")} />
+                    <ProofLink
+                      label="OG card"
+                      value={ogCardPath}
+                      href={ogCardPath}
+                      onCopy={() => void copyText(`${window.location.origin}${ogCardPath}`, "OG card link")}
+                    />
+                    <ProofLink label="Pool contract" value={market.poolAddress} href={poolUrl} />
+                    <ProofLink label="Factory contract" value={market.factoryAddress} href={factoryUrl} />
+                    <ProofLink label="Creation tx" value={market.creationTxHash} href={creationTxUrl} />
+                    <ProofLink label="Resolution tx" value={market.resolutionTxHash} href={resolutionTxUrl} />
+                    <ProofLink label="Evidence hash" value={market.resolutionEvidenceHash} />
+                    <ProofLink label="Evidence tx" value={market.resolutionProofTxHash} href={resolutionProofTxUrl} />
+                    <ProofLink label="Proposer" value={market.resolutionProposer} href={addressUrl(explorerBase, market.resolutionProposer)} />
+                    <ProofLink label="Source" value={market.sourceUrl} href={market.sourceUrl} />
+                    <ProofLink label="Source proof" value={market.proofUrl} href={market.proofUrl} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "activity" && (
+              <div className="space-y-4">
+                <div className="panel p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-gray-500">AI Market-Makers</span>
+                      <Pill tone={view.aiLpCount > 0 ? "accent" : "neutral"}>
+                        {view.aiLpCount > 0 ? "indexed agent activity" : "no indexed activity"}
+                      </Pill>
+                    </div>
+                    <span className="text-[11px] text-gray-500 font-mono tabular-nums">
+                      {view.aiLpCount} active
+                    </span>
+                  </div>
+                  {aiLpActivity.length > 0 ? (
+                    <div className="space-y-2">
+                      {aiLpActivity.slice(0, 5).map((item, index) => (
+                        <ActivityFeedItem key={`${item.transactionHash ?? item.ago}:${index}`} item={item} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={Bot}
+                      title="No AI LPs yet"
+                      description="No indexed AI liquidity-provider activity is available for this market."
+                    />
+                  )}
+                </div>
+                <div className="panel p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <CapsLabel>Activity on this market</CapsLabel>
+                    <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#d9ff00] animate-pulse" />
+                      live
+                    </span>
+                  </div>
+                  <div>
+                    {activityError ? (
+                      <div className="rounded-[6px] border border-[#7f1d1d] bg-[#2a1717] px-3 py-3 text-center text-[11px] text-[#fca5a5]">
+                        Indexed activity unavailable: {activityError}
+                      </div>
+                    ) : marketEvents.length === 0 ? (
+                      <div className="text-[11px] text-gray-500 py-3 text-center">
+                        No indexed activity for this market yet.
+                      </div>
+                    ) : (
+                      marketEvents.map((e, i) => {
+                        const item = toActivity(e);
+                        return item ? (
+                          <ActivityFeedItem key={e.id ?? i} item={item} />
+                        ) : (
+                          <div key={e.id ?? i} className="rounded-[6px] border border-[#78350f] bg-[#2a1f12] px-3 py-2 text-[11px] text-[#fbbf24]">
+                            Malformed indexed event: {e.id}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+                <PositionsFeed events={marketEvents} explorerBase={`${explorerBase}/tx/`} />
+              </div>
+            )}
+
+            {tab === "discussion" && <MarketComments marketId={id} />}
+          </div>
+
+          {/* Sticky bet box (desktop). Mobile uses the fixed bottom bar below. */}
+          <aside className="hidden lg:block">
+            <div className="sticky top-20 space-y-3">
+              <TradeModePanel mode={tradeMode} onModeChange={setTradeMode} />
+              {tradeMode === "market" ? (
+                <>
+                  <div className="panel p-4 space-y-2">
+                    <div className="flex items-baseline justify-between text-[11px] text-gray-500">
+                      <span>YES ${yesPrice.toFixed(2)} · {yesMult.toFixed(2)}x</span>
+                      <span>NO ${noPrice.toFixed(2)} · {noMult.toFixed(2)}x</span>
+                    </div>
+                    <BetButton variant="yes" size="xl" price={yesPrice} multiplier={yesMult} onClick={() => setBetSide("yes")} />
+                    <BetButton variant="no" size="xl" price={noPrice} multiplier={noMult} onClick={() => setBetSide("no")} />
+                  </div>
+                  <AmmExitPanel market={market} liquidity={liquidity} address={address} />
+                </>
+              ) : (
+                <LimitOrderPanel market={market} orders={orders} bestBidBps={market.bestBidBps} bestAskBps={market.bestAskBps} address={address} />
+              )}
+            </div>
+          </aside>
+        </div>
 
         {toast && (
           <div className="fixed bottom-20 md:bottom-6 right-6 z-50 rounded-[6px] border border-[#262626] bg-[#1f1f1f] px-4 py-2 text-sm text-white shadow-lg">
@@ -814,14 +793,14 @@ export function MarketDetailClient({ id }: { id: string }) {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setBetSide("yes")}
-            className="h-11 rounded-[6px] bg-[#10b981] px-3 text-left text-black shadow-lg active:scale-[0.98]"
+            className="h-11 rounded-[6px] bg-[#d9ff00] px-3 text-left text-black shadow-lg active:scale-[0.98]"
           >
             <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">YES</span>
             <span className="font-mono text-sm font-semibold">{Math.round(yesPrice * 100)}% - {yesMult.toFixed(2)}x</span>
           </button>
           <button
             onClick={() => setBetSide("no")}
-            className="h-11 rounded-[6px] bg-[#ef4444] px-3 text-left text-white shadow-lg active:scale-[0.98]"
+            className="h-11 rounded-[6px] bg-[#3b6ffa] px-3 text-left text-white shadow-lg active:scale-[0.98]"
           >
             <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">NO</span>
             <span className="font-mono text-sm font-semibold">{Math.round(noPrice * 100)}% - {noMult.toFixed(2)}x</span>
