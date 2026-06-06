@@ -161,6 +161,7 @@ function printDeployPlan(
     ["LiquidityVault.sol", "LiquidityVault"],
     ["AdjudexOrderMatcher.sol", "AdjudexOrderMatcher"],
     ["ExclusiveOutcomeRegistry.sol", "ExclusiveOutcomeRegistry"],
+    ["OptimisticOracleResolver.sol", "OptimisticOracleResolver"],
     ...(process.env.PARLAY_PROTOTYPE_ENABLED === "1"
       ? ([["ParlayPoolPrototype.sol", "ParlayPoolPrototype"]] as Array<[string, string]>)
       : []),

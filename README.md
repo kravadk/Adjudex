@@ -483,6 +483,14 @@ explicitly desired.
 `kubo`). Missing or unsupported providers fail the proof flow before any
 on-chain anchor is attempted.
 
+> **Deployment status:** the on-chain anchor step (3) requires a deployed
+> `ProofAnchor` and `NEXT_PUBLIC_PROOF_ANCHOR_ADDRESS` / `PROOF_ANCHOR_DEPLOYER_KEY`.
+> The contract is in `scripts/deploy-contracts.ts` but the current Sepolia
+> snapshot ([`deployments/421614.json`](deployments/421614.json), 2026-05-27)
+> predates it — re-run `pnpm contracts:deploy` to deploy the full stack. Until
+> then the proof is verified, persisted and IPFS-pinned, but the anchor step
+> degrades to `anchor.status='skipped'` rather than writing on-chain.
+
 ---
 
 ## EIP-712 signed bet quotes
