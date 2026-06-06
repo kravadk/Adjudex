@@ -16,6 +16,11 @@ import { keccak256, stringToHex } from "viem";
 import { query } from "./db";
 import { getMatchSourceByKind, type MatchResult } from "./feeds";
 import {
+  aiCrossCheck,
+  hybridResolutionEnabled,
+  type AiCrossCheck,
+} from "./feeds/ai-verdict";
+import {
   aiJudgeVerifierWriteAbi,
   autoPipelineConfigError,
   getCreatorClients,
@@ -42,6 +47,11 @@ type AutoRow = {
   team_b: string;
   proposed_outcome: number | null;
   challenge_deadline: string | null;
+  // Joined from `markets` (proposePass only) — used to give the hybrid
+  // AI cross-check the real question/criteria for mirror markets.
+  title?: string | null;
+  description?: string | null;
+  resolution_criteria?: string | null;
 };
 
 function rawMarketId(marketId: string): bigint {
@@ -65,11 +75,13 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
   let proposed = 0;
   let errors = 0;
   const { rows } = await query<AutoRow>(
-    `SELECT market_id, pool_address, source_kind, external_match_id, team_a, team_b,
-            proposed_outcome, challenge_deadline
-       FROM auto_markets
-      WHERE lifecycle = 'open' AND deadline_at < now()
-      ORDER BY deadline_at ASC
+    `SELECT a.market_id, a.pool_address, a.source_kind, a.external_match_id,
+            a.team_a, a.team_b, a.proposed_outcome, a.challenge_deadline,
+            m.title, m.description, m.resolution_criteria
+       FROM auto_markets a
+       LEFT JOIN markets m ON m.id = a.market_id
+      WHERE a.lifecycle = 'open' AND a.deadline_at < now()
+      ORDER BY a.deadline_at ASC
       LIMIT 25`,
   );
 
@@ -98,6 +110,53 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
       }
 
       const outcome = outcomeFromResult(result);
+
+      // Hybrid resolution: for sources that mirror a third-party prediction
+      // market, run an independent AI-judge cross-check before proposing.
+      // A clear discrepancy escalates instead of auto-proposing; "uncertain"
+      // (AI lacks current data) or "confirm" proceed. Deterministic sports
+      // feeds skip this entirely.
+      let aiCheck: AiCrossCheck | null = null;
+      if (source.mirrorsExternalMarket && hybridResolutionEnabled()) {
+        const outcomeLabel = outcome === 0 ? "YES" : "NO";
+        const question =
+          row.title?.trim() || row.description?.trim() || `${row.team_a} vs ${row.team_b}`;
+        try {
+          aiCheck = await aiCrossCheck({
+            question,
+            claimedOutcome: outcomeLabel,
+            resolutionCriteria: row.resolution_criteria,
+          });
+        } catch (e) {
+          // Transient AI/network error: don't block, retry next tick.
+          await bumpAttempt(row.market_id, `ai_crosscheck_error:${(e as Error).message}`);
+          continue;
+        }
+        if (aiCheck?.verdict === "dispute") {
+          await query(
+            `UPDATE auto_markets
+                SET lifecycle = 'escalated', last_error = $2, updated_at = now()
+              WHERE market_id = $1`,
+            [row.market_id, `ai_dispute(${outcomeLabel}):${aiCheck.reasoning.slice(0, 400)}`],
+          );
+          // Lock the public market (betting already closed at deadline) so it
+          // is not shown as freely tradeable while it awaits manual review.
+          // Stays within the markets_status_check enum; the "escalated" reason
+          // lives in auto_markets and is surfaced via the admin review endpoint.
+          await query(
+            `UPDATE markets SET status = 'locked', updated_at = now()
+              WHERE id = $1 AND status = 'open'`,
+            [row.market_id],
+          );
+          incCounter("adjudex_markets_escalated_total", { source: row.source_kind });
+          console.warn(
+            `[match-resolve] ESCALATED ${row.market_id}: Polymarket=${outcomeLabel} ` +
+              `but AI disputes — ${aiCheck.reasoning.slice(0, 160)}`,
+          );
+          continue;
+        }
+      }
+
       const evidence = {
         source: row.source_kind,
         externalMatchId: row.external_match_id,
@@ -106,6 +165,12 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
         winner: result.winner,
         scoreText: result.scoreText ?? null,
         fetchedAt: result.fetchedAtIso,
+        // Hybrid cross-check provenance (omitted for deterministic sources;
+        // undefined keys are dropped by JSON.stringify so their evidenceHash
+        // is unchanged).
+        aiVerdict: aiCheck?.verdict,
+        aiReasoning: aiCheck?.reasoning,
+        aiModel: aiCheck?.model,
       };
       const evidenceHash = keccak256(stringToHex(JSON.stringify(evidence)));
       const marketIdBn = rawMarketId(row.market_id);

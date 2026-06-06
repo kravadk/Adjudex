@@ -69,6 +69,12 @@ export type MatchResult = {
 
 export interface MatchSource {
   readonly kind: MatchSourceKind;
+  // When true, fetchResult() mirrors a third-party prediction market's
+  // outcome rather than a deterministic official result. The resolve worker
+  // runs an independent AI-judge cross-check before proposing such markets
+  // and escalates on a clear discrepancy (hybrid resolution). Deterministic
+  // sports/esports feeds leave this unset.
+  readonly mirrorsExternalMarket?: boolean;
   // Upcoming + recently-started matches that should become markets.
   fetchUpcoming(): Promise<IngestMatch[]>;
   // Final result for one match, or null if not yet decided / not found.

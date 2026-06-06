@@ -5,10 +5,11 @@
 // markets (neg-risk), so every `/markets` row is a binary YES/NO with a
 // `groupItemTitle` for grouped events. We mirror each as one Adjudex market.
 //
-// Resolution (Phase 1): mirror Polymarket's official outcome. A closed market
-// reports the winner via `outcomePrices` (winning side ≈ 1). The resolve
-// worker turns that into the signed verdict. Phase 2 layers an independent
-// AI-judge discrepancy check on top.
+// Resolution: mirror Polymarket's official outcome. A closed market reports
+// the winner via `outcomePrices` (winning side ≈ 1). The resolve worker turns
+// that into the signed verdict AND (hybrid, via `mirrorsExternalMarket`) runs
+// an independent AI-judge cross-check first — escalating on a clear discrepancy
+// instead of auto-proposing. See match-resolve-worker + feeds/ai-verdict.
 //
 // Docs: https://docs.polymarket.com/ (Gamma Markets API)
 //
@@ -216,6 +217,9 @@ function mapStatus(m: GammaMarket): MatchStatus {
 export function createPolymarketSource(): MatchSource {
   return {
     kind: "polymarket",
+    // Mirror source: the resolve worker runs an independent AI-judge
+    // cross-check before proposing and escalates on a clear discrepancy.
+    mirrorsExternalMarket: true,
     async fetchUpcoming(): Promise<IngestMatch[]> {
       const limit = maxIngest() * 3; // overfetch, then filter down
       const data = (await getJson(
