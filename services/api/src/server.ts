@@ -2138,6 +2138,101 @@ server.get<{ Querystring: { limit?: string } }>("/api/analytics/retention", asyn
   };
 });
 
+// --- Hybrid resolution: escalated-market admin review (Phase 3) ---
+// Mirror markets (Polymarket) whose AI cross-check disputed the reported
+// outcome are held in auto_markets.lifecycle='escalated'. Admins review the
+// AI reasoning and either approve the mirror outcome (re-propose, skipping the
+// AI check) or skip the market (stakes refunded after the on-chain grace).
+type EscalatedRow = {
+  market_id: string;
+  pool_address: string;
+  source_kind: string;
+  external_match_id: string;
+  category: string;
+  team_a: string;
+  team_b: string;
+  last_error: string | null;
+  resolve_attempts: number;
+  deadline_at: string | Date;
+  updated_at: string | Date;
+  title: string | null;
+  description: string | null;
+  resolution_criteria: string | null;
+  source_url: string | null;
+};
+
+server.get("/api/admin/escalated", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+  const { rows } = await query<EscalatedRow>(
+    `SELECT a.market_id, a.pool_address, a.source_kind, a.external_match_id,
+            a.category, a.team_a, a.team_b, a.last_error, a.resolve_attempts,
+            a.deadline_at, a.updated_at,
+            m.title, m.description, m.resolution_criteria, m.source_url
+       FROM auto_markets a
+       LEFT JOIN markets m ON m.id = a.market_id
+      WHERE a.lifecycle = 'escalated'
+      ORDER BY a.updated_at DESC
+      LIMIT 200`,
+  );
+  return rows.map((r) => ({
+    marketId: r.market_id,
+    poolAddress: r.pool_address,
+    source: r.source_kind,
+    externalId: r.external_match_id,
+    category: r.category,
+    title: r.title,
+    question: r.title ?? r.description ?? `${r.team_a} vs ${r.team_b}`,
+    resolutionCriteria: r.resolution_criteria,
+    sourceUrl: r.source_url,
+    yesLabel: r.team_a,
+    noLabel: r.team_b,
+    aiReason: r.last_error,
+    attempts: r.resolve_attempts,
+    deadlineIso: toIso(r.deadline_at),
+    escalatedAtIso: toIso(r.updated_at),
+  }));
+});
+
+server.post<{ Params: { marketId: string }; Body: { action?: string } }>(
+  "/api/admin/escalated/:marketId",
+  async (request, reply) => {
+    const admin = await requireImportAdmin(request.headers.cookie);
+    if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+    const action = request.body?.action;
+    const marketId = request.params.marketId;
+    if (action !== "approve" && action !== "skip") {
+      return reply.code(400).send({ error: "action_required", detail: "action must be 'approve' or 'skip'" });
+    }
+    if (action === "approve") {
+      // Re-queue for proposal with the mirror outcome; the resolve worker
+      // skips the AI cross-check because manual_cleared is set.
+      const res = await query(
+        `UPDATE auto_markets
+            SET lifecycle = 'open', manual_cleared = true, last_error = NULL,
+                resolve_attempts = 0, updated_at = now()
+          WHERE market_id = $1 AND lifecycle = 'escalated'`,
+        [marketId],
+      );
+      if (!res.rowCount) return reply.code(404).send({ error: "not_escalated" });
+      await query(
+        `UPDATE markets SET status = 'open', updated_at = now() WHERE id = $1 AND status = 'locked'`,
+        [marketId],
+      );
+      return { ok: true, marketId, action };
+    }
+    // skip: stop trying to resolve; on-chain refundAfterGrace returns stakes.
+    const res = await query(
+      `UPDATE auto_markets
+          SET lifecycle = 'skipped', last_error = 'admin_skipped', updated_at = now()
+        WHERE market_id = $1 AND lifecycle = 'escalated'`,
+      [marketId],
+    );
+    if (!res.rowCount) return reply.code(404).send({ error: "not_escalated" });
+    return { ok: true, marketId, action };
+  },
+);
+
 server.get("/api/analytics/chains", async () => {
   const rows = await query<{
     chain_id: number;

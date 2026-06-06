@@ -656,16 +656,23 @@ CREATE TABLE IF NOT EXISTS auto_markets (
   team_a TEXT NOT NULL,
   team_b TEXT NOT NULL,
   deadline_at TIMESTAMPTZ NOT NULL,
-  -- open -> proposed -> finalized | refunded | skipped
+  -- open -> proposed -> finalized | refunded | skipped | escalated
+  -- 'escalated': hybrid AI cross-check disputed a mirror outcome; held for
+  -- manual admin review (see GET/POST /api/admin/escalated).
   lifecycle TEXT NOT NULL DEFAULT 'open',
   proposed_outcome INTEGER,
   proposed_at TIMESTAMPTZ,
   challenge_deadline TIMESTAMPTZ,
   resolve_attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
+  -- Set true when an admin approves an escalated market: the resolve worker
+  -- then re-proposes with the mirror outcome and skips the AI cross-check.
+  manual_cleared BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE auto_markets ADD COLUMN IF NOT EXISTS manual_cleared BOOLEAN NOT NULL DEFAULT false;
 
 CREATE UNIQUE INDEX IF NOT EXISTS auto_markets_source_match_uidx
   ON auto_markets (source_kind, external_match_id);

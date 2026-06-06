@@ -52,6 +52,8 @@ type AutoRow = {
   title?: string | null;
   description?: string | null;
   resolution_criteria?: string | null;
+  // When an admin approved a previously-escalated market, skip the AI check.
+  manual_cleared?: boolean;
 };
 
 function rawMarketId(marketId: string): bigint {
@@ -77,7 +79,7 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
   const { rows } = await query<AutoRow>(
     `SELECT a.market_id, a.pool_address, a.source_kind, a.external_match_id,
             a.team_a, a.team_b, a.proposed_outcome, a.challenge_deadline,
-            m.title, m.description, m.resolution_criteria
+            a.manual_cleared, m.title, m.description, m.resolution_criteria
        FROM auto_markets a
        LEFT JOIN markets m ON m.id = a.market_id
       WHERE a.lifecycle = 'open' AND a.deadline_at < now()
@@ -117,7 +119,7 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
       // (AI lacks current data) or "confirm" proceed. Deterministic sports
       // feeds skip this entirely.
       let aiCheck: AiCrossCheck | null = null;
-      if (source.mirrorsExternalMarket && hybridResolutionEnabled()) {
+      if (source.mirrorsExternalMarket && hybridResolutionEnabled() && !row.manual_cleared) {
         const outcomeLabel = outcome === 0 ? "YES" : "NO";
         const question =
           row.title?.trim() || row.description?.trim() || `${row.team_a} vs ${row.team_b}`;
