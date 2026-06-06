@@ -64,3 +64,8 @@ skills-lock.json
 
 # scratch / session artifacts
 chat-history/
+
+# foundry (forge test) — toolchain deps + build cache, not vendored
+/lib/
+/cache/
+/broadcast/

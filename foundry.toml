@@ -1,0 +1,23 @@
+# Foundry config for bytecode-level contract tests.
+#
+# Setup (one-time): install the toolchain (https://getfoundry.sh) and forge-std:
+#   forge install foundry-rs/forge-std
+# Run:
+#   forge test -vvv
+#
+# These tests exercise the COMPILED contracts (deploy + call + assert) — the
+# bytecode-level coverage the vitest harness (compile + ABI + JS-mirror fuzz
+# invariants) cannot give. Solc settings mirror scripts/deploy-contracts.ts.
+[profile.default]
+src = "contracts/src"
+test = "test"
+out = "out"
+libs = ["node_modules", "lib"]
+solc = "0.8.26"
+optimizer = true
+optimizer_runs = 200
+via_ir = true
+remappings = [
+  "@openzeppelin/=node_modules/@openzeppelin/",
+  "forge-std/=lib/forge-std/src/",
+]
