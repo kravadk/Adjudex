@@ -1,17 +1,28 @@
 // Minimal IPFS pinning for proof anchoring. Pins a JSON value and returns its
-// CID. Supports two providers via env:
-//   IPFS_PROVIDER=pinata          IPFS_TOKEN = Pinata JWT
-//   IPFS_PROVIDER=web3.storage    IPFS_TOKEN = web3.storage API token
+// CID. Provider + token come from env:
+//   IPFS_PROVIDER=pinata          PINATA_JWT (or IPFS_TOKEN)
+//   IPFS_PROVIDER=web3.storage    WEB3_STORAGE_TOKEN (or IPFS_TOKEN)
 // When unconfigured the proof-anchor worker skips anchoring (no-op), so this is
 // safe to leave off in environments without an IPFS account.
 
+function ipfsToken(): string | undefined {
+  const provider = process.env.IPFS_PROVIDER?.trim().toLowerCase();
+  if (provider === "pinata") {
+    return (process.env.PINATA_JWT || process.env.IPFS_TOKEN)?.trim() || undefined;
+  }
+  if (provider === "web3.storage" || provider === "web3storage") {
+    return (process.env.WEB3_STORAGE_TOKEN || process.env.IPFS_TOKEN)?.trim() || undefined;
+  }
+  return process.env.IPFS_TOKEN?.trim() || undefined;
+}
+
 export function ipfsConfigured(): boolean {
-  return Boolean(process.env.IPFS_PROVIDER?.trim()) && Boolean(process.env.IPFS_TOKEN?.trim());
+  return Boolean(process.env.IPFS_PROVIDER?.trim()) && Boolean(ipfsToken());
 }
 
 export async function pinJsonToIpfs(value: unknown): Promise<string> {
   const provider = process.env.IPFS_PROVIDER?.trim().toLowerCase();
-  const token = process.env.IPFS_TOKEN?.trim();
+  const token = ipfsToken();
   if (!provider || !token) throw new Error("ipfs_not_configured");
 
   if (provider === "pinata") {
