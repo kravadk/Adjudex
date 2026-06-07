@@ -28,6 +28,8 @@ import {
   aiJudgeVerifierWriteAbi,
   autoPipelineConfigError,
   getCreatorClients,
+  optimisticResolverAbi,
+  optimisticResolverAddress,
   signJudgeVerdict,
 } from "./feeds/chain";
 import { asNumber, toIso, walletShort } from "./format";
@@ -1508,6 +1510,89 @@ server.post<{ Params: { id: string } }>("/api/admin/markets/:id/finalize", async
   await query(`UPDATE markets SET status = 'resolved', updated_at = now() WHERE id = $1`, [row.id]);
   return { finalized: true, txHash };
 });
+
+// Live state of a market's optimistic assertion (read on-chain so it works
+// without the indexer). Used by the dispute/settle UI.
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+server.get<{ Params: { id: string } }>("/api/markets/:id/assertion", async (request, reply) => {
+  const resolver = optimisticResolverAddress();
+  if (!resolver) return { optimistic: false as const };
+  const market = await query<{ id: string; oracle_type: string | null }>(
+    "SELECT id, oracle_type FROM markets WHERE id = $1",
+    [request.params.id],
+  );
+  const row = market.rows[0];
+  if (!row) return reply.code(404).send({ error: "market_not_found" });
+  if (row.oracle_type !== "optimistic-oracle") return { optimistic: false as const };
+
+  const rpcUrl = process.env.ARBITRUM_SEPOLIA_RPC_URL?.trim();
+  if (!rpcUrl) return reply.code(503).send({ error: "rpc_unconfigured" });
+  const client = createPublicClient({ chain: arbitrumSepolia, transport: http(rpcUrl) });
+  const marketIdBn = BigInt(row.id.includes(":") ? row.id.split(":")[1] : row.id);
+  const a = (await client.readContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "assertions",
+    args: [marketIdBn],
+  })) as readonly [string, string, string, number, string, bigint, bigint, bigint, number];
+  const statusNum = Number(a[8]);
+  const statusLabel = (["none", "asserted", "disputed", "settled"][statusNum] ?? "none") as
+    | "none"
+    | "asserted"
+    | "disputed"
+    | "settled";
+  return {
+    optimistic: true as const,
+    resolver,
+    status: statusLabel,
+    outcome: statusNum >= 1 ? (Number(a[3]) === 0 ? "YES" : "NO") : null,
+    asserter: a[1] === ZERO_ADDR ? null : a[1],
+    disputer: a[2] === ZERO_ADDR ? null : a[2],
+    bond: a[7].toString(),
+    assertedAt: Number(a[5]),
+    liveness: Number(a[6]),
+    disputeDeadline: statusNum === 1 ? Number(a[5]) + Number(a[6]) : null,
+  };
+});
+
+// Admin arbitration of a disputed assertion. NOTE: resolveDispute is onlyOwner
+// on the resolver — the creator key must be (or be set to) the resolver owner.
+server.post<{ Params: { id: string }; Body: { finalOutcome?: "YES" | "NO" } }>(
+  "/api/admin/markets/:id/arbitrate",
+  async (request, reply) => {
+    const admin = await requireImportAdmin(request.headers.cookie);
+    if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+    const configError = autoPipelineConfigError();
+    if (configError) return reply.code(503).send({ error: configError });
+    const resolver = optimisticResolverAddress();
+    if (!resolver) return reply.code(503).send({ error: "optimistic_resolver_unconfigured" });
+
+    const final = request.body.finalOutcome;
+    if (final !== "YES" && final !== "NO") return reply.code(400).send({ error: "finalOutcome_required" });
+    const market = await query<{ id: string }>("SELECT id FROM markets WHERE id = $1", [request.params.id]);
+    const row = market.rows[0];
+    if (!row) return reply.code(404).send({ error: "market_not_found" });
+    const marketIdBn = BigInt(row.id.includes(":") ? row.id.split(":")[1] : row.id);
+    const outcome = final === "YES" ? 0 : 1;
+
+    const { walletClient, publicClient } = getCreatorClients();
+    const txHash = await walletClient.writeContract({
+      address: resolver,
+      abi: optimisticResolverAbi,
+      functionName: "resolveDispute",
+      args: [marketIdBn, outcome],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status !== "success") return reply.code(502).send({ error: "arbitrate_reverted", txHash });
+
+    await query(
+      `UPDATE markets SET status = 'resolved', resolved_outcome = $2, resolution_tx_hash = $3, updated_at = now() WHERE id = $1`,
+      [row.id, final, txHash],
+    );
+    await query(`UPDATE auto_markets SET lifecycle = 'finalized', last_error = NULL, updated_at = now() WHERE market_id = $1`, [row.id]);
+    return { arbitrated: true, finalOutcome: final, txHash };
+  },
+);
 
 server.get<{ Params: { id: string } }>("/api/markets/:id/resolution", async (request) => {
   const disputes = await query<ResolutionDisputeRow>(

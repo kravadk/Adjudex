@@ -12,11 +12,11 @@ export function ManualResolveClient() {
   const [marketId, setMarketId] = useState("");
   const [outcome, setOutcome] = useState<"YES" | "NO">("YES");
   const [evidence, setEvidence] = useState("");
-  const [busy, setBusy] = useState<"propose" | "finalize" | null>(null);
+  const [busy, setBusy] = useState<"propose" | "finalize" | "arbitrate" | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const call = async (action: "propose" | "finalize") => {
+  const call = async (action: "propose" | "finalize" | "arbitrate") => {
     if (!marketId.trim()) {
       setError("Enter a market id.");
       return;
@@ -25,10 +25,16 @@ export function ManualResolveClient() {
     setResult(null);
     setError(null);
     try {
+      const body =
+        action === "propose"
+          ? JSON.stringify({ outcome, evidence: evidence.trim() || undefined })
+          : action === "arbitrate"
+            ? JSON.stringify({ finalOutcome: outcome })
+            : undefined;
       const res = await fetch(`/api/admin/markets/${encodeURIComponent(marketId.trim())}/${action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: action === "propose" ? JSON.stringify({ outcome, evidence: evidence.trim() || undefined }) : undefined,
+        body,
       });
       const text = await res.text();
       if (!res.ok) {
@@ -99,6 +105,14 @@ export function ManualResolveClient() {
             className="h-9 px-4 rounded-[6px] border border-[#2a2a2a] text-gray-200 text-[12.5px] font-bold disabled:opacity-40"
           >
             {busy === "finalize" ? "Finalizing…" : "Finalize"}
+          </button>
+          <button
+            onClick={() => void call("arbitrate")}
+            disabled={busy !== null}
+            className="h-9 px-4 rounded-[6px] border border-[#2a2a2a] text-gray-200 text-[12.5px] font-bold disabled:opacity-40"
+            title="Resolve a disputed optimistic assertion to the selected outcome"
+          >
+            {busy === "arbitrate" ? "Arbitrating…" : "Arbitrate dispute"}
           </button>
         </div>
         {result && <div className="text-[11.5px] text-[#5fc295] break-all">{result}</div>}

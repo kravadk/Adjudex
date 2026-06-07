@@ -24,6 +24,7 @@ import { WatchStream } from "@/components/dashboard/watch-stream";
 import { LiveStatusBadge } from "@/components/dashboard/live-status-badge";
 import { MarketComments } from "@/components/dashboard/market-comments";
 import { TabBar, type TabItem } from "@/components/dashboard/tab-bar";
+import { OptimisticDisputePanel } from "@/components/dashboard/optimistic-dispute-panel";
 import {
   ActivityFeedItem,
   CapsLabel,
@@ -623,6 +624,7 @@ export function MarketDetailClient({ id }: { id: string }) {
                   poolResolved={market.status === "resolved"}
                   resolvedOutcome={market.resolvedOutcome}
                 />
+                <OptimisticDisputePanel marketId={view.id} chainId={view.chainId} />
                 <GmxSignalCards market={market} />
                 <ResolutionTimelinePanel disputes={resolutionDisputes} explorerBase={explorerBase} />
                 <div className="panel p-4">
