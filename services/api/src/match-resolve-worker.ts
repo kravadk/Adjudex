@@ -22,8 +22,12 @@ import {
 } from "./feeds/ai-verdict";
 import {
   aiJudgeVerifierWriteAbi,
+  ASSERTION_STATUS,
   autoPipelineConfigError,
+  erc20Abi,
   getCreatorClients,
+  optimisticResolverAbi,
+  optimisticResolverAddress,
   PROPOSAL_STATUS,
   signJudgeVerdict,
 } from "./feeds/chain";
@@ -52,6 +56,8 @@ type AutoRow = {
   title?: string | null;
   description?: string | null;
   resolution_criteria?: string | null;
+  // Resolver kind for this market ('optimistic-oracle' | 'zktls-ai-oracle').
+  oracle_type?: string | null;
   // When an admin approved a previously-escalated market, skip the AI check.
   manual_cleared?: boolean;
 };
@@ -73,13 +79,132 @@ async function bumpAttempt(marketId: string, lastError: string | null): Promise<
   );
 }
 
+type AssertionTuple = readonly [string, string, string, number, string, bigint, bigint, bigint, number];
+
+// Optimistic resolver: assert the outcome with a bond (the AI is the asserter).
+// Humans may then dispute it on-chain; settle/arbitrate happen in finalizePass.
+async function assertOptimistic(
+  row: AutoRow,
+  outcome: 0 | 1,
+  evidenceHash: `0x${string}`,
+  marketIdBn: bigint,
+): Promise<boolean> {
+  const resolver = optimisticResolverAddress();
+  if (!resolver) {
+    await bumpAttempt(row.market_id, "optimistic_resolver_unset");
+    return false;
+  }
+  const { walletClient, publicClient, account } = getCreatorClients();
+  const bond = (await publicClient.readContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "defaultBond",
+  })) as bigint;
+
+  if (bond > 0n) {
+    const stakeToken = process.env.STAKE_TOKEN_ADDRESS?.trim() as `0x${string}` | undefined;
+    if (!stakeToken) {
+      await bumpAttempt(row.market_id, "stake_token_unset");
+      return false;
+    }
+    const allowance = (await publicClient.readContract({
+      address: stakeToken,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [account.address, resolver],
+    })) as bigint;
+    if (allowance < bond) {
+      const approveTx = await walletClient.writeContract({
+        address: stakeToken,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [resolver, bond],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: approveTx });
+    }
+  }
+
+  const txHash = await walletClient.writeContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "assertOutcome",
+    args: [row.pool_address, marketIdBn, outcome, evidenceHash],
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") {
+    await bumpAttempt(row.market_id, `assert_reverted:${txHash}`);
+    return false;
+  }
+
+  const a = (await publicClient.readContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "assertions",
+    args: [marketIdBn],
+  })) as AssertionTuple;
+  const challengeDeadline = new Date((Number(a[5]) + Number(a[6])) * 1000).toISOString();
+
+  await query(
+    `UPDATE auto_markets
+        SET lifecycle = 'proposed', proposed_outcome = $2, proposed_at = now(),
+            challenge_deadline = $3, last_error = NULL, updated_at = now()
+      WHERE market_id = $1`,
+    [row.market_id, outcome, challengeDeadline],
+  );
+  await query(
+    `UPDATE markets
+        SET status = 'resolving', resolution_evidence_hash = $2,
+            resolution_proposer = $3, resolution_proposed_at = now(),
+            resolution_tx_hash = $4, updated_at = now()
+      WHERE id = $1`,
+    [row.market_id, evidenceHash, account.address, txHash],
+  );
+  console.log(`[match-resolve] asserted (optimistic) market ${row.market_id} outcome=${outcome} tx=${txHash}`);
+  return true;
+}
+
+// Settle an undisputed assertion after liveness. Disputed assertions wait for
+// admin arbitration (resolveDispute); they are never auto-settled here.
+async function settleOptimistic(
+  marketIdBn: bigint,
+): Promise<{ result: "settled" | "disputed" | "pending"; txHash?: string }> {
+  const resolver = optimisticResolverAddress();
+  if (!resolver) return { result: "pending" };
+  const { walletClient, publicClient } = getCreatorClients();
+  const a = (await publicClient.readContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "assertions",
+    args: [marketIdBn],
+  })) as AssertionTuple;
+  const status = Number(a[8]);
+  if (status === ASSERTION_STATUS.DISPUTED) return { result: "disputed" };
+  if (status === ASSERTION_STATUS.SETTLED) return { result: "settled" };
+  const canSettle = (await publicClient.readContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "canSettle",
+    args: [marketIdBn],
+  })) as boolean;
+  if (!canSettle) return { result: "pending" };
+  const txHash = await walletClient.writeContract({
+    address: resolver,
+    abi: optimisticResolverAbi,
+    functionName: "settle",
+    args: [marketIdBn],
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") return { result: "pending" };
+  return { result: "settled", txHash };
+}
+
 async function proposePass(): Promise<{ proposed: number; errors: number }> {
   let proposed = 0;
   let errors = 0;
   const { rows } = await query<AutoRow>(
     `SELECT a.market_id, a.pool_address, a.source_kind, a.external_match_id,
             a.team_a, a.team_b, a.proposed_outcome, a.challenge_deadline,
-            a.manual_cleared, m.title, m.description, m.resolution_criteria
+            a.manual_cleared, m.title, m.description, m.resolution_criteria, m.oracle_type
        FROM auto_markets a
        LEFT JOIN markets m ON m.id = a.market_id
       WHERE a.lifecycle = 'open' AND a.deadline_at < now()
@@ -177,6 +302,16 @@ async function proposePass(): Promise<{ proposed: number; errors: number }> {
       const evidenceHash = keccak256(stringToHex(JSON.stringify(evidence)));
       const marketIdBn = rawMarketId(row.market_id);
 
+      // Economic (optimistic) resolver: the AI asserts the outcome with a bond
+      // instead of proposing to AIJudgeVerifier. Humans can then dispute it.
+      if (row.oracle_type === "optimistic-oracle") {
+        if (await assertOptimistic(row, outcome, evidenceHash, marketIdBn)) {
+          proposed += 1;
+          incCounter("adjudex_markets_proposed_total", { source: row.source_kind });
+        }
+        continue;
+      }
+
       const signature = await signJudgeVerdict({
         pool: row.pool_address,
         marketId: marketIdBn,
@@ -230,11 +365,12 @@ async function finalizePass(): Promise<{ finalized: number; errors: number }> {
   let finalized = 0;
   let errors = 0;
   const { rows } = await query<AutoRow>(
-    `SELECT market_id, pool_address, source_kind, external_match_id, team_a, team_b,
-            proposed_outcome, challenge_deadline
-       FROM auto_markets
-      WHERE lifecycle = 'proposed' AND challenge_deadline IS NOT NULL AND challenge_deadline < now()
-      ORDER BY challenge_deadline ASC
+    `SELECT a.market_id, a.pool_address, a.source_kind, a.external_match_id, a.team_a, a.team_b,
+            a.proposed_outcome, a.challenge_deadline, m.oracle_type
+       FROM auto_markets a
+       LEFT JOIN markets m ON m.id = a.market_id
+      WHERE a.lifecycle = 'proposed' AND a.challenge_deadline IS NOT NULL AND a.challenge_deadline < now()
+      ORDER BY a.challenge_deadline ASC
       LIMIT 25`,
   );
 
@@ -242,6 +378,23 @@ async function finalizePass(): Promise<{ finalized: number; errors: number }> {
     try {
       const { walletClient, publicClient, verifierAddress } = getCreatorClients();
       const marketIdBn = rawMarketId(row.market_id);
+
+      // Optimistic resolver: settle if undisputed past liveness; disputed
+      // assertions wait for admin arbitration (resolveDispute).
+      if (row.oracle_type === "optimistic-oracle") {
+        const r = await settleOptimistic(marketIdBn);
+        if (r.result === "disputed") {
+          await bumpAttempt(row.market_id, "disputed_needs_arbitration");
+        } else if (r.result === "settled") {
+          await markFinalized(row, r.txHash);
+          finalized += 1;
+          incCounter("adjudex_markets_finalized_total", { source: row.source_kind });
+        } else {
+          await bumpAttempt(row.market_id, "optimistic_settle_pending");
+        }
+        continue;
+      }
+
       const proposal = (await publicClient.readContract({
         address: verifierAddress,
         abi: aiJudgeVerifierWriteAbi,

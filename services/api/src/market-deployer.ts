@@ -10,6 +10,8 @@ import type { IngestMatch } from "./feeds";
 import {
   getCreatorClients,
   marketFactoryWriteAbi,
+  optimisticResolutionEnabled,
+  optimisticResolverAddress,
 } from "./feeds/chain";
 import { matchQuestion } from "./feeds/match-question";
 
@@ -63,12 +65,19 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
   const { account, walletClient, publicClient, chainId, factoryAddress, verifierAddress } =
     getCreatorClients();
 
+  // Resolver selection: opt-in economic (optimistic) resolver, else AIJudgeVerifier.
+  // The pool's resolver is whatever createSoftMarket receives as `verifier`.
+  const optimisticAddr = optimisticResolverAddress();
+  const useOptimistic = optimisticResolutionEnabled() && Boolean(optimisticAddr);
+  const resolverAddress = (useOptimistic && optimisticAddr ? optimisticAddr : verifierAddress) as `0x${string}`;
+  const oracleType = useOptimistic ? "optimistic-oracle" : "zktls-ai-oracle";
+
   // Spec JSON is what the AI judge + auditors re-derive specHash from.
   const specPayload = {
     title: spec.title,
     description: spec.description,
     category: dbCategory,
-    oracleType: "zktls-ai-oracle" as const,
+    oracleType,
     asset: "USDC" as const,
     deadlineIso,
     feeBps: 100,
@@ -84,7 +93,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
     address: factoryAddress,
     abi: marketFactoryWriteAbi,
     functionName: "createSoftMarket",
-    args: [specHash, deadlineSec, verifierAddress, specUri],
+    args: [specHash, deadlineSec, resolverAddress, specUri],
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") {
@@ -125,7 +134,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
        provenance_note, game, sport, tournament, league, team_a, team_b,
        match_starts_at, best_of_maps, stream_url
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,'zktls-ai-oracle','open','USDC',$9,
+       $1,$2,$3,$4,$5,$6,$7,$8,$24,'open','USDC',$9,
        $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
      )
      ON CONFLICT (id) DO NOTHING`,
@@ -141,7 +150,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
       emojiFor(match),
       match.sourceUrl,
       spec.resolutionCriteria,
-      verifierAddress,
+      resolverAddress,
       new Date(deadlineMs).toISOString(),
       provenance,
       match.game ?? null,
@@ -153,6 +162,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
       new Date(match.matchStartsAtIso).toISOString(),
       match.bestOfMaps ?? null,
       match.streamUrl ?? null,
+      oracleType,
     ],
   );
 

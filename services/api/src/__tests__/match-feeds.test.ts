@@ -7,6 +7,7 @@ import {
 } from "../feeds/match-question";
 import type { IngestMatch } from "../feeds/types";
 import { isSupported } from "../match-ingest-worker";
+import { optimisticResolutionEnabled } from "../feeds/chain";
 
 function esportsMatch(overrides: Partial<IngestMatch> = {}): IngestMatch {
   return {
@@ -120,5 +121,29 @@ describe("isSupported", () => {
   it("accepts football and rejects unknown sports", () => {
     expect(isSupported(esportsMatch({ category: "sports", sport: "football", game: undefined }))).toBe(true);
     expect(isSupported(esportsMatch({ category: "sports", sport: "tennis", game: undefined }))).toBe(false);
+  });
+});
+
+describe("optimisticResolutionEnabled", () => {
+  const prevFlag = process.env.OPTIMISTIC_RESOLUTION_ENABLED;
+  const prevAddr = process.env.OPTIMISTIC_ORACLE_RESOLVER_ADDRESS;
+  afterEach(() => {
+    if (prevFlag === undefined) delete process.env.OPTIMISTIC_RESOLUTION_ENABLED;
+    else process.env.OPTIMISTIC_RESOLUTION_ENABLED = prevFlag;
+    if (prevAddr === undefined) delete process.env.OPTIMISTIC_ORACLE_RESOLVER_ADDRESS;
+    else process.env.OPTIMISTIC_ORACLE_RESOLVER_ADDRESS = prevAddr;
+  });
+
+  it("is on only when the flag is 1 and the resolver address is set", () => {
+    process.env.OPTIMISTIC_RESOLUTION_ENABLED = "1";
+    process.env.OPTIMISTIC_ORACLE_RESOLVER_ADDRESS = "0xdbad18aaa2db2bbb5a703f4305ad71ea0c1b1258";
+    expect(optimisticResolutionEnabled()).toBe(true);
+
+    process.env.OPTIMISTIC_RESOLUTION_ENABLED = "0";
+    expect(optimisticResolutionEnabled()).toBe(false);
+
+    process.env.OPTIMISTIC_RESOLUTION_ENABLED = "1";
+    delete process.env.OPTIMISTIC_ORACLE_RESOLVER_ADDRESS;
+    expect(optimisticResolutionEnabled()).toBe(false);
   });
 });
