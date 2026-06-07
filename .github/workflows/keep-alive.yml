@@ -1,0 +1,34 @@
+name: keep-alive
+
+# Pings the Render API /health every ~10 min so the free-tier service does not
+# spin down (and the embedded indexer + ingest/resolve workers keep running).
+# NOTE: GitHub only runs `schedule` triggers from the DEFAULT branch (main) —
+# this must be on main to fire automatically. Use "Run workflow" (workflow_dispatch)
+# to test from any branch. GitHub also disables schedules after 60 days of repo
+# inactivity. For guaranteed uptime, use an external monitor or a paid instance.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API health
+        run: |
+          for i in 1 2 3; do
+            if curl -fsS --max-time 60 https://adjudex-api.onrender.com/health; then
+              echo "ok"; exit 0
+            fi
+            echo "retry $i…"; sleep 20
+          done
+          echo "health ping failed (service may be cold-starting)"; exit 0
