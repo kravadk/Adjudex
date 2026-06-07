@@ -42,6 +42,7 @@ import { startOnchainMonitor } from "./onchain-monitor";
 import { startMatchIngestWorker } from "./match-ingest-worker";
 import { startMatchResolveWorker } from "./match-resolve-worker";
 import { startProofAnchorWorker } from "./proof-anchor-worker";
+import { startEmbeddedIndexer } from "./embedded-indexer";
 import { startWebhookWorker } from "./webhook-worker";
 import { registerWebhookRoutes } from "./webhook-routes";
 import { enqueueMarketResolved } from "./webhooks";
@@ -97,6 +98,12 @@ if (process.env.NODE_ENV !== "test" && process.env.MATCH_INGEST_ENABLED === "1")
 // IPFS_PROVIDER/IPFS_TOKEN and the shared MARKET_CREATOR_PRIVATE_KEY.
 if (process.env.NODE_ENV !== "test" && process.env.PROOF_ANCHOR_ENABLED === "1") {
   startProofAnchorWorker();
+}
+// Embedded indexer: run the block indexer inside this API process (free, no
+// separate paid Background Worker). Opt-in via EMBEDDED_INDEXER_ENABLED=1 plus
+// the INDEXER_* env. Contained failure — the API is unaffected if it can't start.
+if (process.env.NODE_ENV !== "test" && process.env.EMBEDDED_INDEXER_ENABLED === "1") {
+  startEmbeddedIndexer();
 }
 await server.register(cors, { origin: true });
 await server.register(fastifyRawBody, {
