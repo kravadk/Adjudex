@@ -369,6 +369,11 @@ ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS source_url TEXT;
 ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS chain_id INTEGER;
 ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS pool_address TEXT;
 ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS wallet_address TEXT;
+-- On-chain anchor state (ProofAnchor.anchor): set once the proof-anchor worker
+-- pins the proof to IPFS and writes the anchor transaction.
+ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS anchor_tx_hash TEXT;
+ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS anchor_cid TEXT;
+ALTER TABLE reclaim_proofs ADD COLUMN IF NOT EXISTS anchored_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS auth_nonces (
   nonce TEXT PRIMARY KEY,

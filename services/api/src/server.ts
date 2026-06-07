@@ -24,7 +24,12 @@ import { privateKeyToAccount } from "viem/accounts";
 import { buildSiweMessage, configuredSiweDomain, createToken, expiredSessionCookie, isNonceExpired, nonceTtlMs, parseCookie, sessionCookie, sessionCookieName, sessionTtlMs } from "./auth";
 import { query, transaction, type QueryExecutor } from "./db";
 import { getActiveMatchSources } from "./feeds";
-import { autoPipelineConfigError } from "./feeds/chain";
+import {
+  aiJudgeVerifierWriteAbi,
+  autoPipelineConfigError,
+  getCreatorClients,
+  signJudgeVerdict,
+} from "./feeds/chain";
 import { asNumber, toIso, walletShort } from "./format";
 import { configuredImportSources, scanImportSource, validateImportCandidate, type ImportCandidateDraft, type ImportSource } from "./importer";
 import { validateMarketDraft } from "./market-validation";
@@ -36,6 +41,7 @@ import { startNotificationWorker } from "./notification-worker";
 import { startOnchainMonitor } from "./onchain-monitor";
 import { startMatchIngestWorker } from "./match-ingest-worker";
 import { startMatchResolveWorker } from "./match-resolve-worker";
+import { startProofAnchorWorker } from "./proof-anchor-worker";
 import { startWebhookWorker } from "./webhook-worker";
 import { registerWebhookRoutes } from "./webhook-routes";
 import { enqueueMarketResolved } from "./webhooks";
@@ -85,6 +91,12 @@ if (process.env.NODE_ENV !== "test" && process.env.ONCHAIN_MONITOR_ENABLED === "
 if (process.env.NODE_ENV !== "test" && process.env.MATCH_INGEST_ENABLED === "1") {
   startMatchIngestWorker();
   startMatchResolveWorker();
+}
+// Proof-anchor worker: pins stored Reclaim proofs to IPFS and writes them to the
+// on-chain ProofAnchor. Off by default; opt-in via PROOF_ANCHOR_ENABLED=1 plus
+// IPFS_PROVIDER/IPFS_TOKEN and the shared MARKET_CREATOR_PRIVATE_KEY.
+if (process.env.NODE_ENV !== "test" && process.env.PROOF_ANCHOR_ENABLED === "1") {
+  startProofAnchorWorker();
 }
 await server.register(cors, { origin: true });
 await server.register(fastifyRawBody, {
@@ -1321,6 +1333,23 @@ server.post<{ Body: { takerHash?: string; makerHashes?: string[] } }>("/api/orde
   return { taker, makers, fillableAmountUsd, avgPriceBps, settlementRequired: true };
 });
 
+server.get("/api/market-groups", async () => {
+  const rows = await query<{ id: string }>(
+    "SELECT id FROM market_groups ORDER BY created_at DESC LIMIT 50",
+  );
+  const groups = [];
+  for (const row of rows.rows) {
+    const group = await getMarketGroup(row.id);
+    if (!group) continue;
+    const totalProbabilityBps = group.outcomes.reduce(
+      (sum: number, outcome: { probabilityBps: number }) => sum + outcome.probabilityBps,
+      0,
+    );
+    groups.push({ ...group, totalProbabilityBps, coherent: totalProbabilityBps <= 10000 });
+  }
+  return groups;
+});
+
 server.post<{ Body: { id?: string; title?: string; outcomes?: Array<{ marketId?: string; label?: string; probabilityBps?: number }> } }>("/api/market-groups", async (request, reply) => {
   const admin = await requireImportAdmin(request.headers.cookie);
   if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
@@ -1390,6 +1419,87 @@ server.get<{ Params: { id: string } }>("/api/market-groups/:id/arbitrage", async
     coherent: totalProbabilityBps > 0 && Math.abs(totalProbabilityBps - 10_000) <= 500,
     outcomes: group.outcomes,
   };
+});
+
+// Admin: manually propose / finalize an AI-judge verdict for a market that is
+// not part of the auto-ingest pipeline. Mirrors the match-resolve worker path
+// (sign verdict -> AIJudgeVerifier.propose; later finalize after the window).
+server.post<{ Params: { id: string }; Body: { outcome?: "YES" | "NO"; evidence?: string } }>(
+  "/api/admin/markets/:id/propose",
+  async (request, reply) => {
+    const admin = await requireImportAdmin(request.headers.cookie);
+    if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+    const configError = autoPipelineConfigError();
+    if (configError) return reply.code(503).send({ error: configError });
+
+    const outcomeLabel = request.body.outcome;
+    if (outcomeLabel !== "YES" && outcomeLabel !== "NO") {
+      return reply.code(400).send({ error: "outcome_required" });
+    }
+    const market = await query<{ id: string; pool_address: string }>(
+      "SELECT id, pool_address FROM markets WHERE id = $1",
+      [request.params.id],
+    );
+    const row = market.rows[0];
+    if (!row?.pool_address) return reply.code(404).send({ error: "market_not_found" });
+
+    const outcome = outcomeLabel === "YES" ? 0 : 1;
+    const pool = row.pool_address as Hex;
+    const marketIdBn = BigInt(row.id.includes(":") ? row.id.split(":")[1] : row.id);
+    const evidence = {
+      manual: true,
+      admin: admin.address,
+      outcome: outcomeLabel,
+      note: request.body.evidence ?? null,
+      at: new Date().toISOString(),
+    };
+    const evidenceHash = keccak256(stringToBytes(JSON.stringify(evidence)));
+    const signature = await signJudgeVerdict({ pool, marketId: marketIdBn, outcome, evidenceHash });
+
+    const { walletClient, publicClient, account, verifierAddress } = getCreatorClients();
+    const txHash = await walletClient.writeContract({
+      address: verifierAddress,
+      abi: aiJudgeVerifierWriteAbi,
+      functionName: "propose",
+      args: [pool, marketIdBn, outcome, evidenceHash, signature],
+    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (receipt.status !== "success") return reply.code(502).send({ error: "propose_reverted", txHash });
+
+    await query(
+      `UPDATE markets SET status = 'resolving', resolution_evidence_hash = $2,
+              resolution_proposer = $3, resolution_proposed_at = now(),
+              resolution_tx_hash = $4, updated_at = now()
+        WHERE id = $1`,
+      [row.id, evidenceHash, account.address, txHash],
+    );
+    return { proposed: true, outcome: outcomeLabel, txHash };
+  },
+);
+
+server.post<{ Params: { id: string } }>("/api/admin/markets/:id/finalize", async (request, reply) => {
+  const admin = await requireImportAdmin(request.headers.cookie);
+  if (!admin.ok) return reply.code(admin.statusCode).send({ error: admin.error });
+  const configError = autoPipelineConfigError();
+  if (configError) return reply.code(503).send({ error: configError });
+
+  const market = await query<{ id: string }>("SELECT id FROM markets WHERE id = $1", [request.params.id]);
+  const row = market.rows[0];
+  if (!row) return reply.code(404).send({ error: "market_not_found" });
+  const marketIdBn = BigInt(row.id.includes(":") ? row.id.split(":")[1] : row.id);
+
+  const { walletClient, publicClient, verifierAddress } = getCreatorClients();
+  const txHash = await walletClient.writeContract({
+    address: verifierAddress,
+    abi: aiJudgeVerifierWriteAbi,
+    functionName: "finalize",
+    args: [marketIdBn],
+  });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+  if (receipt.status !== "success") return reply.code(502).send({ error: "finalize_reverted", txHash });
+
+  await query(`UPDATE markets SET status = 'resolved', updated_at = now() WHERE id = $1`, [row.id]);
+  return { finalized: true, txHash };
 });
 
 server.get<{ Params: { id: string } }>("/api/markets/:id/resolution", async (request) => {

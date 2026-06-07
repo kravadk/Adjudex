@@ -10,6 +10,7 @@ import {
   Crown,
   Gift,
   Layers,
+  Network,
   Send,
   Settings,
   Sparkles,
@@ -51,6 +52,7 @@ const NAV_SECTIONS: { title?: string; items: Item[] }[] = [
   {
     title: "More",
     items: [
+      { href: "/groups", match: "/groups", label: "Groups", Icon: Network },
       { href: "/rhc", match: "/rhc", label: "Robinhood Chain", Icon: Layers },
       { href: "/analytics/sponsors", match: "/analytics/sponsors", label: "Traction", Icon: BarChart3 },
       { href: "/integrations", match: "/integrations", label: "Integrations", Icon: Boxes },
