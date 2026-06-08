@@ -226,3 +226,23 @@ export function optimisticResolutionEnabled(): boolean {
 
 // Assertion.status enum (matches OptimisticOracleResolver.sol ordering).
 export const ASSERTION_STATUS = { NONE: 0, ASSERTED: 1, DISPUTED: 2, SETTLED: 3 } as const;
+
+export function resolverOwnerConfigured(): boolean {
+  return Boolean((process.env.RESOLVER_OWNER_PRIVATE_KEY || process.env.MARKET_CREATOR_PRIVATE_KEY)?.trim());
+}
+
+// Wallet that OWNS the OptimisticOracleResolver — used to call resolveDispute
+// (onlyOwner). Prefer a dedicated RESOLVER_OWNER_PRIVATE_KEY; falls back to
+// MARKET_CREATOR_PRIVATE_KEY when the creator is also the owner.
+export function getResolverOwnerClients() {
+  const key = (process.env.RESOLVER_OWNER_PRIVATE_KEY || process.env.MARKET_CREATOR_PRIVATE_KEY)?.trim();
+  if (!key) throw new Error("RESOLVER_OWNER_PRIVATE_KEY missing");
+  const rpcUrl = process.env.ARBITRUM_SEPOLIA_RPC_URL!;
+  const account = privateKeyToAccount(key as Hex);
+  const transport = http(rpcUrl);
+  return {
+    account,
+    publicClient: createPublicClient({ chain: arbitrumSepolia, transport }),
+    walletClient: createWalletClient({ account, chain: arbitrumSepolia, transport }),
+  };
+}

@@ -28,8 +28,10 @@ import {
   aiJudgeVerifierWriteAbi,
   autoPipelineConfigError,
   getCreatorClients,
+  getResolverOwnerClients,
   optimisticResolverAbi,
   optimisticResolverAddress,
+  resolverOwnerConfigured,
   signJudgeVerdict,
 } from "./feeds/chain";
 import { asNumber, toIso, walletShort } from "./format";
@@ -1575,7 +1577,8 @@ server.post<{ Params: { id: string }; Body: { finalOutcome?: "YES" | "NO" } }>(
     const marketIdBn = BigInt(row.id.includes(":") ? row.id.split(":")[1] : row.id);
     const outcome = final === "YES" ? 0 : 1;
 
-    const { walletClient, publicClient } = getCreatorClients();
+    if (!resolverOwnerConfigured()) return reply.code(503).send({ error: "resolver_owner_unconfigured" });
+    const { walletClient, publicClient } = getResolverOwnerClients();
     const txHash = await walletClient.writeContract({
       address: resolver,
       abi: optimisticResolverAbi,
