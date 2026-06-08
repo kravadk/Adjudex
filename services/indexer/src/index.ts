@@ -351,7 +351,15 @@ async function syncOnce() {
     }
   }
 
-  const fromBlock = cursor.lastBlock === 0n ? 0n : cursor.lastBlock + 1n;
+  // INDEXER_START_BLOCK lets a fresh (or far-behind) indexer skip ahead instead
+  // of crawling from genesis — essential on a high-block-number chain where the
+  // contracts were deployed recently. Fast-forwards a stuck cursor too.
+  const fromBlock =
+    cursor.lastBlock < config.startBlock
+      ? config.startBlock
+      : cursor.lastBlock === 0n
+        ? 0n
+        : cursor.lastBlock + 1n;
   const toBlock =
     fromBlock > safeHead
       ? safeHead
@@ -1278,6 +1286,8 @@ function readIndexerConfig() {
     intervalMs: readRequiredPositiveIntegerEnv("INDEXER_INTERVAL_MS"),
     // Defaults: 3 blocks (Arb Sepolia ~3s finality buffer).
     confirmations: readOptionalPositiveBigIntEnv("INDEXER_CONFIRMATIONS", 3n),
+    // Optional: first block a fresh/behind cursor jumps to (recent deploys).
+    startBlock: readOptionalPositiveBigIntEnv("INDEXER_START_BLOCK", 0n),
     // Optional: the AdjudexOrderMatcher whose OrderFilled events settle the
     // signed-order book. Unset -> on-chain fills are simply not indexed.
     orderMatcherAddress: readOptionalAddressEnv("INDEXER_ORDER_MATCHER_ADDRESS"),
