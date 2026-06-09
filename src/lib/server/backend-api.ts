@@ -22,10 +22,19 @@ export async function proxyToBackend(request: Request, path: string) {
       cache: "no-store",
     });
 
+    // undici (the server-side fetch) transparently decompresses the body, so
+    // the stream we forward is already plain bytes. Copying the backend's
+    // Content-Encoding/Content-Length verbatim makes the browser try to gunzip
+    // an already-decoded body -> ERR_CONTENT_DECODING_FAILED. Strip them.
+    const headers = new Headers(response.headers);
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+    headers.delete("transfer-encoding");
+
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers,
     });
   } catch (error) {
     return NextResponse.json(
