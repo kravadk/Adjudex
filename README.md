@@ -29,6 +29,49 @@ states — never fabricates records.
 
 ---
 
+## ⚡ For judges — live & verifiable
+
+**Live app:** https://adjudex.vercel.app · **Status JSON:** https://adjudex-api.onrender.com/api/status · **Network:** Arbitrum Sepolia (`421614`)
+
+**Thesis in one line:** prediction markets where an **AI proposes the outcome on-chain**, anyone can **dispute it with a bond** (UMA-style economic resolver), and markets **auto-ingest** from real sports / esports / crypto feeds. AI judges, humans keep it honest, the chain settles.
+
+**Deployed contracts** (click → Arbiscan):
+
+| Contract | Address |
+|---|---|
+| MarketFactory | [`0x4cf79c…2869`](https://sepolia.arbiscan.io/address/0x4cf79c89cfd85f788f6a0d8a27e0552902622869) |
+| AIJudgeVerifier (optimistic) | [`0xc097a5…3dcf`](https://sepolia.arbiscan.io/address/0xc097a5ad5af530017aa3748046b56f6c75763dcf) |
+| OptimisticOracleResolver (bonded) | [`0xdbad18…1258`](https://sepolia.arbiscan.io/address/0xdbad18aaa2db2bbb5a703f4305ad71ea0c1b1258) |
+| ProofAnchor | [`0x9c36aa…98ad`](https://sepolia.arbiscan.io/address/0x9c36aa5fa856893ae70e33014985678e4ce198ad) |
+| LiquidityVault | [`0x52c3af…0b2d`](https://sepolia.arbiscan.io/address/0x52c3afa0975e6b72c6b1e0cf3ac805d30b0b0b2d) |
+| AdjudexOrderMatcher | [`0x0f066c…531c`](https://sepolia.arbiscan.io/address/0x0f066c8280e67f88b1c7959595e229541afc531c) |
+| ExclusiveOutcomeRegistry | [`0xb5f9ca…0693`](https://sepolia.arbiscan.io/address/0xb5f9ca1350c3eda3fb2f0c0b7398c88ba2310693) |
+| ReputationOracle | [`0x532ddc…cd70`](https://sepolia.arbiscan.io/address/0x532ddccb09389a35d353f73a06be162d123ccd70) |
+| PriceOracle | [`0xa59054…0189`](https://sepolia.arbiscan.io/address/0xa590547ab9f0f3b6a75121210f5488a85a750189) |
+| TokenizedStockAdapter | [`0x8ad475…581d`](https://sepolia.arbiscan.io/address/0x8ad47542ebbd92696e7c69e756bdf654d867581d) |
+| TestUSDC (stake token) | [`0x5beb1d…d696`](https://sepolia.arbiscan.io/address/0x5beb1dbe90d0c1faa1fa44e175f9f72fd8bcd696) |
+
+**On-chain proof — a full AI-resolution cycle** (market #1, pool `0x3E91677F…5A14`):
+
+| Step | Transaction |
+|---|---|
+| createSoftMarket | [`0x7a5535…`](https://sepolia.arbiscan.io/tx/0x7a55352a0efd7535aab23b98946b73014b7273d03492e1f9b422d33c544460c7) |
+| bet (YES, 5 USDC) | [`0x3ae459…`](https://sepolia.arbiscan.io/tx/0x3ae459b31cc4cafab2ed95dbbcac7ca354fa213365a4bb6b2d9396361cf36137) |
+| 🤖 assertOutcome (AI proposes + bond) | [`0xa752c5…`](https://sepolia.arbiscan.io/tx/0xa752c511b40f18c1f540407bac185c204a38ae84184f7a178486d0b3f1c647c5) |
+| settle (after dispute window) | [`0xe2145d…`](https://sepolia.arbiscan.io/tx/0xe2145d69df1e2d4f1eaea88f6fca887316535468fff667ef4d4b6446f68170c0) |
+| claim (payout) | [`0x79dd1c…`](https://sepolia.arbiscan.io/tx/0x79dd1ca847abbf00b276ed9c3be5948497a0762ef4b0007264b7efa130ed228f) |
+
+Reproduce it: `pnpm tsx --env-file=.env.local scripts/demo-resolution.ts`.
+
+**Sponsor tech actually wired + live** — verify at [`/api/integrations/sponsors`](https://adjudex-api.onrender.com/api/integrations/sponsors):
+- **GMX** — live `@gmx-io/sdk` signals (liquidity / OI / funding / APY) → auto-generated markets. `configured: true`
+- **OpenZeppelin** — load-bearing across the suite: `ReentrancyGuard` / `SafeERC20` / `Ownable2Step` / `Pausable` / `TimelockController`. `configured: true`
+- **ZeroDev** — gasless smart-account bets via a per-bet "Gasless" toggle (Kernel v3.3 / EntryPoint 0.7). `configured: true`
+
+**Verify in 60 seconds:** open the app → connect wallet → mint TestUSDC (faucet) → bet YES/NO on any market → the tx emits `BetPlaced` (click the **tx** chip to Arbiscan). Or `curl /api/status` for live DB / RPC / factory / indexer readiness.
+
+---
+
 ## Product flow
 
 ```text
