@@ -28,6 +28,7 @@ export type MarketView = {
   changePct: number;
   poolAddress?: `0x${string}`;
   chainId?: number;
+  liquidityMode?: "parimutuel" | "amm";
   sourceUrl?: string;
   lifecycle: MarketLifecycle;
   // Esports opt-in (mirrors Market opt-in fields).
@@ -114,6 +115,7 @@ export function toMarketView(market: Market, opts: { featured?: boolean } = {}):
     changePct: market.yesProbabilityChange1h * 100,
     poolAddress: market.poolAddress,
     chainId: market.chainId,
+    liquidityMode: market.liquidityMode,
     sourceUrl: market.sourceUrl,
     lifecycle: lifecycleOf(market),
     game: market.game,

@@ -89,12 +89,25 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
   const specUri = `data:application/json;base64,${Buffer.from(specJson, "utf8").toString("base64")}`;
   const deadlineSec = BigInt(Math.floor(deadlineMs / 1000));
 
-  const txHash = await walletClient.writeContract({
-    address: factoryAddress,
-    abi: marketFactoryWriteAbi,
-    functionName: "createSoftMarket",
-    args: [specHash, deadlineSec, resolverAddress, specUri],
-  });
+  // Default to AMM (Polymarket-style share trading with mid-market exit). The
+  // LiquidityVault seeds the pool with `seedAmount` (it must be pre-funded).
+  // Set MARKET_MODE=parimutuel to fall back to the legacy bank-split pool.
+  const useAmm = (process.env.MARKET_MODE ?? "amm").toLowerCase() === "amm";
+  const liquidityMode = useAmm ? "amm" : "parimutuel";
+  const seedAmount = BigInt(process.env.AMM_SEED_USDC ?? "1000") * 1_000_000n; // USDC = 6 decimals
+  const txHash = useAmm
+    ? await walletClient.writeContract({
+        address: factoryAddress,
+        abi: marketFactoryWriteAbi,
+        functionName: "createAmmMarket",
+        args: [specHash, deadlineSec, resolverAddress, specUri, seedAmount],
+      })
+    : await walletClient.writeContract({
+        address: factoryAddress,
+        abi: marketFactoryWriteAbi,
+        functionName: "createSoftMarket",
+        args: [specHash, deadlineSec, resolverAddress, specUri],
+      });
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") {
     return { status: "skipped", reason: `tx_reverted:${txHash}` };
@@ -132,10 +145,10 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
        title, description, category, oracle_type, status, asset, emoji,
        source_url, resolution_criteria, resolver_address, deadline_at,
        provenance_note, game, sport, tournament, league, team_a, team_b,
-       match_starts_at, best_of_maps, stream_url
+       match_starts_at, best_of_maps, stream_url, liquidity_mode
      ) VALUES (
        $1,$2,$3,$4,$5,$6,$7,$8,$24,'open','USDC',$9,
-       $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
+       $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$25
      )
      ON CONFLICT (id) DO NOTHING`,
     [
@@ -163,6 +176,7 @@ export async function deployMarketFromMatch(match: IngestMatch): Promise<DeployO
       match.bestOfMaps ?? null,
       match.streamUrl ?? null,
       oracleType,
+      liquidityMode,
     ],
   );
 

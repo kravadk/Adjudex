@@ -84,6 +84,21 @@ export const marketFactoryWriteAbi = [
     outputs: [{ name: "marketId", type: "uint256" }],
   },
   {
+    // AMM (OutcomeSharePool) market: same args as createSoftMarket plus a
+    // seedAmount the LiquidityVault splits 50/50 into the pool's reserves.
+    type: "function",
+    name: "createAmmMarket",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "specHash", type: "bytes32" },
+      { name: "deadline", type: "uint256" },
+      { name: "resolver", type: "address" },
+      { name: "specUri", type: "string" },
+      { name: "seedAmount", type: "uint256" },
+    ],
+    outputs: [{ name: "marketId", type: "uint256" }],
+  },
+  {
     type: "event",
     name: "MarketCreated",
     inputs: [
@@ -94,6 +109,15 @@ export const marketFactoryWriteAbi = [
       { indexed: false, name: "resolver", type: "address" },
       { indexed: false, name: "deadline", type: "uint256" },
       { indexed: false, name: "specUri", type: "string" },
+    ],
+  },
+  {
+    type: "event",
+    name: "AmmMarketCreated",
+    inputs: [
+      { indexed: true, name: "marketId", type: "uint256" },
+      { indexed: true, name: "pool", type: "address" },
+      { indexed: false, name: "seedAmount", type: "uint256" },
     ],
   },
 ] as const;

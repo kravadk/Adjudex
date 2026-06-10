@@ -576,10 +576,16 @@ export function MarketDetailClient({ id }: { id: string }) {
               )}
             </div>
 
-            {/* Mobile-only bet entry (sticky aside is desktop). */}
-            <div className="grid grid-cols-2 gap-2 lg:hidden">
-              <BetButton variant="yes" size="xl" price={yesPrice} multiplier={yesMult} onClick={() => setBetSide("yes")} />
-              <BetButton variant="no" size="xl" price={noPrice} multiplier={noMult} onClick={() => setBetSide("no")} />
+            {/* Mobile-only trade entry (sticky aside is desktop). */}
+            <div className="lg:hidden">
+              {view.liquidityMode === "amm" ? (
+                <AmmExitPanel market={market} liquidity={liquidity} address={address} />
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <BetButton variant="yes" size="xl" price={yesPrice} multiplier={yesMult} onClick={() => setBetSide("yes")} />
+                  <BetButton variant="no" size="xl" price={noPrice} multiplier={noMult} onClick={() => setBetSide("no")} />
+                </div>
+              )}
             </div>
 
             <TabBar
@@ -769,7 +775,9 @@ export function MarketDetailClient({ id }: { id: string }) {
             <div className="sticky top-20 space-y-3">
               <TradeModePanel mode={tradeMode} onModeChange={setTradeMode} />
               {tradeMode === "market" ? (
-                <>
+                view.liquidityMode === "amm" ? (
+                  <AmmExitPanel market={market} liquidity={liquidity} address={address} />
+                ) : (
                   <InlineBetTicket
                     market={view}
                     onPlaced={() => {
@@ -777,8 +785,7 @@ export function MarketDetailClient({ id }: { id: string }) {
                       window.setTimeout(() => setToast(null), 3000);
                     }}
                   />
-                  <AmmExitPanel market={market} liquidity={liquidity} address={address} />
-                </>
+                )
               ) : (
                 <LimitOrderPanel market={market} orders={orders} bestBidBps={market.bestBidBps} bestAskBps={market.bestAskBps} address={address} />
               )}
@@ -793,24 +800,26 @@ export function MarketDetailClient({ id }: { id: string }) {
         )}
       </main>
 
-      <div className="fixed inset-x-0 bottom-14 z-40 border-t border-[#262626] bg-[#181818]/95 p-3 backdrop-blur md:hidden">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setBetSide("yes")}
-            className="h-11 rounded-[6px] bg-[#d9ff00] px-3 text-left text-black shadow-lg active:scale-[0.98]"
-          >
-            <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">YES</span>
-            <span className="font-mono text-sm font-semibold">{Math.round(yesPrice * 100)}% - {yesMult.toFixed(2)}x</span>
-          </button>
-          <button
-            onClick={() => setBetSide("no")}
-            className="h-11 rounded-[6px] bg-[#3b6ffa] px-3 text-left text-white shadow-lg active:scale-[0.98]"
-          >
-            <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">NO</span>
-            <span className="font-mono text-sm font-semibold">{Math.round(noPrice * 100)}% - {noMult.toFixed(2)}x</span>
-          </button>
+      {view.liquidityMode !== "amm" && (
+        <div className="fixed inset-x-0 bottom-14 z-40 border-t border-[#262626] bg-[#181818]/95 p-3 backdrop-blur md:hidden">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setBetSide("yes")}
+              className="h-11 rounded-[6px] bg-[#d9ff00] px-3 text-left text-black shadow-lg active:scale-[0.98]"
+            >
+              <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">YES</span>
+              <span className="font-mono text-sm font-semibold">{Math.round(yesPrice * 100)}% - {yesMult.toFixed(2)}x</span>
+            </button>
+            <button
+              onClick={() => setBetSide("no")}
+              className="h-11 rounded-[6px] bg-[#3b6ffa] px-3 text-left text-white shadow-lg active:scale-[0.98]"
+            >
+              <span className="block text-[10px] font-bold uppercase tracking-[0.12em]">NO</span>
+              <span className="font-mono text-sm font-semibold">{Math.round(noPrice * 100)}% - {noMult.toFixed(2)}x</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {betSide && (
         <BetForm
