@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { notFound } from "next/navigation";
 import { BarChart3, ChevronLeft, Share2, Flame, Bot, Star, Copy, ExternalLink, LineChart } from "lucide-react";
 import { keccak256, parseUnits, stringToBytes, zeroAddress, type Address } from "viem";
-import { readContract, signTypedData, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { readContract, signTypedData, simulateContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import testUsdcAbi from "@/lib/abi/TestUSDC.json";
 import { stakeTokenForChain } from "@/lib/stake-token";
 import { describeTxError } from "@/lib/utils/decode-error";
@@ -1362,15 +1362,35 @@ function AmmExitPanel({
     try {
       let hash: `0x${string}`;
       if (mode === "buy") {
+        // Preflight: a buy ends in stake.transferFrom and reverts without
+        // enough USDC. Catch it here so the wallet never shows a generic
+        // "unknown transaction" warning.
+        if (stakeToken) {
+          const balance = (await readContract(wagmiConfig, {
+            address: stakeToken,
+            abi: testUsdcAbi,
+            functionName: "balanceOf",
+            args: [address as Address],
+            chainId: market.chainId,
+          })) as bigint;
+          if (balance < units) {
+            setStatus("Insufficient USDC balance. Use the faucet to mint test USDC first.");
+            setBusy(false);
+            return;
+          }
+        }
         await ensureApproval(units);
-        setStatus("Waiting for wallet signature.");
-        hash = await writeContract(wagmiConfig, {
+        setStatus("Simulating buy.");
+        const sim = await simulateContract(wagmiConfig, {
+          account: address as Address,
           address: market.poolAddress as Address,
           abi: outcomeSharePoolAbi,
           functionName: "buy",
           args: [sideIdx, units],
           chainId: market.chainId,
         });
+        setStatus("Waiting for wallet signature.");
+        hash = await writeContract(wagmiConfig, sim.request);
       } else if (mode === "sell") {
         setStatus("Waiting for wallet signature.");
         hash = await writeContract(wagmiConfig, {
