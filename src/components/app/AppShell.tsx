@@ -12,10 +12,15 @@ import { TopUtility } from "@/components/dashboard/top-utility";
 // Routes that opt out of the app chrome (sidebar / rails / footer) and render
 // full-bleed — the marketing landing. Everything else keeps the dashboard shell.
 const BARE_PREFIXES = ["/landing"];
+// The market detail page is a focused two-column layout (hero + chart on the
+// left, sticky bet ticket on the right); a third Trending/New rail competes for
+// width and adds noise, so it opts out of the rail.
+const RAIL_HIDDEN_PREFIXES = ["/market"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const bare = BARE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const hideRail = RAIL_HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   if (bare) return <>{children}</>;
 
@@ -28,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <NetworkBanner />
           <div className="flex gap-8">
             <main className="flex-1 min-w-0">{children}</main>
-            <RightRail />
+            {!hideRail && <RightRail />}
           </div>
           <Footer />
         </div>

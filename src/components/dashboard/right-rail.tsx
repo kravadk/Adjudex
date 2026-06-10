@@ -19,31 +19,38 @@ export function RightRail() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      fetch("/api/markets?hotOnly=true", { cache: "no-store" })
+    // Free-tier backend can cold-start (~50s); bound the wait so the rail never
+    // hangs on "Loading…", and always clear the flag via finally.
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    const safeFetch = (url: string) =>
+      fetch(url, { cache: "no-store", signal: controller.signal })
         .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []),
-      fetch("/api/markets", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []),
-    ]).then(([hotRows, allRows]) => {
-      if (!active) return;
-      const top = (hotRows as Market[])
-        .slice()
-        .sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0))
-        .slice(0, 3);
-      const fresh = (allRows as Market[])
-        .slice()
-        .sort((a, b) =>
-          (b.sourcePublishedAtIso ?? "").localeCompare(a.sourcePublishedAtIso ?? ""),
-        )
-        .slice(0, 3);
-      setTrending(top.map((m) => ({ id: m.id, title: m.title, volumeUsd: m.volumeUsd ?? 0 })));
-      setLatest(fresh.map((m) => ({ id: m.id, title: m.title, volumeUsd: m.volumeUsd ?? 0 })));
-      setLoading(false);
-    });
+        .catch(() => []);
+    Promise.all([safeFetch("/api/markets?hotOnly=true"), safeFetch("/api/markets")])
+      .then(([hotRows, allRows]) => {
+        if (!active) return;
+        const top = (hotRows as Market[])
+          .slice()
+          .sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0))
+          .slice(0, 3);
+        const fresh = (allRows as Market[])
+          .slice()
+          .sort((a, b) =>
+            (b.sourcePublishedAtIso ?? "").localeCompare(a.sourcePublishedAtIso ?? ""),
+          )
+          .slice(0, 3);
+        setTrending(top.map((m) => ({ id: m.id, title: m.title, volumeUsd: m.volumeUsd ?? 0 })));
+        setLatest(fresh.map((m) => ({ id: m.id, title: m.title, volumeUsd: m.volumeUsd ?? 0 })));
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
+      controller.abort();
+      window.clearTimeout(timeout);
     };
   }, []);
 

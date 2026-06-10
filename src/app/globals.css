@@ -193,6 +193,41 @@ html[data-compact="on"] .tbl td { padding-top: 8px; padding-bottom: 8px; }
   transition: border-color 0.22s, box-shadow 0.22s;
 }
 .panel:hover { border-color: #423f3c; }
+
+/* Raised panel — a touch lighter + a clearer border so key cards (bet ticket,
+   hero) separate from the #0a0a0a shell instead of melting into it. */
+.panel-raised {
+  background: #181818;
+  border: 1px solid #2c2a27;
+  border-radius: 14px;
+  transition: border-color 0.22s, box-shadow 0.22s;
+}
+.panel-raised:hover { border-color: #38352f; }
+
+/* Slim inline stat strip (market detail) replacing the tall 4-card row. */
+.stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.stat-strip > div {
+  flex: 1 1 0;
+  min-width: 120px;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line-soft);
+}
+.stat-strip > div:last-child { border-right: 0; }
+.stat-strip .s-label { font-size: 10.5px; color: var(--t3); }
+.stat-strip .s-value {
+  margin-top: 2px;
+  font: 600 14px/1.1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--tx);
+}
+
 .panel-head {
   display: flex;
   align-items: center;

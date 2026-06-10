@@ -12,6 +12,7 @@ import { describeTxError } from "@/lib/utils/decode-error";
 import { useAccount } from "wagmi";
 import { BetButton } from "@/components/dashboard/bet-button";
 import { BetForm } from "@/components/dashboard/bet-form";
+import { InlineBetTicket } from "@/components/dashboard/inline-bet-ticket";
 import { ProbabilityBar } from "@/components/dashboard/probability-bar";
 import { AssetLogo } from "@/components/dashboard/asset-logo";
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -184,6 +185,26 @@ export function MarketDetailClient({ id }: { id: string }) {
 
   useEffect(() => {
     let active = true;
+    // Backend GETs can legitimately return an empty 200 body before any rows
+    // are indexed; calling response.json() on "" throws "Unexpected end of JSON
+    // input". Read text first and treat empty/unparseable as an empty list (a
+    // calm empty state), reserving the error slot for real non-2xx failures.
+    const readArray = async <T,>(r: Response): Promise<{ data: T[]; error: string | null }> => {
+      let text = "";
+      try {
+        text = (await r.text()).trim();
+      } catch {
+        return { data: [], error: null };
+      }
+      if (!r.ok) return { data: [], error: text || `Service responded ${r.status}.` };
+      if (!text) return { data: [], error: null };
+      try {
+        const parsed = JSON.parse(text);
+        return { data: Array.isArray(parsed) ? (parsed as T[]) : [], error: null };
+      } catch {
+        return { data: [], error: null };
+      }
+    };
     async function loadProofSurfaces() {
       try {
         const [activityResponse, timelineResponse] = await Promise.all([
@@ -191,27 +212,18 @@ export function MarketDetailClient({ id }: { id: string }) {
           fetch(`/api/markets/${encodeURIComponent(id)}/timeline`, { cache: "no-store" }),
         ]);
         if (!active) return;
-        if (activityResponse.ok) {
-          setMarketEvents((await activityResponse.json()) as ActivityEvent[]);
-          setActivityError(null);
-        } else {
-          setMarketEvents([]);
-          setActivityError(await activityResponse.text());
-        }
-        if (timelineResponse.ok) {
-          setTimeline((await timelineResponse.json()) as MarketTimelinePoint[]);
-          setTimelineError(null);
-        } else {
-          setTimeline([]);
-          setTimelineError(await timelineResponse.text());
-        }
-      } catch (error) {
+        const activity = await readArray<ActivityEvent>(activityResponse);
+        setMarketEvents(activity.data);
+        setActivityError(activity.error);
+        const tl = await readArray<MarketTimelinePoint>(timelineResponse);
+        setTimeline(tl.data);
+        setTimelineError(tl.error);
+      } catch {
         if (!active) return;
         setMarketEvents([]);
         setTimeline([]);
-        const message = error instanceof Error ? error.message : "Indexed proof surfaces unavailable.";
-        setActivityError(message);
-        setTimelineError(message);
+        setActivityError(null);
+        setTimelineError(null);
       }
     }
     void loadProofSurfaces();
@@ -480,25 +492,16 @@ export function MarketDetailClient({ id }: { id: string }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 panel overflow-hidden mb-5">
+        <div className="stat-strip mb-5">
           {[
             { label: "Volume", value: formatUsd(view.volume) },
-            { label: "Resolves", value: <ResolutionTimer ms={view.resolvesInMs} /> },
+            { label: "Resolves in", value: <ResolutionTimer ms={view.resolvesInMs} /> },
             { label: "Traders", value: view.bettors.toLocaleString() },
-            { label: "AI LPs", value: view.aiLpCount, accent: true },
+            { label: "AI LPs", value: view.aiLpCount },
           ].map((s, i) => (
-            <div
-              key={i}
-              className="p-3.5 border-r border-b md:border-b-0 border-[#262626] last:border-r-0"
-            >
-              <div className="text-[11px] text-gray-500">{s.label}</div>
-              <div
-                className={`mt-0.5 font-mono tabular-nums text-[16px] font-semibold ${
-                  s.accent ? "text-[#CCE9E7]" : "text-white"
-                }`}
-              >
-                {s.value}
-              </div>
+            <div key={i}>
+              <div className="s-label">{s.label}</div>
+              <div className="s-value">{s.value}</div>
             </div>
           ))}
         </div>
@@ -531,8 +534,8 @@ export function MarketDetailClient({ id }: { id: string }) {
                 </div>
               </div>
               {timelineError ? (
-                <div className="h-[180px] grid place-items-center rounded-[6px] border border-[#7f1d1d] bg-[#2a1717] px-4 text-center text-[11px] text-[#fca5a5]">
-                  Indexed timeline unavailable: {timelineError}
+                <div className="h-[180px] grid place-items-center rounded-[6px] border border-[color:var(--line)] bg-[color:var(--card-inner)] px-4 text-center text-[11px] text-[color:var(--t3)]">
+                  Probability history is still indexing — check back shortly.
                 </div>
               ) : hasHistory ? (
                 <>
@@ -567,8 +570,8 @@ export function MarketDetailClient({ id }: { id: string }) {
                   <TimelineMarkers points={timeline} explorerBase={explorerBase} />
                 </>
               ) : (
-                <div className="h-[180px] grid place-items-center text-[11px] text-gray-500">
-                  No indexed probability timeline yet
+                <div className="h-[180px] grid place-items-center text-[11px] text-[color:var(--t3)]">
+                  Probability history appears after the first indexed snapshot.
                 </div>
               )}
             </div>
@@ -767,14 +770,13 @@ export function MarketDetailClient({ id }: { id: string }) {
               <TradeModePanel mode={tradeMode} onModeChange={setTradeMode} />
               {tradeMode === "market" ? (
                 <>
-                  <div className="panel p-4 space-y-2">
-                    <div className="flex items-baseline justify-between text-[11px] text-gray-500">
-                      <span>YES ${yesPrice.toFixed(2)} · {yesMult.toFixed(2)}x</span>
-                      <span>NO ${noPrice.toFixed(2)} · {noMult.toFixed(2)}x</span>
-                    </div>
-                    <BetButton variant="yes" size="xl" price={yesPrice} multiplier={yesMult} onClick={() => setBetSide("yes")} />
-                    <BetButton variant="no" size="xl" price={noPrice} multiplier={noMult} onClick={() => setBetSide("no")} />
-                  </div>
+                  <InlineBetTicket
+                    market={view}
+                    onPlaced={() => {
+                      setToast("Position confirmed");
+                      window.setTimeout(() => setToast(null), 3000);
+                    }}
+                  />
                   <AmmExitPanel market={market} liquidity={liquidity} address={address} />
                 </>
               ) : (
