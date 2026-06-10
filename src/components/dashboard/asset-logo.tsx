@@ -1,4 +1,17 @@
-import { SiMeta, SiNba, SiDogecoin, SiSolana } from "@icons-pack/react-simple-icons";
+import {
+  SiMeta,
+  SiNba,
+  SiDogecoin,
+  SiSolana,
+  SiGoogle,
+  SiApple,
+  SiTesla,
+  SiNvidia,
+  SiBitcoin,
+  SiEthereum,
+  SiLitecoin,
+  SiRobinhood,
+} from "@icons-pack/react-simple-icons";
 import type { AssetClass } from "@/lib/market-view";
 
 type Props = {
@@ -16,6 +29,20 @@ const BRAND_MAP: Record<
   GSW: SiNba,
   DOGE: SiDogecoin,
   SOL: SiSolana,
+  // Tokenized equities
+  GOOGL: SiGoogle,
+  GOOG: SiGoogle,
+  AAPL: SiApple,
+  TSLA: SiTesla,
+  NVDA: SiNvidia,
+  // Crypto / GMX underlyings
+  BTC: SiBitcoin,
+  WBTC: SiBitcoin,
+  ETH: SiEthereum,
+  WETH: SiEthereum,
+  LTC: SiLitecoin,
+  // Robinhood Chain RWA markets
+  RWA: SiRobinhood,
 };
 
 // Per-asset-class gradient so a ticker chip reads as intentional, not a gray

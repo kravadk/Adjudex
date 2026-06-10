@@ -1430,7 +1430,7 @@ function AmmExitPanel({
       </div>
       {liquidity?.mode === "amm" ? (
         <>
-          <div className="grid grid-cols-1 gap-2.5 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
             <TrustItem label="YES reserve" value={formatUsd(liquidity.yesReserveUsd)} />
             <TrustItem label="NO reserve" value={formatUsd(liquidity.noReserveUsd)} />
             <TrustItem label="Vault debt" value={formatUsd(liquidity.vaultDebtUsd)} />
@@ -1472,12 +1472,12 @@ function AmmExitPanel({
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-1 gap-2.5 md:grid-cols-[120px_1fr_140px_140px]">
+          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-[120px_minmax(0,1fr)_140px_140px]">
             {showSide ? (
               <select
                 value={side}
                 onChange={(event) => setSide(event.target.value as "YES" | "NO")}
-                className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+                className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
               >
                 <option value="YES">YES</option>
                 <option value="NO">NO</option>
@@ -1489,14 +1489,14 @@ function AmmExitPanel({
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               inputMode="decimal"
-              className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+              className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
               placeholder={amountLabel}
             />
             <button
               type="button"
               disabled={!showQuote}
               onClick={() => void refreshQuote()}
-              className="rounded-[6px] border border-[#333] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-200 hover:border-[#CCE9E7] disabled:opacity-30"
+              className="min-w-0 w-full rounded-[6px] border border-[#333] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-200 hover:border-[#CCE9E7] disabled:opacity-30"
             >
               Quote
             </button>
@@ -1504,7 +1504,7 @@ function AmmExitPanel({
               type="button"
               disabled={busy}
               onClick={() => void execute()}
-              className="rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50"
+              className="min-w-0 w-full rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50"
             >
               {actionLabel}
             </button>
@@ -1736,22 +1736,22 @@ function LimitOrderComposer({ market, address }: { market: Market; address?: str
         <span className="text-[11px] text-gray-500">Limit order</span>
         <span className="caps">EIP-712</span>
       </div>
-      <div className="grid grid-cols-1 gap-2.5 md:grid-cols-[100px_100px_1fr_1fr_140px]">
-        <select value={side} onChange={(event) => setSide(event.target.value as "YES" | "NO")} className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-[100px_100px_minmax(0,1fr)_minmax(0,1fr)_140px]">
+        <select value={side} onChange={(event) => setSide(event.target.value as "YES" | "NO")} className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none">
           <option value="YES">YES</option>
           <option value="NO">NO</option>
         </select>
-        <select value={orderType} onChange={(event) => setOrderType(event.target.value as "buy" | "sell")} className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none">
+        <select value={orderType} onChange={(event) => setOrderType(event.target.value as "buy" | "sell")} className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none">
           <option value="buy">Buy</option>
           <option value="sell">Sell</option>
         </select>
-        <input value={amountUsd} onChange={(event) => setAmountUsd(event.target.value)} inputMode="decimal" placeholder="USDC" className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none" />
-        <input value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} inputMode="decimal" placeholder="Price %" className="rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none" />
-        <button type="button" disabled={busy} onClick={() => void submitOrder()} className="rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50">
+        <input value={amountUsd} onChange={(event) => setAmountUsd(event.target.value)} inputMode="decimal" placeholder="USDC" className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none" />
+        <input value={limitPrice} onChange={(event) => setLimitPrice(event.target.value)} inputMode="decimal" placeholder="Price %" className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none" />
+        <button type="button" disabled={busy} onClick={() => void submitOrder()} className="min-w-0 w-full rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50">
           Sign
         </button>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <span className="text-[10.5px] text-gray-600">Approve the matcher so takers can settle your order on-chain.</span>
         <button type="button" disabled={busy} onClick={() => void approveSettlement()} className="rounded-[5px] border border-[#2a2a2a] bg-[#232323] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-200 hover:border-[#3a3a3a] hover:text-white disabled:opacity-40">
           Approve settlement
