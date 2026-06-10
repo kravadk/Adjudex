@@ -1,6 +1,6 @@
 "use client";
 
-import { getWalletClient, readContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
+import { getWalletClient, readContract, simulateContract, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { parseUnits, type Address } from "viem";
 import parimutuelPoolAbi from "@/lib/abi/ParimutuelPool.json";
 import testUsdcAbi from "@/lib/abi/TestUSDC.json";
@@ -95,14 +95,39 @@ export function useBet() {
       transactionHash = gasless.transactionHash;
       bettorAddress = gasless.smartAccountAddress;
     } else {
-      onStep("Waiting for wallet signature");
-      transactionHash = await writeContract(wagmiConfig, {
+      // Preflight: confirm the wallet actually holds enough stake token. The
+      // pool's bet() ends in stake.transferFrom — without a balance the tx
+      // reverts and the wallet shows a scary generic "unknown transaction"
+      // warning. Catch it here with a clear message instead.
+      if (stakeTokenAddress) {
+        const balance = (await readContract(wagmiConfig, {
+          address: stakeTokenAddress,
+          abi: testUsdcAbi,
+          functionName: "balanceOf",
+          args: [account.address as Address],
+          chainId,
+        })) as bigint;
+        if (balance < amount) {
+          throw new Error(
+            "Insufficient USDC balance. Use the faucet to mint test USDC before betting.",
+          );
+        }
+      }
+      // Preflight: simulate the bet so a guaranteed revert (expired deadline,
+      // already-resolved market, allowance/stake-token mismatch) surfaces as a
+      // decoded error in the app rather than as the wallet's generic
+      // "execution error for third-party contract" warning.
+      onStep("Simulating bet transaction");
+      const { request } = await simulateContract(wagmiConfig, {
+        account: account.address as Address,
         address: poolAddress,
         abi: parimutuelPoolAbi,
         functionName: "bet",
         args: [input.side === "YES" ? 0 : 1, amount],
         chainId,
       });
+      onStep("Waiting for wallet signature");
+      transactionHash = await writeContract(wagmiConfig, request);
       onStep(`Transaction submitted: ${transactionHash}`);
       onStep("Confirming transaction");
       await waitForTransactionReceipt(wagmiConfig, { hash: transactionHash, chainId, timeout: 90_000 });
