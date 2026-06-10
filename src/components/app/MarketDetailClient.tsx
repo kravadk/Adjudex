@@ -1245,8 +1245,8 @@ function TradeModePanel({
   onModeChange: (mode: "market" | "limit") => void;
 }) {
   return (
-    <div className="panel mb-5 flex flex-wrap items-center justify-between gap-3 p-3">
-      <div className="inline-flex rounded-[6px] border border-[#262626] bg-[#0b0b0b] p-1">
+    <div className="panel mb-5 flex min-w-0 flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="grid w-full grid-cols-2 rounded-[6px] border border-[#262626] bg-[#0b0b0b] p-1 sm:w-auto sm:min-w-[160px]">
         {(["market", "limit"] as const).map((item) => (
           <button
             key={item}
@@ -1260,7 +1260,7 @@ function TradeModePanel({
           </button>
         ))}
       </div>
-      <span className="caps">{mode === "market" ? "pool execution" : "signed intents"}</span>
+      <span className="caps text-left sm:text-right">{mode === "market" ? "pool execution" : "signed intents"}</span>
     </div>
   );
 }
@@ -1421,23 +1421,23 @@ function AmmExitPanel({
   }
 
   return (
-    <div className="panel p-4 mb-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-gray-500">AMM · constant product (x*y=k)</span>
+    <div className="panel mb-5 w-full min-w-0 max-w-full overflow-hidden p-3 sm:p-4">
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-[11px] text-gray-500">AMM · constant product (x*y=k)</span>
         <Pill tone={liquidity?.mode === "amm" ? "accent" : "neutral"}>
           {liquidity?.mode === "amm" ? "indexed" : "awaiting index"}
         </Pill>
       </div>
       {liquidity?.mode === "amm" ? (
         <>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <TrustItem label="YES reserve" value={formatUsd(liquidity.yesReserveUsd)} />
             <TrustItem label="NO reserve" value={formatUsd(liquidity.noReserveUsd)} />
             <TrustItem label="Vault debt" value={formatUsd(liquidity.vaultDebtUsd)} />
             <TrustItem label="Vault surplus" value={formatUsd(liquidity.vaultSurplusUsd)} />
           </div>
 
-          <div className="mt-3 inline-flex rounded-[7px] border border-[#262626] bg-[#111111] p-0.5">
+          <div className="mt-3 grid w-full grid-cols-3 rounded-[7px] border border-[#262626] bg-[#111111] p-0.5">
             {(["buy", "sell", "lp"] as const).map((m) => (
               <button
                 key={m}
@@ -1447,7 +1447,7 @@ function AmmExitPanel({
                   setQuote(null);
                   setStatus(null);
                 }}
-                className={`rounded-[5px] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] ${
+                className={`min-w-0 rounded-[5px] px-2 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] sm:px-3 sm:text-[11px] ${
                   mode === m ? "bg-[#CCE9E7] text-black" : "text-gray-400"
                 }`}
               >
@@ -1472,7 +1472,7 @@ function AmmExitPanel({
             </div>
           )}
 
-          <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 2xl:grid-cols-[120px_minmax(0,1fr)_140px_140px]">
+          <div className="mt-3 grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-[120px_minmax(0,1fr)] xl:grid-cols-[120px_minmax(0,1fr)_112px_112px]">
             {showSide ? (
               <select
                 value={side}
@@ -1492,6 +1492,7 @@ function AmmExitPanel({
               className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
               placeholder={amountLabel}
             />
+            <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:col-span-2 xl:col-span-1 xl:contents">
             <button
               type="button"
               disabled={!showQuote}
@@ -1508,6 +1509,7 @@ function AmmExitPanel({
             >
               {actionLabel}
             </button>
+            </div>
           </div>
           {(quote || status) && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[11.5px] text-gray-400">
