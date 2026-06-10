@@ -20,7 +20,7 @@ export function useBet() {
   const refreshPortfolio = usePortfolioStore((state) => state.refresh);
 
   async function placeBet(
-    input: Omit<BetPreviewInput, "address">,
+    input: Omit<BetPreviewInput, "address"> & { poolAddress?: Address; chainId?: number },
     onStep: (step: string) => void = () => undefined,
     opts: { gasless?: boolean } = {},
   ) {
@@ -31,13 +31,17 @@ export function useBet() {
       ...input,
       address: account.address,
     });
-    const market = useMarketsStore.getState().markets.find((item) => item.id === input.marketId);
-    if (!market?.poolAddress) throw new Error("Market pool address is required for on-chain bet placement.");
-    if (!market.chainId) throw new Error("Market chain id is required for on-chain bet placement.");
-    if (!isSupportedChainId(market.chainId)) {
-      throw new Error(`Market chain ${market.chainId} is not configured in the wallet client.`);
+    // Resolve pool/chain from the caller first (the market detail page passes
+    // them directly) and fall back to the markets store, so betting works even
+    // when the store isn't populated — e.g. a direct load of /market/:id.
+    const storeMarket = useMarketsStore.getState().markets.find((item) => item.id === input.marketId);
+    const poolAddress = (input.poolAddress ?? storeMarket?.poolAddress) as Address | undefined;
+    const chainId = input.chainId ?? storeMarket?.chainId;
+    if (!poolAddress) throw new Error("Market pool address is required for on-chain bet placement.");
+    if (!chainId) throw new Error("Market chain id is required for on-chain bet placement.");
+    if (!isSupportedChainId(chainId)) {
+      throw new Error(`Market chain ${chainId} is not configured in the wallet client.`);
     }
-    const chainId = market.chainId;
     const stakeTokenAddress = stakeTokenForChain(chainId);
 
     const amount = parseUnits(String(input.stakeUsd), 6);
@@ -51,7 +55,7 @@ export function useBet() {
         address: stakeTokenAddress,
         abi: testUsdcAbi,
         functionName: "allowance",
-        args: [account.address as Address, market.poolAddress],
+        args: [account.address as Address, poolAddress],
         chainId,
       })) as bigint;
       if (allowance < amount) {
@@ -60,7 +64,7 @@ export function useBet() {
           address: stakeTokenAddress,
           abi: testUsdcAbi,
           functionName: "approve",
-          args: [market.poolAddress, MAX_UINT256],
+          args: [poolAddress, MAX_UINT256],
           chainId,
         });
         await waitForTransactionReceipt(wagmiConfig, { hash: approveHash, chainId, timeout: 90_000 });
@@ -69,7 +73,7 @@ export function useBet() {
 
     onStep("Reading next on-chain position id");
     const positionId = await readContract(wagmiConfig, {
-      address: market.poolAddress,
+      address: poolAddress,
       abi: parimutuelPoolAbi,
       functionName: "nextPositionId",
       chainId,
@@ -82,7 +86,7 @@ export function useBet() {
       const gasless = await placeGaslessBetWithZeroDev({
         walletClient,
         chainId,
-        poolAddress: market.poolAddress,
+        poolAddress: poolAddress,
         stakeTokenAddress,
         side: input.side,
         stakeUsd: input.stakeUsd,
@@ -93,7 +97,7 @@ export function useBet() {
     } else {
       onStep("Waiting for wallet signature");
       transactionHash = await writeContract(wagmiConfig, {
-        address: market.poolAddress,
+        address: poolAddress,
         abi: parimutuelPoolAbi,
         functionName: "bet",
         args: [input.side === "YES" ? 0 : 1, amount],
@@ -109,7 +113,7 @@ export function useBet() {
       ...quote,
       address: bettorAddress,
       transactionHash,
-      positionId: `${market.id}#${String(positionId)}`,
+      positionId: `${input.marketId}#${String(positionId)}`,
       chainId,
     });
     onStep("Refreshing indexed market and portfolio state");

@@ -824,6 +824,8 @@ export function MarketDetailClient({ id }: { id: string }) {
                 marketId: view.id,
                 side: betSide.toUpperCase() as "YES" | "NO",
                 stakeUsd: stake,
+                poolAddress: view.poolAddress,
+                chainId: view.chainId,
               }, onStep, { gasless: opts.gasless });
               setToast(`Bet placed: ${betSide.toUpperCase()} $${stake}`);
               setTimeout(() => setToast(null), 3500);

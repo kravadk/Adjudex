@@ -92,7 +92,7 @@ export function InlineBetTicket({ market, onPlaced }: { market: Market; onPlaced
     const addStep = (s: string) => setSteps((c) => [...c, s]);
     try {
       addStep("Waiting for wallet");
-      await placeBet({ marketId: market.id, side: sideLabel, stakeUsd: stake }, addStep, { gasless: gaslessAvailable && gasless });
+      await placeBet({ marketId: market.id, side: sideLabel, stakeUsd: stake, poolAddress: market.poolAddress, chainId: market.chainId }, addStep, { gasless: gaslessAvailable && gasless });
       addStep("Portfolio and market refreshed");
       setCelebrate(true);
       showToast({ kind: "success", title: `${sideLabel} position confirmed`, body: `$${stake.toLocaleString()} staked.` });
