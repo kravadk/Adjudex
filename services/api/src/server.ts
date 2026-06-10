@@ -1169,6 +1169,7 @@ server.post<{
 });
 
 server.get<{ Params: { id: string } }>("/api/markets/:id/liquidity", async (request) => {
+  await ensureFreshAmmLiquidity(request.params.id);
   const liquidity = await query<{
     market_id: string;
     mode: string;
@@ -1217,6 +1218,7 @@ server.post<{
   const side = normalizeSide(request.body.side);
   const action = request.body.action === "sell" ? "sell" : request.body.action === "buy" ? "buy" : null;
   if (!side || !action) return reply.code(400).send({ error: "share_quote_invalid" });
+  await ensureFreshAmmLiquidity(request.params.id);
   const liquidity = await query<{ mode: string; yes_reserve: unknown; no_reserve: unknown; yes_shares: unknown; no_shares: unknown }>(
     `SELECT mode, yes_reserve, no_reserve, yes_shares, no_shares FROM market_liquidity WHERE market_id = $1`,
     [request.params.id],
@@ -4852,6 +4854,32 @@ async function insertTimelinePointFromPool(input: {
     return false;
   }
   return true;
+}
+
+// AMM price/quote endpoints must not depend on the (free-tier, often-stale)
+// indexer. If a market is AMM and its market_liquidity row is missing or older
+// than 30s, pull live reserves straight from the pool on-chain. Best-effort.
+async function ensureFreshAmmLiquidity(marketId: string): Promise<void> {
+  try {
+    const m = await query<{ pool_address: string | null; liquidity_mode: string | null; chain_id: number }>(
+      `SELECT pool_address, liquidity_mode, chain_id FROM markets WHERE id = $1`,
+      [marketId],
+    );
+    const market = m.rows[0];
+    if (!market || market.liquidity_mode !== "amm" || !market.pool_address) return;
+    const existing = await query<{ updated_at: Date | string; mode: string }>(
+      `SELECT updated_at, mode FROM market_liquidity WHERE market_id = $1`,
+      [marketId],
+    );
+    const row = existing.rows[0];
+    if (row && row.mode === "amm" && Date.now() - new Date(row.updated_at).getTime() < 30_000) return;
+    const rpc = rpcConfigForChain(market.chain_id);
+    if (!rpc.supported || !rpc.rpcUrl) return;
+    const client = createRpcClient(market.chain_id, rpc.rpcUrl);
+    await refreshAmmLiquiditySnapshot({ execute: query, client, marketId, poolAddress: market.pool_address });
+  } catch {
+    // best-effort; fall back to whatever is already in the DB
+  }
 }
 
 async function refreshAmmLiquiditySnapshot(input: {
