@@ -1472,12 +1472,12 @@ function AmmExitPanel({
             </div>
           )}
 
-          <div className="mt-3 grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-[120px_minmax(0,1fr)] xl:grid-cols-[120px_minmax(0,1fr)_112px_112px]">
+          <div className="mt-3 grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-[minmax(0,120px)_minmax(120px,1fr)]">
             {showSide ? (
               <select
                 value={side}
                 onChange={(event) => setSide(event.target.value as "YES" | "NO")}
-                className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+                className="h-9 min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] font-semibold text-white outline-none"
               >
                 <option value="YES">YES</option>
                 <option value="NO">NO</option>
@@ -1489,26 +1489,26 @@ function AmmExitPanel({
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               inputMode="decimal"
-              className="min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
+              className="h-9 min-w-0 w-full rounded-[6px] border border-[#262626] bg-[#111111] px-3 py-2 text-[12px] text-white outline-none"
               placeholder={amountLabel}
             />
-            <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:col-span-2 xl:col-span-1 xl:contents">
-            <button
-              type="button"
-              disabled={!showQuote}
-              onClick={() => void refreshQuote()}
-              className="min-w-0 w-full rounded-[6px] border border-[#333] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-200 hover:border-[#CCE9E7] disabled:opacity-30"
-            >
-              Quote
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void execute()}
-              className="min-w-0 w-full rounded-[6px] bg-[#CCE9E7] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-black disabled:opacity-50"
-            >
-              {actionLabel}
-            </button>
+            <div className="grid min-w-0 grid-cols-2 gap-2.5 sm:col-span-2">
+              <button
+                type="button"
+                disabled={!showQuote}
+                onClick={() => void refreshQuote()}
+                className="h-9 min-w-0 w-full rounded-[6px] border border-[#333] px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-200 hover:border-[#CCE9E7] disabled:opacity-30 sm:px-3 sm:tracking-[0.12em]"
+              >
+                Quote
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void execute()}
+                className="h-9 min-w-0 w-full rounded-[6px] bg-[#CCE9E7] px-2 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-black disabled:opacity-50 sm:px-3 sm:tracking-[0.12em]"
+              >
+                {actionLabel}
+              </button>
             </div>
           </div>
           {(quote || status) && (
